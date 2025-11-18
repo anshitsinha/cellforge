@@ -1,0 +1,21 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+
+# rust / wasm (for later)
+target/
+pkg/
+
+# local env + editor junk
+.env
+.env.local
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# big test files - don't commit these, generate them with the bench scripts
+*.csv
+!bench/fixtures/*.csv
