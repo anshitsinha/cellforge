@@ -1,7 +1,7 @@
 import { ColumnLayout, columnLetter } from "./columns";
 import { formatCell } from "./format";
 import { readTheme } from "./theme";
-import type { DataSource, GridOptions, Theme } from "./types";
+import type { CellRef, DataSource, GridOptions, Theme } from "./types";
 
 const FONT = '13px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const HEADER_FONT = '12px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -39,6 +39,11 @@ export class Grid {
   private scrollY = 0;
   private pendingFrame = 0;
 
+  private active: CellRef = { row: 0, col: 0 };
+
+  /** Called whenever the active cell changes (click, keyboard, or select()). */
+  onSelectionChange: ((cell: CellRef) => void) | null = null;
+
   constructor(
     private readonly container: HTMLElement,
     source: DataSource,
@@ -64,6 +69,8 @@ export class Grid {
     this.resizeObserver.observe(container);
 
     this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
+    this.canvas.addEventListener("mousedown", this.onMouseDown);
+    this.canvas.addEventListener("keydown", this.onKeyDown);
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", this.onThemeChange);
 
     this.resize();
@@ -74,7 +81,43 @@ export class Grid {
     this.columns = new ColumnLayout(source.colCount, this.defaultColumnWidth);
     this.scrollX = 0;
     this.scrollY = 0;
+    this.active = { row: 0, col: 0 };
     this.updateRowHeaderWidth();
+    this.invalidate();
+    this.onSelectionChange?.(this.active);
+  }
+
+  get selection(): CellRef {
+    return { ...this.active };
+  }
+
+  /** Move the active cell, scrolling it into view if needed. */
+  select(row: number, col: number): void {
+    row = clamp(row, 0, this.source.rowCount - 1);
+    col = clamp(col, 0, this.columns.count - 1);
+    if (row === this.active.row && col === this.active.col) return;
+    this.active = { row, col };
+    this.scrollIntoView(row, col);
+    this.invalidate();
+    this.onSelectionChange?.(this.selection);
+  }
+
+  focus(): void {
+    this.canvas.focus();
+  }
+
+  scrollIntoView(row: number, col: number): void {
+    const top = row * this.rowHeight;
+    const bottom = top + this.rowHeight;
+    if (top < this.scrollY) this.scrollY = top;
+    else if (bottom > this.scrollY + this.bodyHeight) this.scrollY = bottom - this.bodyHeight;
+
+    const left = this.columns.left(col);
+    const right = left + this.columns.width(col);
+    if (left < this.scrollX) this.scrollX = left;
+    else if (right > this.scrollX + this.bodyWidth) this.scrollX = right - this.bodyWidth;
+
+    this.clampScroll();
     this.invalidate();
   }
 
@@ -91,6 +134,8 @@ export class Grid {
     cancelAnimationFrame(this.pendingFrame);
     this.resizeObserver.disconnect();
     this.canvas.removeEventListener("wheel", this.onWheel);
+    this.canvas.removeEventListener("mousedown", this.onMouseDown);
+    this.canvas.removeEventListener("keydown", this.onKeyDown);
     matchMedia("(prefers-color-scheme: dark)").removeEventListener("change", this.onThemeChange);
     this.canvas.remove();
   }
@@ -160,6 +205,76 @@ export class Grid {
     this.clampScroll();
     this.invalidate();
   };
+
+  private onMouseDown = (e: MouseEvent): void => {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const cell = this.hitTest(x, y);
+    if (!cell) return;
+    // stop the browser from moving focus elsewhere / starting a text selection
+    e.preventDefault();
+    this.canvas.focus();
+    this.select(cell.row, cell.col);
+  };
+
+  private onKeyDown = (e: KeyboardEvent): void => {
+    const { row, col } = this.active;
+    const pageRows = Math.max(1, Math.floor(this.bodyHeight / this.rowHeight) - 1);
+    const lastRow = this.source.rowCount - 1;
+    const lastCol = this.columns.count - 1;
+    // ctrl on windows/linux, cmd on mac - jumps to the edge of the sheet.
+    // (Excel jumps to the edge of the current data block; we don't track
+    // emptiness yet so the sheet edge will do.)
+    const jump = e.ctrlKey || e.metaKey;
+
+    let next: CellRef | null = null;
+    switch (e.key) {
+      case "ArrowUp":
+        next = { row: jump ? 0 : row - 1, col };
+        break;
+      case "ArrowDown":
+        next = { row: jump ? lastRow : row + 1, col };
+        break;
+      case "ArrowLeft":
+        next = { row, col: jump ? 0 : col - 1 };
+        break;
+      case "ArrowRight":
+        next = { row, col: jump ? lastCol : col + 1 };
+        break;
+      case "Tab":
+        next = { row, col: e.shiftKey ? col - 1 : col + 1 };
+        break;
+      case "Enter":
+        next = { row: e.shiftKey ? row - 1 : row + 1, col };
+        break;
+      case "PageUp":
+        next = { row: row - pageRows, col };
+        break;
+      case "PageDown":
+        next = { row: row + pageRows, col };
+        break;
+      case "Home":
+        next = jump ? { row: 0, col: 0 } : { row, col: 0 };
+        break;
+      case "End":
+        next = jump ? { row: lastRow, col: lastCol } : { row, col: lastCol };
+        break;
+    }
+    if (!next) return;
+    e.preventDefault();
+    this.select(next.row, next.col);
+  };
+
+  /** Map a point (css px, relative to the canvas) to a body cell, or null. */
+  private hitTest(x: number, y: number): CellRef | null {
+    if (x < this.rowHeaderWidth || y < this.headerHeight) return null;
+    if (x > this.rowHeaderWidth + this.bodyWidth || y > this.headerHeight + this.bodyHeight) return null;
+    const row = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight);
+    const col = this.columns.indexAt(x - this.rowHeaderWidth + this.scrollX);
+    if (row >= this.source.rowCount) return null;
+    return { row, col };
+  }
 
   private onThemeChange = (): void => {
     this.theme = readTheme(this.container);
@@ -244,6 +359,19 @@ export class Grid {
     ctx.strokeStyle = theme.gridLine;
     ctx.lineWidth = 1;
     ctx.stroke();
+
+    // active cell outline (drawn even if partly off-screen; the clip handles it)
+    const { row: ar, col: ac } = this.active;
+    if (ar >= firstRow && ar <= lastRow && ac >= firstCol && ac <= lastCol) {
+      ctx.strokeStyle = theme.accent;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(
+        Math.round(colX(ac)) + 1,
+        Math.round(rowY(ar)) + 1,
+        columns.width(ac) - 1,
+        rowHeight - 1,
+      );
+    }
     ctx.restore();
 
     // --- headers -----------------------------------------------------------
@@ -252,6 +380,18 @@ export class Grid {
     ctx.fillStyle = theme.headerBackground;
     ctx.fillRect(0, 0, this.width, headerHeight);
     ctx.fillRect(0, 0, rowHeaderWidth, this.height);
+
+    // tint the headers of the active row/column so it's easy to find your place
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = theme.accent;
+    if (ac >= firstCol && ac <= lastCol) {
+      ctx.fillRect(Math.max(rowHeaderWidth, colX(ac)), 0, columns.width(ac), headerHeight);
+    }
+    if (ar >= firstRow && ar <= lastRow) {
+      ctx.fillRect(0, Math.max(headerHeight, rowY(ar)), rowHeaderWidth, rowHeight);
+    }
+    ctx.restore();
 
     // column headers
     ctx.save();
@@ -314,6 +454,10 @@ export class Grid {
     }
     ctx.globalAlpha = 1;
   }
+}
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(Math.max(n, min), max);
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {

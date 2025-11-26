@@ -115,6 +115,10 @@ button:hover {
   overflow: hidden;
 }
 
+.sheet canvas:focus {
+  outline: none; /* the active cell outline already shows focus */
+}
+
 .status-bar {
   display: flex;
   justify-content: space-between;

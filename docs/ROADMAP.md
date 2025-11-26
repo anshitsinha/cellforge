@@ -5,9 +5,9 @@ Rough order, subject to change.
 ## v0.1 — the grid
 
 - [x] Repo setup, docs
-- [ ] Vite app shell
-- [ ] Virtualized canvas grid (rows/cols, headers, scrolling)
-- [ ] Cell selection + keyboard navigation
+- [x] Vite app shell
+- [x] Virtualized canvas grid (rows/cols, headers, scrolling)
+- [x] Cell selection + keyboard navigation
 - [ ] Formula bar + in-place cell editing
 - [ ] Column resize
 
