@@ -1,3 +1,4 @@
+import { CellEditor, type EditorRect } from "./CellEditor";
 import { ColumnLayout, columnLetter } from "./columns";
 import { formatCell } from "./format";
 import { readTheme } from "./theme";
@@ -44,6 +45,15 @@ export class Grid {
   /** Called whenever the active cell changes (click, keyboard, or select()). */
   onSelectionChange: ((cell: CellRef) => void) | null = null;
 
+  /**
+   * Called when the user finishes editing a cell. The grid doesn't own the
+   * data, so it's up to the caller to store the value and call invalidate().
+   * An empty string means "clear the cell".
+   */
+  onCellEdit: ((cell: CellRef, text: string) => void) | null = null;
+
+  private readonly editor: CellEditor;
+
   constructor(
     private readonly container: HTMLElement,
     source: DataSource,
@@ -63,6 +73,19 @@ export class Grid {
     container.appendChild(this.canvas);
     this.ctx = this.canvas.getContext("2d", { alpha: false })!;
 
+    this.editor = new CellEditor(container);
+    this.editor.onCommit = (text, move) => {
+      this.onCellEdit?.(this.selection, text);
+      const { row, col } = this.active;
+      if (move === "down") this.select(row + 1, col);
+      else if (move === "up") this.select(row - 1, col);
+      else if (move === "right") this.select(row, col + 1);
+      else if (move === "left") this.select(row, col - 1);
+      if (move !== "none") this.canvas.focus();
+      this.invalidate();
+    };
+    this.editor.onCancel = () => this.canvas.focus();
+
     this.updateRowHeaderWidth();
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -71,6 +94,7 @@ export class Grid {
     this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
     this.canvas.addEventListener("mousedown", this.onMouseDown);
     this.canvas.addEventListener("keydown", this.onKeyDown);
+    this.canvas.addEventListener("dblclick", this.onDoubleClick);
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", this.onThemeChange);
 
     this.resize();
@@ -106,6 +130,34 @@ export class Grid {
     this.canvas.focus();
   }
 
+  get isEditing(): boolean {
+    return this.editor.isEditing;
+  }
+
+  /**
+   * Open the in-cell editor on the active cell. With no argument it starts
+   * from the cell's current text (F2 / double click); with a string it
+   * replaces the contents (user just started typing).
+   */
+  startEditing(initialText?: string): void {
+    const { row, col } = this.active;
+    this.scrollIntoView(row, col);
+    const text = initialText ?? formatCell(this.source.getCell(row, col));
+    this.editor.open(this.cellRect(row, col), text, this.theme);
+  }
+
+  /** Cell bounds in css px relative to the container. */
+  private cellRect(row: number, col: number): EditorRect {
+    const firstRow = Math.floor(this.scrollY / this.rowHeight);
+    const rowShift = this.scrollY - firstRow * this.rowHeight;
+    return {
+      x: this.rowHeaderWidth + this.columns.left(col) - this.scrollX,
+      y: this.headerHeight + (row - firstRow) * this.rowHeight - rowShift,
+      width: this.columns.width(col) + 1,
+      height: this.rowHeight + 1,
+    };
+  }
+
   scrollIntoView(row: number, col: number): void {
     const top = row * this.rowHeight;
     const bottom = top + this.rowHeight;
@@ -136,6 +188,8 @@ export class Grid {
     this.canvas.removeEventListener("wheel", this.onWheel);
     this.canvas.removeEventListener("mousedown", this.onMouseDown);
     this.canvas.removeEventListener("keydown", this.onKeyDown);
+    this.canvas.removeEventListener("dblclick", this.onDoubleClick);
+    this.editor.destroy();
     matchMedia("(prefers-color-scheme: dark)").removeEventListener("change", this.onThemeChange);
     this.canvas.remove();
   }
@@ -228,6 +282,26 @@ export class Grid {
     // emptiness yet so the sheet edge will do.)
     const jump = e.ctrlKey || e.metaKey;
 
+    // editing shortcuts first
+    if (e.key === "F2") {
+      e.preventDefault();
+      this.startEditing();
+      return;
+    }
+    if (e.key === "Delete" || e.key === "Backspace") {
+      e.preventDefault();
+      this.onCellEdit?.(this.selection, "");
+      this.invalidate();
+      return;
+    }
+    // any printable character starts editing and replaces the cell, which is
+    // how Excel/Sheets behave. key.length === 1 filters out "Shift", "F5" etc.
+    if (e.key.length === 1 && !jump && !e.altKey) {
+      e.preventDefault();
+      this.startEditing(e.key);
+      return;
+    }
+
     let next: CellRef | null = null;
     switch (e.key) {
       case "ArrowUp":
@@ -264,6 +338,13 @@ export class Grid {
     if (!next) return;
     e.preventDefault();
     this.select(next.row, next.col);
+  };
+
+  private onDoubleClick = (e: MouseEvent): void => {
+    const rect = this.canvas.getBoundingClientRect();
+    if (this.hitTest(e.clientX - rect.left, e.clientY - rect.top)) {
+      this.startEditing();
+    }
   };
 
   /** Map a point (css px, relative to the canvas) to a body cell, or null. */
@@ -426,6 +507,11 @@ export class Grid {
     ctx.stroke();
 
     this.drawScrollbars(bodyW, bodyH);
+
+    // keep the floating editor glued to its cell if we scrolled mid-edit
+    if (this.editor.isEditing) {
+      this.editor.place(this.cellRect(ar, ac));
+    }
   }
 
   private drawScrollbars(bodyW: number, bodyH: number): void {
