@@ -10,12 +10,15 @@
   "scripts": {
     "dev": "npm run dev -w @cellforge/web",
     "build": "npm run build -w @cellforge/web",
-    "typecheck": "tsc --noEmit -p apps/web"
+    "typecheck": "tsc --noEmit -p apps/web",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "engines": {
     "node": ">=20"
   },
   "devDependencies": {
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
   }
 }
