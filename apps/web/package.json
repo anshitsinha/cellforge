@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@cellforge/core": "*",
     "@cellforge/grid": "*"
   },
   "devDependencies": {
