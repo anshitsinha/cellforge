@@ -1,5 +1,17 @@
 import type { CellValue, DataSource } from "@cellforge/grid";
 
+/** An empty sheet - what you get from "New". */
+export class BlankSource implements DataSource {
+  constructor(
+    readonly rowCount = 1000,
+    readonly colCount = 26,
+  ) {}
+
+  getCell(): CellValue {
+    return null;
+  }
+}
+
 /**
  * Wraps a read-only source and layers user edits on top of it.
  *
@@ -35,6 +47,24 @@ export class EditableSource implements DataSource {
     const rowEdits = this.edits.get(row);
     if (rowEdits?.has(col)) return rowEdits.get(col)!;
     return this.base.getCell(row, col);
+  }
+
+  /**
+   * Smallest (rows, cols) that contains every non-empty cell. For a blank
+   * sheet that's just the edited area - nobody wants to export 1000 empty
+   * rows. For real data it's the data size, grown to fit any edits beyond it.
+   */
+  usedRange(): { rows: number; cols: number } {
+    let rows = this.base instanceof BlankSource ? 0 : this.base.rowCount;
+    let cols = this.base instanceof BlankSource ? 0 : this.base.colCount;
+    for (const [r, rowEdits] of this.edits) {
+      for (const [c, v] of rowEdits) {
+        if (v === null) continue;
+        rows = Math.max(rows, r + 1);
+        cols = Math.max(cols, c + 1);
+      }
+    }
+    return { rows, cols };
   }
 
   setCell(row: number, col: number, value: CellValue): void {
