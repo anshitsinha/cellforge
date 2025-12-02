@@ -2,7 +2,7 @@ import { CellEditor, type EditorRect } from "./CellEditor";
 import { ColumnLayout, columnLetter } from "./columns";
 import { formatCell } from "./format";
 import { readTheme } from "./theme";
-import type { CellRef, DataSource, GridOptions, Theme } from "./types";
+import type { CellRange, CellRef, DataSource, GridOptions, Theme } from "./types";
 
 const FONT = '13px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const HEADER_FONT = '12px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -20,6 +20,7 @@ interface Thumb {
 }
 
 type Drag =
+  | { kind: "select" }
   | { kind: "resize"; col: number; startX: number; startWidth: number }
   | { kind: "vscroll" | "hscroll"; startPos: number; startScroll: number };
 
@@ -53,11 +54,18 @@ export class Grid {
   private scrollY = 0;
   private pendingFrame = 0;
 
+  // A selection is the active cell (where typing goes, also the anchor when
+  // extending) plus an extent - the opposite corner of the selected range.
+  // For a single-cell selection they're the same cell.
   private active: CellRef = { row: 0, col: 0 };
+  private extent: CellRef = { row: 0, col: 0 };
   private drag: Drag | null = null;
 
-  /** Called whenever the active cell changes (click, keyboard, or select()). */
+  /** Called whenever the selection changes (click, keyboard, or select()). */
   onSelectionChange: ((cell: CellRef) => void) | null = null;
+
+  /** Called when the user asks to clear the selected range (Delete key). */
+  onClearRange: ((range: CellRange) => void) | null = null;
 
   /**
    * Called when the user finishes editing a cell. The grid doesn't own the
@@ -121,22 +129,63 @@ export class Grid {
     this.scrollX = 0;
     this.scrollY = 0;
     this.active = { row: 0, col: 0 };
+    this.extent = { row: 0, col: 0 };
     this.updateRowHeaderWidth();
     this.invalidate();
     this.onSelectionChange?.(this.active);
   }
 
+  /** The active cell. */
   get selection(): CellRef {
     return { ...this.active };
   }
 
-  /** Move the active cell, scrolling it into view if needed. */
-  select(row: number, col: number): void {
+  /** The full selected rectangle (just the active cell if nothing's extended). */
+  get range(): CellRange {
+    return {
+      top: Math.min(this.active.row, this.extent.row),
+      bottom: Math.max(this.active.row, this.extent.row),
+      left: Math.min(this.active.col, this.extent.col),
+      right: Math.max(this.active.col, this.extent.col),
+    };
+  }
+
+  /**
+   * Move the active cell (collapsing any range), or with `extend` grow the
+   * range from the active cell to (row, col). Scrolls the moved corner into
+   * view.
+   */
+  select(row: number, col: number, extend = false): void {
     row = clamp(row, 0, this.source.rowCount - 1);
     col = clamp(col, 0, this.columns.count - 1);
-    if (row === this.active.row && col === this.active.col) return;
-    this.active = { row, col };
+    const target = { row, col };
+    if (extend) {
+      this.setSelection(this.active, target);
+    } else {
+      this.setSelection(target, target);
+    }
     this.scrollIntoView(row, col);
+  }
+
+  /** Select a whole rectangle, e.g. after a paste. Doesn't scroll. */
+  selectRange(range: CellRange): void {
+    const maxRow = this.source.rowCount - 1;
+    const maxCol = this.columns.count - 1;
+    this.setSelection(
+      { row: clamp(range.top, 0, maxRow), col: clamp(range.left, 0, maxCol) },
+      { row: clamp(range.bottom, 0, maxRow), col: clamp(range.right, 0, maxCol) },
+    );
+  }
+
+  private setSelection(active: CellRef, extent: CellRef): void {
+    const same =
+      active.row === this.active.row &&
+      active.col === this.active.col &&
+      extent.row === this.extent.row &&
+      extent.col === this.extent.col;
+    if (same) return;
+    this.active = { ...active };
+    this.extent = { ...extent };
     this.invalidate();
     this.onSelectionChange?.(this.selection);
   }
@@ -308,13 +357,43 @@ export class Grid {
       return;
     }
 
+    // header clicks select whole columns / rows (corner = everything)
+    if (y < this.headerHeight || x < this.rowHeaderWidth) {
+      e.preventDefault();
+      this.canvas.focus();
+      this.onHeaderDown(x, y, e.shiftKey);
+      return;
+    }
+
     const cell = this.hitTest(x, y);
     if (!cell) return;
     // stop the browser from moving focus elsewhere / starting a text selection
     e.preventDefault();
     this.canvas.focus();
-    this.select(cell.row, cell.col);
+    this.select(cell.row, cell.col, e.shiftKey);
+    this.startDrag({ kind: "select" });
   };
+
+  private onHeaderDown(x: number, y: number, extend: boolean): void {
+    const lastRow = this.source.rowCount - 1;
+    const lastCol = this.columns.count - 1;
+    const { active } = this;
+
+    if (x < this.rowHeaderWidth && y < this.headerHeight) {
+      this.setSelection({ row: 0, col: 0 }, { row: lastRow, col: lastCol });
+      return;
+    }
+    if (y < this.headerHeight) {
+      const col = this.columns.indexAt(x - this.rowHeaderWidth + this.scrollX);
+      if (extend) this.setSelection({ row: 0, col: active.col }, { row: lastRow, col });
+      else this.setSelection({ row: 0, col }, { row: lastRow, col });
+      return;
+    }
+    const row = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight);
+    if (row > lastRow) return;
+    if (extend) this.setSelection({ row: active.row, col: 0 }, { row, col: lastCol });
+    else this.setSelection({ row, col: 0 }, { row, col: lastCol });
+  }
 
   private onKeyDown = (e: KeyboardEvent): void => {
     const { row, col } = this.active;
@@ -334,8 +413,14 @@ export class Grid {
     }
     if (e.key === "Delete" || e.key === "Backspace") {
       e.preventDefault();
-      this.onCellEdit?.(this.selection, "");
+      if (this.onClearRange) this.onClearRange(this.range);
+      else this.onCellEdit?.(this.selection, "");
       this.invalidate();
+      return;
+    }
+    if (jump && e.key.toLowerCase() === "a") {
+      e.preventDefault();
+      this.setSelection({ row: 0, col: 0 }, { row: lastRow, col: lastCol });
       return;
     }
     // any printable character starts editing and replaces the cell, which is
@@ -346,19 +431,23 @@ export class Grid {
       return;
     }
 
+    // shift + navigation keys extend the range, moving its far corner
+    const extend = e.shiftKey && e.key !== "Tab" && e.key !== "Enter";
+    const { row: r, col: c } = extend ? this.extent : this.active;
+
     let next: CellRef | null = null;
     switch (e.key) {
       case "ArrowUp":
-        next = { row: jump ? 0 : row - 1, col };
+        next = { row: jump ? 0 : r - 1, col: c };
         break;
       case "ArrowDown":
-        next = { row: jump ? lastRow : row + 1, col };
+        next = { row: jump ? lastRow : r + 1, col: c };
         break;
       case "ArrowLeft":
-        next = { row, col: jump ? 0 : col - 1 };
+        next = { row: r, col: jump ? 0 : c - 1 };
         break;
       case "ArrowRight":
-        next = { row, col: jump ? lastCol : col + 1 };
+        next = { row: r, col: jump ? lastCol : c + 1 };
         break;
       case "Tab":
         next = { row, col: e.shiftKey ? col - 1 : col + 1 };
@@ -367,21 +456,21 @@ export class Grid {
         next = { row: e.shiftKey ? row - 1 : row + 1, col };
         break;
       case "PageUp":
-        next = { row: row - pageRows, col };
+        next = { row: r - pageRows, col: c };
         break;
       case "PageDown":
-        next = { row: row + pageRows, col };
+        next = { row: r + pageRows, col: c };
         break;
       case "Home":
-        next = jump ? { row: 0, col: 0 } : { row, col: 0 };
+        next = jump ? { row: 0, col: 0 } : { row: r, col: 0 };
         break;
       case "End":
-        next = jump ? { row: lastRow, col: lastCol } : { row, col: lastCol };
+        next = jump ? { row: lastRow, col: lastCol } : { row: r, col: lastCol };
         break;
     }
     if (!next) return;
     e.preventDefault();
-    this.select(next.row, next.col);
+    this.select(next.row, next.col, extend);
   };
 
   private onScrollbarDown(kind: "vscroll" | "hscroll", pos: number, clientPos: number): void {
@@ -420,7 +509,21 @@ export class Grid {
     const drag = this.drag;
     if (!drag) return;
 
-    if (drag.kind === "resize") {
+    if (drag.kind === "select") {
+      const rect = this.canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      // dragging past an edge scrolls that way, proportional to how far out
+      // the pointer is. Only happens on mousemove, which is good enough.
+      const bottom = this.headerHeight + this.bodyHeight;
+      const right = this.rowHeaderWidth + this.bodyWidth;
+      if (y > bottom) this.scrollY += y - bottom;
+      else if (y < this.headerHeight) this.scrollY -= this.headerHeight - y;
+      if (x > right) this.scrollX += x - right;
+      else if (x < this.rowHeaderWidth) this.scrollX -= this.rowHeaderWidth - x;
+      this.clampScroll();
+      this.setSelection(this.active, this.cellAtClamped(x, y));
+    } else if (drag.kind === "resize") {
       const width = Math.max(MIN_COLUMN_WIDTH, drag.startWidth + e.clientX - drag.startX);
       this.columns.setWidth(drag.col, width);
     } else {
@@ -482,6 +585,20 @@ export class Grid {
     const col = this.columns.indexAt(x - this.rowHeaderWidth + this.scrollX);
     if (row >= this.source.rowCount) return null;
     return { row, col };
+  }
+
+  /** Like hitTest, but snaps points outside the body to the nearest cell. */
+  private cellAtClamped(x: number, y: number): CellRef {
+    const cx = clamp(x, this.rowHeaderWidth, this.rowHeaderWidth + this.bodyWidth - 1);
+    const cy = clamp(y, this.headerHeight, this.headerHeight + this.bodyHeight - 1);
+    return {
+      row: clamp(
+        Math.floor((cy - this.headerHeight + this.scrollY) / this.rowHeight),
+        0,
+        this.source.rowCount - 1,
+      ),
+      col: this.columns.indexAt(cx - this.rowHeaderWidth + this.scrollX),
+    };
   }
 
   private onThemeChange = (): void => {
@@ -568,9 +685,55 @@ export class Grid {
     ctx.lineWidth = 1;
     ctx.stroke();
 
+    // selected range: light fill + border. A range can be 100M rows tall, so
+    // edges that are off-screen get pinned just outside the viewport instead
+    // of computing pixel coords in the billions.
+    const sel = this.range;
+    const visTop = Math.max(sel.top, firstRow);
+    const visBottom = Math.min(sel.bottom, lastRow);
+    const visLeft = Math.max(sel.left, firstCol);
+    const visRight = Math.min(sel.right, lastCol);
+    const rangeVisible = visTop <= visBottom && visLeft <= visRight;
+    const multi = sel.top !== sel.bottom || sel.left !== sel.right;
+    if (rangeVisible && multi) {
+      const x0 = sel.left < firstCol ? rowHeaderWidth - 4 : colX(sel.left);
+      const x1 = sel.right > lastCol ? rowHeaderWidth + bodyW + 4 : colX(sel.right) + columns.width(sel.right);
+      const y0 = sel.top < firstRow ? headerHeight - 4 : rowY(sel.top);
+      const y1 = sel.bottom > lastRow ? headerHeight + bodyH + 4 : rowY(sel.bottom) + rowHeight;
+      ctx.save();
+      ctx.globalAlpha = 0.12;
+      ctx.fillStyle = theme.accent;
+      ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+      ctx.restore();
+      ctx.strokeStyle = theme.accent;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(Math.round(x0) + 0.5, Math.round(y0) + 0.5, Math.round(x1 - x0), Math.round(y1 - y0));
+    }
+
     // active cell outline (drawn even if partly off-screen; the clip handles it)
     const { row: ar, col: ac } = this.active;
     if (ar >= firstRow && ar <= lastRow && ac >= firstCol && ac <= lastCol) {
+      if (multi) {
+        // inside a range the active cell shows as unfilled, like Excel
+        ctx.fillStyle = theme.background;
+        ctx.globalAlpha = 0.6;
+        ctx.fillRect(colX(ac) + 1, rowY(ar) + 1, columns.width(ac) - 1, rowHeight - 1);
+        ctx.globalAlpha = 1;
+        // the fill covered the text, so redraw it
+        const v = this.source.getCell(ar, ac);
+        if (v !== null) {
+          ctx.font = FONT;
+          ctx.fillStyle = theme.text;
+          ctx.textAlign = typeof v === "number" ? "right" : "left";
+          const tx = typeof v === "number" ? colX(ac) + columns.width(ac) - CELL_PADDING : colX(ac) + CELL_PADDING;
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(colX(ac), rowY(ar), columns.width(ac), rowHeight);
+          ctx.clip();
+          ctx.fillText(formatCell(v), tx, rowY(ar) + rowHeight / 2);
+          ctx.restore();
+        }
+      }
       ctx.strokeStyle = theme.accent;
       ctx.lineWidth = 2;
       ctx.strokeRect(
@@ -589,15 +752,19 @@ export class Grid {
     ctx.fillRect(0, 0, this.width, headerHeight);
     ctx.fillRect(0, 0, rowHeaderWidth, this.height);
 
-    // tint the headers of the active row/column so it's easy to find your place
+    // tint the headers of the selected rows/columns so it's easy to find your place
     ctx.save();
     ctx.globalAlpha = 0.18;
     ctx.fillStyle = theme.accent;
-    if (ac >= firstCol && ac <= lastCol) {
-      ctx.fillRect(Math.max(rowHeaderWidth, colX(ac)), 0, columns.width(ac), headerHeight);
+    if (visLeft <= visRight) {
+      const hx0 = Math.max(rowHeaderWidth, colX(visLeft));
+      const hx1 = colX(visRight) + columns.width(visRight);
+      ctx.fillRect(hx0, 0, hx1 - hx0, headerHeight);
     }
-    if (ar >= firstRow && ar <= lastRow) {
-      ctx.fillRect(0, Math.max(headerHeight, rowY(ar)), rowHeaderWidth, rowHeight);
+    if (visTop <= visBottom) {
+      const hy0 = Math.max(headerHeight, rowY(visTop));
+      const hy1 = rowY(visBottom) + rowHeight;
+      ctx.fillRect(0, hy0, rowHeaderWidth, hy1 - hy0);
     }
     ctx.restore();
 
