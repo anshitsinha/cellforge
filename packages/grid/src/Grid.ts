@@ -206,7 +206,8 @@ export class Grid {
   startEditing(initialText?: string): void {
     const { row, col } = this.active;
     this.scrollIntoView(row, col);
-    const text = initialText ?? formatCell(this.source.getCell(row, col));
+    const text =
+      initialText ?? this.source.getEditText?.(row, col) ?? formatCell(this.source.getCell(row, col));
     this.editor.open(this.cellRect(row, col), text, this.theme);
   }
 

@@ -1,9 +1,9 @@
 import "./style.css";
-import { Grid, columnLetter, formatCell, type CellValue } from "@cellforge/grid";
+import { Grid, columnLetter } from "@cellforge/grid";
 import { parseTsv, rangeSize, rangeToTsv } from "./clipboard";
 import { computeStats } from "./stats";
 import { SyntheticSource } from "./demo";
-import { BlankSource, EditableSource, parseInput } from "./editable";
+import { BlankSource, EditableSource, parseInput, type Stored } from "./editable";
 import { download, exportCsv } from "./exporter";
 import { formatBytes, importCsv } from "./importer";
 
@@ -36,7 +36,7 @@ function updateStatus() {
 function syncFormulaBar() {
   const { row, col } = grid.selection;
   cellRef.textContent = `${columnLetter(col)}${row + 1}`;
-  formulaInput.value = formatCell(source.getCell(row, col));
+  formulaInput.value = source.getEditText(row, col);
 }
 
 // --- status bar (right side) ----------------------------------------------------
@@ -82,7 +82,7 @@ grid.onSelectionChange = () => {
 };
 
 /** Write several cells at once, then refresh everything that depends on them. */
-function writeCells(changes: { row: number; col: number; value: CellValue }[]) {
+function writeCells(changes: { row: number; col: number; value: Stored }[]) {
   for (const { row, col, value } of changes) source.setCell(row, col, value);
   grid.invalidate();
   syncFormulaBar();
