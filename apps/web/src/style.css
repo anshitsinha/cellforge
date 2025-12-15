@@ -76,8 +76,19 @@ button {
   cursor: pointer;
 }
 
-button:hover {
+button:hover:not(:disabled) {
   border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.toolbar-sep {
+  width: 1px;
+  margin: 0 4px;
+  background: var(--border);
 }
 
 .formula-bar {
