@@ -48,21 +48,29 @@ const hasNumericColumns = (s: DataSource): s is DataSource & NumericColumns =>
 const key = (row: number, col: number) => row * 16384 + col;
 
 /**
- * Wraps a read-only source and layers user edits (values and formulas) on top.
+ * Wraps a read-only source and layers user edits (values and formulas) and
+ * an optional row order (from sorting) on top.
  *
- * Edits are kept in a sparse map, so editing a handful of cells in a 100M row
- * sheet costs a handful of map entries, not a copy of the data.
+ * Coordinates: every public method takes *view* rows - row N is whatever is
+ * currently displayed on row N. Internally edits are keyed by *base* rows
+ * (the row in the original data), so when the sheet is re-sorted an edit
+ * moves along with the rest of its row. Formula references are in view
+ * coordinates, same as what the user sees.
  *
- * Formula results are cached and the whole cache is dropped on any edit.
- * That's crude - a dependency graph would only recompute what changed - but
- * it's always correct, and recomputing the handful of visible formulas is
- * cheap. Smarter invalidation comes with the fill-down compiler.
+ * Formula results are cached and the whole cache is dropped on any edit or
+ * re-sort. That's crude - a dependency graph would only recompute what
+ * changed - but it's always correct, and recomputing the handful of visible
+ * formulas is cheap. Smarter invalidation comes with the fill-down compiler.
  */
 export class EditableSource implements DataSource {
-  // row -> (col -> value). Nested so looking up a row is cheap.
+  // base row -> (col -> value). Nested so looking up a row is cheap.
   private edits = new Map<number, Map<number, Stored>>();
   private editsPerColumn = new Map<number, number>();
   private count = 0;
+  private formulas = 0;
+
+  // view row -> base row. null means "unsorted" (identity).
+  private order: Uint32Array | null = null;
 
   private cache = new Map<number, Scalar>();
   private inProgress = new Set<number>(); // for cycle detection
@@ -81,6 +89,10 @@ export class EditableSource implements DataSource {
     return this.count;
   }
 
+  get hasFormulas(): boolean {
+    return this.formulas > 0;
+  }
+
   getColumnName(col: number): string | undefined {
     return this.base.getColumnName?.(col);
   }
@@ -92,41 +104,65 @@ export class EditableSource implements DataSource {
 
   /** What goes in the formula bar / cell editor: the formula itself, not its result. */
   getEditText(row: number, col: number): string {
-    const stored = this.edits.get(row)?.get(col);
+    const stored = this.edits.get(this.toBase(row))?.get(col);
     if (isFormula(stored)) return stored.text;
     return formatCell(this.getCell(row, col));
   }
 
   /** The stored edit for a cell, or undefined if it's untouched. Used by undo. */
   getStored(row: number, col: number): Stored | undefined {
-    return this.edits.get(row)?.get(col);
+    return this.edits.get(this.toBase(row))?.get(col);
   }
 
   setCell(row: number, col: number, value: Stored): void {
-    let rowEdits = this.edits.get(row);
+    const b = this.toBase(row);
+    let rowEdits = this.edits.get(b);
     if (!rowEdits) {
       rowEdits = new Map();
-      this.edits.set(row, rowEdits);
+      this.edits.set(b, rowEdits);
     }
-    if (!rowEdits.has(col)) {
+    const prev = rowEdits.get(col);
+    if (prev === undefined && !rowEdits.has(col)) {
       this.count++;
       this.editsPerColumn.set(col, (this.editsPerColumn.get(col) ?? 0) + 1);
     }
+    if (isFormula(prev)) this.formulas--;
+    if (isFormula(value)) this.formulas++;
     rowEdits.set(col, value);
     this.cache.clear();
   }
 
   /** Forget an edit entirely, so the cell shows the underlying data again. */
   revertCell(row: number, col: number): void {
-    const rowEdits = this.edits.get(row);
+    const b = this.toBase(row);
+    const rowEdits = this.edits.get(b);
     if (!rowEdits?.has(col)) return;
+    if (isFormula(rowEdits.get(col))) this.formulas--;
     rowEdits.delete(col);
-    if (rowEdits.size === 0) this.edits.delete(row);
+    if (rowEdits.size === 0) this.edits.delete(b);
     this.count--;
     const n = this.editsPerColumn.get(col)! - 1;
     if (n === 0) this.editsPerColumn.delete(col);
     else this.editsPerColumn.set(col, n);
     this.cache.clear();
+  }
+
+  // ---------------------------------------------------------------------------
+  // row order (sorting)
+
+  get rowOrder(): Uint32Array | null {
+    return this.order;
+  }
+
+  /** Replace the view -> base row mapping. null restores the original order. */
+  setRowOrder(order: Uint32Array | null): void {
+    if (order && order.length !== this.rowCount) throw new Error("row order has the wrong length");
+    this.order = order;
+    this.cache.clear();
+  }
+
+  toBase(row: number): number {
+    return this.order ? this.order[row] : row;
   }
 
   /**
@@ -135,12 +171,22 @@ export class EditableSource implements DataSource {
    * rows. For real data it's the data size, grown to fit any edits beyond it.
    */
   usedRange(): { rows: number; cols: number } {
-    let rows = this.base instanceof BlankSource ? 0 : this.base.rowCount;
-    let cols = this.base instanceof BlankSource ? 0 : this.base.colCount;
-    for (const [r, rowEdits] of this.edits) {
+    const blank = this.base instanceof BlankSource;
+    let rows = blank ? 0 : this.base.rowCount;
+    let cols = blank ? 0 : this.base.colCount;
+
+    // edits are keyed by base row, so map back to view rows if sorted
+    let toView: ((b: number) => number) | null = null;
+    if (blank && this.order) {
+      const inverse = new Uint32Array(this.order.length);
+      this.order.forEach((b, v) => (inverse[b] = v));
+      toView = (b) => inverse[b];
+    }
+
+    for (const [b, rowEdits] of this.edits) {
       for (const [c, v] of rowEdits) {
         if (v === null) continue;
-        rows = Math.max(rows, r + 1);
+        rows = Math.max(rows, (toView ? toView(b) : b) + 1);
         cols = Math.max(cols, c + 1);
       }
     }
@@ -151,8 +197,9 @@ export class EditableSource implements DataSource {
   // evaluation
 
   private value(row: number, col: number): Scalar {
-    const stored = this.edits.get(row)?.get(col);
-    if (stored === undefined) return this.base.getCell(row, col);
+    const b = this.toBase(row);
+    const stored = this.edits.get(b)?.get(col);
+    if (stored === undefined) return this.base.getCell(b, col);
     if (!isFormula(stored)) return stored;
 
     const k = key(row, col);
@@ -183,17 +230,18 @@ export class EditableSource implements DataSource {
 
     // Fast path: untouched numeric columns of an imported table can be read
     // straight out of the Float64Array without going through getCell for
-    // every row. Visits column by column, which is fine for aggregates.
+    // every row. It visits in base order, so when sorted it's only valid if
+    // the range covers whole columns (then order doesn't matter).
     const fast = hasNumericColumns(this.base) ? this.base : null;
-    const allFast =
-      fast !== null &&
-      Array.from({ length: right - range.left + 1 }, (_, i) => range.left + i).every(
-        (c) => !this.editsPerColumn.has(c) && fast.numberColumn(c) !== null,
-      );
+    const orderOk = !this.order || (range.top === 0 && bottom === this.rowCount - 1);
+    let allFast = fast !== null && orderOk;
+    for (let c = range.left; allFast && c <= right; c++) {
+      allFast = !this.editsPerColumn.has(c) && fast!.numberColumn(c) !== null;
+    }
 
     if (allFast) {
       for (let c = range.left; c <= right; c++) {
-        const values = fast.numberColumn(c)!;
+        const values = fast!.numberColumn(c)!;
         for (let r = range.top; r <= bottom; r++) {
           const v = values[r];
           visit(Number.isNaN(v) ? null : v);
