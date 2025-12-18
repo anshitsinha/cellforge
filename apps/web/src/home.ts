@@ -27,7 +27,9 @@ container.addEventListener("mouseleave", () => (paused = false));
 function tick() {
   if (!paused && !reduceMotion) {
     row += 0.06;
-    grid.select(Math.floor(row), 4);
+    // stay on the first column - selecting one further right makes the
+    // (narrow) demo grid scroll sideways and cut off the left columns
+    grid.select(Math.floor(row), 0);
     label.textContent = `row ${fmt.format(Math.floor(row) + 1)} of ${fmt.format(ROWS)}`;
   }
   requestAnimationFrame(tick);
