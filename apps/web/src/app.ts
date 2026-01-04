@@ -6,7 +6,7 @@ import { SyntheticSource } from "./demo";
 import { BlankSource, EditableSource, parseInput, type Stored } from "./editable";
 import { download, exportCsv } from "./exporter";
 import { History } from "./history";
-import { sortedOrder } from "./sort";
+import { extractKeys, sortInWorker } from "./sort";
 import { formatBytes, importCsv } from "./importer";
 
 const DEMO_ROWS = 100_000_000;
@@ -163,33 +163,55 @@ document.addEventListener("keydown", (e) => {
 
 // --- sorting ---------------------------------------------------------------------
 
-// The sort itself is fine at this size, but the key + index arrays add ~13
-// bytes/row on top of the data. 100M rows would want this in a worker.
-const MAX_SORT_ROWS = 20_000_000;
+// Keys are extracted on the main thread (in slices) and the radix sort runs
+// in a worker. Peak memory is ~17 bytes/row (8 key + 1 kind + 2x4 index), so
+// the 100M demo needs ~1.7GB free.
+let cancelSort: (() => void) | null = null;
 
 async function sortBy(descending: boolean) {
   const { col } = grid.selection;
-  if (source.rowCount > MAX_SORT_ROWS) {
-    statusLeft.textContent = `Sorting is limited to ${rowFormat.format(MAX_SORT_ROWS)} rows for now.`;
-    return;
-  }
   const name = source.getColumnName(col) ?? columnLetter(col);
-  statusLeft.textContent = `Sorting by ${name}…`;
-  // let the status message paint before the (synchronous) sort starts
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  cancelSort?.();
 
   const started = performance.now();
   const target = source;
   const before = target.rowOrder;
-  const after = sortedOrder(target, col, descending);
+  // a newer sort / undo / file load makes this one pointless
+  const stale = () => source !== target || target.rowOrder !== before;
+
+  statusLeft.textContent = `Sorting by ${name}: reading values…`;
+  let cancelled = false;
+  cancelSort = () => (cancelled = true);
+  const { keys, kinds } = await extractKeys(target, col, descending, (f) => {
+    statusLeft.textContent = `Sorting by ${name}: reading values… ${Math.round(f * 100)}%`;
+  });
+  if (cancelled || stale()) return;
+
+  const job = sortInWorker({ keys, kinds, descending }, (f) => {
+    statusLeft.textContent = `Sorting by ${name}… ${Math.round(f * 100)}%`;
+  });
+  cancelSort = job.cancel;
+  let viewOrder: Uint32Array;
+  try {
+    viewOrder = (await job.result).order;
+  } catch {
+    return; // cancelled
+  }
+  if (stale()) return;
+
+  // worker result is in view rows - map through the order we sorted from
+  const after = before ? viewOrder.map((v) => before[v]) : viewOrder;
   target.setRowOrder(after);
   history.push({
     label: `sort by ${name}`,
     undo: () => target.setRowOrder(before),
     redo: () => target.setRowOrder(after),
   });
+  cancelSort = null;
   refresh();
-  statusLeft.textContent = `Sorted ${rowFormat.format(target.rowCount)} rows by ${name} in ${Math.round(performance.now() - started)} ms`;
+  statusLeft.textContent = `Sorted ${rowFormat.format(target.rowCount)} rows by ${name} in ${(
+    (performance.now() - started) / 1000
+  ).toFixed(2)}s`;
 }
 
 document.getElementById("btn-sort-asc")!.addEventListener("click", () => {

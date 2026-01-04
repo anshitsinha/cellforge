@@ -1,4 +1,5 @@
-import type { CellRange, DataSource } from "@cellforge/grid";
+import type { CellRange } from "@cellforge/grid";
+import type { EditableSource } from "./editable";
 
 export interface RangeStats {
   sum: number;
@@ -9,38 +10,41 @@ export interface RangeStats {
 const CELLS_PER_SLICE = 500_000;
 
 /**
- * Sum / count over a selection, computed in slices so selecting a whole
- * 100M-row column doesn't freeze the tab. Returns null if `isStale()` starts
- * returning true (the selection changed) before it finishes.
+ * Sum / count over a selection.
  *
- * This goes through getCell() for every cell, so it's the slow generic path.
- * Once the columnar store does aggregates natively this should call that
- * instead - summing a Float64Array directly is much faster.
+ * Columns that come straight from an imported file (untouched, so the typed
+ * array is the truth) are summed directly from the Float64Array - a whole
+ * 100M-row column takes a fraction of a second that way. Everything else goes
+ * through getCell, in slices, so selecting a huge range doesn't freeze the
+ * tab. Returns null if `isStale()` turns true before it finishes.
  */
 export async function computeStats(
-  source: DataSource,
+  source: EditableSource,
   range: CellRange,
   isStale: () => boolean,
   onProgress: (fraction: number) => void,
 ): Promise<RangeStats | null> {
-  let sum = 0;
-  let numbers = 0;
-  let count = 0;
+  const stats: RangeStats = { sum: 0, numbers: 0, count: 0 };
+  const slowCols: number[] = [];
+
+  for (let c = range.left; c <= range.right; c++) {
+    if (!addColumnFast(source, c, range.top, range.bottom, stats)) slowCols.push(c);
+  }
+  if (slowCols.length === 0) return stats;
+
   let sinceYield = 0;
   const totalRows = range.bottom - range.top + 1;
-  const width = range.right - range.left + 1;
-
   for (let r = range.top; r <= range.bottom; r++) {
-    for (let c = range.left; c <= range.right; c++) {
+    for (const c of slowCols) {
       const v = source.getCell(r, c);
       if (v === null) continue;
-      count++;
+      stats.count++;
       if (typeof v === "number") {
-        sum += v;
-        numbers++;
+        stats.sum += v;
+        stats.numbers++;
       }
     }
-    sinceYield += width;
+    sinceYield += slowCols.length;
     if (sinceYield >= CELLS_PER_SLICE) {
       sinceYield = 0;
       onProgress((r - range.top + 1) / totalRows);
@@ -48,5 +52,43 @@ export async function computeStats(
       if (isStale()) return null;
     }
   }
-  return { sum, numbers, count };
+  return stats;
+}
+
+/** Add one column's stats from its typed array. Returns false if it can't. */
+function addColumnFast(
+  source: EditableSource,
+  col: number,
+  top: number,
+  bottom: number,
+  stats: RangeStats,
+): boolean {
+  const column = source.baseColumn(col);
+  if (!column) return false;
+  // with a sort applied, rows top..bottom are scattered across the array -
+  // only a whole-column selection can ignore the order
+  const whole = top === 0 && bottom === source.rowCount - 1;
+  if (source.rowOrder && !whole) return false;
+
+  if (column.kind === "number") {
+    const v = column.values;
+    let sum = 0;
+    let n = 0;
+    for (let r = top; r <= bottom; r++) {
+      const x = v[r];
+      if (x === x) {
+        // x === x is a NaN check that V8 optimises better than Number.isNaN
+        sum += x;
+        n++;
+      }
+    }
+    stats.sum += sum;
+    stats.numbers += n;
+    stats.count += n;
+  } else {
+    let n = 0;
+    for (let r = top; r <= bottom; r++) if (column.codes[r] !== 0) n++;
+    stats.count += n;
+  }
+  return true;
 }
