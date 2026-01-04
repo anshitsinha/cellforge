@@ -1,5 +1,8 @@
 import { CellError, errors, type Node, type RangeRef } from "./ast";
 
+// exported so the compiler can call the exact same implementations
+export { roundHalfAway };
+
 export type Scalar = number | string | boolean | null | CellError;
 
 /** Where a formula gets its inputs from. Implemented by the sheet. */
@@ -49,10 +52,20 @@ function toBool(v: Scalar): boolean | CellError {
   return errors.value;
 }
 
-/** Turn a computed float into something that won't display as 0.30000000000000004. */
+/**
+ * Results are plain IEEE doubles, same as Excel's engine - 0.1+0.2 really is
+ * 0.30000000000000004 and it's the display layer's job to show "0.3". Doing
+ * the maths unrounded is also what lets the compiled kernels (compile.ts)
+ * produce bit-identical results to this interpreter.
+ */
 function tidy(n: number): number | CellError {
-  if (!Number.isFinite(n)) return errors.num;
-  return Math.abs(n) < 1e15 ? Number.parseFloat(n.toPrecision(15)) : n;
+  return Number.isFinite(n) ? n : errors.num;
+}
+
+/** ROUND: half away from zero like Excel, not banker's rounding. */
+function roundHalfAway(n: number, digits: number): number {
+  const f = 10 ** Math.trunc(digits);
+  return (Math.sign(n) * Math.round(Math.abs(n) * f)) / f;
 }
 
 function compare(a: Scalar, b: Scalar): number {
@@ -69,36 +82,63 @@ function compare(a: Scalar, b: Scalar): number {
 // ---------------------------------------------------------------------------
 // evaluation
 
-export function evaluate(node: Node, ctx: EvalContext): Scalar {
+/**
+ * Evaluate a formula.
+ *
+ * `rowShift` evaluates it as if it had been filled down that many rows:
+ * relative row references move, `$`-anchored ones don't. That's how one
+ * template AST serves every row of a filled range without being copied.
+ */
+export function evaluate(node: Node, ctx: EvalContext, rowShift = 0): Scalar {
   switch (node.type) {
     case "number":
     case "string":
     case "boolean":
       return node.value;
-    case "ref":
-      return ctx.cell(node.row, node.col);
+    case "ref": {
+      const row = node.absRow ? node.row : node.row + rowShift;
+      return row < 0 ? errors.ref : ctx.cell(row, node.col);
+    }
     case "range":
       // a bare range outside a function (=A1:A3) - Excel would spill it; we
       // just don't support that
       return errors.value;
     case "unary": {
-      const n = toNumber(evaluate(node.arg, ctx));
+      const n = toNumber(evaluate(node.arg, ctx, rowShift));
       if (isError(n)) return n;
       if (node.op === "-") return -n;
       if (node.op === "%") return tidy(n / 100);
       return n;
     }
     case "binary":
-      return binary(node.op, evaluate(node.left, ctx), evaluate(node.right, ctx));
+      return binary(node.op, evaluate(node.left, ctx, rowShift), evaluate(node.right, ctx, rowShift));
     case "call": {
       const fn = FUNCTIONS[node.name];
       if (!fn) return errors.name;
-      const args: Arg[] = node.args.map((a) =>
-        a.type === "range" ? { kind: "range", range: a.range } : { kind: "value", value: evaluate(a, ctx) },
-      );
+      const args: Arg[] = [];
+      for (const a of node.args) {
+        if (a.type === "range") {
+          const range = shiftRange(a, rowShift);
+          if (!range) return errors.ref;
+          args.push({ kind: "range", range });
+        } else {
+          args.push({ kind: "value", value: evaluate(a, ctx, rowShift) });
+        }
+      }
       return fn(args, ctx);
     }
   }
+}
+
+/** Apply a fill-down shift to a range node. null if it'd go above row 1. */
+export function shiftRange(node: Extract<Node, { type: "range" }>, shift: number): RangeRef | null {
+  if (shift === 0) return node.range;
+  const { top, bottom, left, right } = node.range;
+  const t = node.absTop ? top : top + shift;
+  // whole-column ranges (bottom = Infinity) never move
+  const b = node.absBottom || bottom === Infinity ? bottom : bottom + shift;
+  if (t < 0) return null;
+  return { top: Math.min(t, b), bottom: Math.max(t, b), left, right };
 }
 
 function binary(op: string, a: Scalar, b: Scalar): Scalar {
@@ -349,9 +389,7 @@ export const FUNCTIONS: Record<string, Fn> = {
     const digits = args.length > 1 ? toNumber(scalarArg(args[1])) : 0;
     if (isError(n)) return n;
     if (isError(digits)) return digits;
-    const f = 10 ** Math.trunc(digits);
-    // round half away from zero like Excel, not banker's rounding
-    return tidy((Math.sign(n) * Math.round(Math.abs(n) * f)) / f);
+    return tidy(roundHalfAway(n, digits));
   },
   MOD: (args) => {
     const a = toNumber(scalarArg(args[0]));
