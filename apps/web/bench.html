@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Benchmark: interpreter vs compiled JS kernel vs WebGPU for fill-down formulas." />
+    <title>cellforge — kernel benchmark</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body class="bench">
+    <main>
+      <a class="logo" href="/">cellforge</a>
+      <h1>Fill-down kernel benchmark</h1>
+      <p class="lede">
+        Evaluates one formula filled down N rows three ways: the tree-walking <strong>interpreter</strong>,
+        the <strong>compiled JS kernel</strong> (f64, bit-identical to the interpreter), and a
+        <strong>WebGPU</strong> compute shader (f32). Everything runs in this tab.
+      </p>
+
+      <form id="controls">
+        <label>Rows
+          <select id="rows">
+            <option value="1000000">1M</option>
+            <option value="4000000" selected>4M</option>
+            <option value="16000000">16M</option>
+            <option value="32000000">32M</option>
+          </select>
+        </label>
+        <label>Runs per method <input id="runs" type="number" min="1" max="10" value="3" /></label>
+        <label class="check"><input id="interp" type="checkbox" checked /> interpreter (capped at 2M rows)</label>
+        <button id="run" type="submit">Run benchmark</button>
+      </form>
+
+      <p id="env" class="env"></p>
+      <div id="progress" class="progress"></div>
+
+      <table id="results" hidden>
+        <thead>
+          <tr>
+            <th>formula</th>
+            <th>method</th>
+            <th>rows</th>
+            <th>median ms</th>
+            <th>M rows/s</th>
+            <th>vs interpreter</th>
+            <th>notes</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p><button id="copy" type="button" hidden>Copy results as CSV</button></p>
+
+      <section class="method">
+        <h2>Method</h2>
+        <ul>
+          <li>Inputs A, B, C are random positive doubles (B never 0), so every row takes the fast path.</li>
+          <li>Each method runs once to warm up, then <em>runs</em> times; the median is reported.</li>
+          <li>The interpreter is capped at 2M rows (it's slow); its rows/s is measured on that slice.</li>
+          <li>JS kernel results are checked against the interpreter row-by-row on the interpreted slice (expect 0 mismatches).</li>
+          <li>GPU timing is end to end: f64→f32 conversion, upload, compute and readback. "compute" in notes is the dispatch alone.</li>
+          <li>GPU error is the max relative difference vs the f64 kernel.</li>
+        </ul>
+      </section>
+    </main>
+    <script type="module" src="/src/bench.ts"></script>
+  </body>
+</html>
