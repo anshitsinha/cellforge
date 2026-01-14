@@ -24,17 +24,24 @@ Rough order, subject to change.
 - [x] Undo / redo
 - [x] Sort by column (index-based)
 
-## v0.3 — scale everything
+## v0.3 — scale + the compiler ✅
 
-- [ ] Selection stats and SUM over whole columns via the columnar fast path
-- [ ] Sort in a worker so 100M rows works
-- [ ] Column-level clear/fill instead of per-cell edits
+- [x] Selection stats over whole imported columns via the typed arrays
+- [x] Radix sort in a worker — 100M rows in ~4s
+- [x] Fill down (Ctrl+D), stored as one object per column
+- [x] `$` anchors, row-shifted evaluation, formula printer
+- [x] Fill-down compiler → JS typed-array kernels, bit-identical to the interpreter
+- [x] Property-based fuzz test for the compiler's correctness contract
+- [x] Lazy chunked kernel evaluation with an LRU cap
+- [x] WGSL codegen + WebGPU runner (experimental, f32)
+- [x] `/bench.html` evaluation harness
+
+## v0.4 — next
+
+- [ ] Persistent GPU-resident columns; double-f32 emulation (see RESEARCH.md)
+- [ ] Fill-down *detection* for sheets with per-cell formulas (e.g. .xlsx import)
+- [ ] Multi-threaded kernels (SharedArrayBuffer + workers)
+- [ ] Dependency tracking instead of drop-everything invalidation
 - [ ] Save/restore sessions in OPFS (Origin Private File System)
 - [ ] Filter rows
-
-## v0.4 — the fast path
-
-- [ ] Fill-down detection (same relative formula repeated down a column)
-- [ ] Rust → WASM engine
-- [ ] WGSL codegen for vectorised formulas
-- [ ] Benchmarks vs Excel / Google Sheets / DuckDB
+- [ ] Benchmarks vs Excel / LibreOffice / Google Sheets
