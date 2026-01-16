@@ -19,3 +19,5 @@ Thumbs.db
 # big test files - don't commit these, generate them with the bench scripts
 *.csv
 !bench/fixtures/*.csv
+
+.vercel
