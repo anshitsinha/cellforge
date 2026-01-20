@@ -16,6 +16,7 @@
       <div class="nav-links">
         <a href="#features">Features</a>
         <a href="#how">How it works</a>
+        <a href="/bench.html">Benchmark</a>
         <a href="https://github.com/anshitsinha/cellforge" target="_blank" rel="noopener">GitHub</a>
         <a class="btn btn-primary btn-small" href="/app.html">Open app</a>
       </div>
@@ -102,9 +103,10 @@
             scrolling 100 rows and 100 million costs the same.</p>
         </li>
         <li>
-          <h3>Compiled formulas <span class="tag">in progress</span></h3>
-          <p>Formulas filled down a column are really vector operations. The plan is to compile
-            them to WebGPU compute shaders.</p>
+          <h3>Compiled formulas</h3>
+          <p>A formula filled down a column is really one vector operation, so it's compiled to a
+            single loop over typed arrays — 6–22× faster than interpreting it, with bit-identical
+            results. <a href="/bench.html">Run the benchmark</a> in your own browser.</p>
         </li>
       </ol>
     </section>
@@ -115,7 +117,7 @@
     </section>
 
     <footer class="footer">
-      <span>cellforge · MIT licensed</span>
+      <span>cellforge · MIT licensed · <a href="/bench.html">benchmark</a></span>
       <a href="https://github.com/anshitsinha/cellforge" target="_blank" rel="noopener">Source on GitHub</a>
     </footer>
 
