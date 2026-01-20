@@ -1,6 +1,7 @@
 # Roadmap
 
-Rough order, subject to change.
+What has shipped so far. The forward plan lives in [PLAN.md](PLAN.md), and
+the product direction in [VISION.md](VISION.md).
 
 ## v0.1 — the grid ✅
 
@@ -36,7 +37,13 @@ Rough order, subject to change.
 - [x] WGSL codegen + WebGPU runner (experimental, f32)
 - [x] `/bench.html` evaluation harness
 
-## v0.4 — next
+## v0.4 — superseded
+
+Folded into [PLAN.md](PLAN.md) (dependency tracking → M1, OPFS sessions → M1,
+filters → M4, xlsx fill-down detection → M3, GPU work → M5/M8).
+
+<details><summary>Original list</summary>
+
 
 - [ ] Persistent GPU-resident columns; double-f32 emulation (see RESEARCH.md)
 - [ ] Fill-down *detection* for sheets with per-cell formulas (e.g. .xlsx import)
@@ -45,3 +52,5 @@ Rough order, subject to change.
 - [ ] Save/restore sessions in OPFS (Origin Private File System)
 - [ ] Filter rows
 - [ ] Benchmarks vs Excel / LibreOffice / Google Sheets
+
+</details>

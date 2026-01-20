@@ -62,6 +62,13 @@ precision isn't safe for spreadsheets (up to 32% error from cancellation) — se
 
 More detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+## Where it's going
+
+A complete, local-only spreadsheet: everything Excel and Google Sheets do, plus
+re-runnable recipes, instant analysis on huge data, and an AI assistant that runs
+on your own GPU. Nothing leaves your machine. See [docs/VISION.md](docs/VISION.md)
+and the milestone plan in [docs/PLAN.md](docs/PLAN.md).
+
 ## Getting started
 
 Requires Node 20+.
