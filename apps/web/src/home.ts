@@ -9,7 +9,9 @@ const container = document.getElementById("demo-grid")!;
 const label = document.getElementById("demo-label")!;
 const fmt = new Intl.NumberFormat();
 
-const grid = new Grid(container, new SyntheticSource(ROWS), { defaultColumnWidth: 100 });
+// touch: false - this grid is decoration inside a scrolling page, so a
+// swipe over it on a phone should scroll the page, not the grid
+const grid = new Grid(container, new SyntheticSource(ROWS), { defaultColumnWidth: 100, touch: false });
 
 // Respect people who've asked for less motion.
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
