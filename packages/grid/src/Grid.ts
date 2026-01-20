@@ -11,6 +11,19 @@ const SCROLLBAR_SIZE = 10;
 const MIN_THUMB = 24;
 const RESIZE_HANDLE = 4; // px either side of a column border that counts as "grab"
 const MIN_COLUMN_WIDTH = 30;
+const TOUCH_SCROLLBAR_ZONE = 28; // px from the right edge that grabs the scrollbar
+const TAP_SLOP = 8; // px a finger can move and still count as a tap
+const DOUBLE_TAP_MS = 350;
+
+interface TouchState {
+  id: number;
+  startX: number;
+  startY: number;
+  scrollX: number;
+  scrollY: number;
+  panning: boolean;
+  samples: { t: number; x: number; y: number }[];
+}
 
 interface Thumb {
   start: number; // px along the track where the thumb begins
@@ -45,7 +58,14 @@ export class Grid {
   private readonly rowHeight: number;
   private readonly headerHeight: number;
   private readonly defaultColumnWidth: number;
+  private readonly touchEnabled: boolean;
+  private readonly editorFontSize: number;
   private rowHeaderWidth = 50;
+
+  private touch: TouchState | null = null;
+  private momentumFrame = 0;
+  private lastTap = { time: 0, row: -1, col: -1 };
+  private lastTouchEnd = -Infinity;
 
   private width = 0;
   private height = 0;
@@ -84,6 +104,8 @@ export class Grid {
     this.rowHeight = options.rowHeight ?? 24;
     this.headerHeight = options.headerHeight ?? 24;
     this.defaultColumnWidth = options.defaultColumnWidth ?? 110;
+    this.touchEnabled = options.touch ?? true;
+    this.editorFontSize = options.editorFontSize ?? 13;
 
     this.source = source;
     this.columns = new ColumnLayout(source.colCount, this.defaultColumnWidth);
@@ -92,6 +114,9 @@ export class Grid {
     this.canvas = document.createElement("canvas");
     this.canvas.style.display = "block";
     this.canvas.tabIndex = 0; // so it can take keyboard focus later
+    // We do our own panning for touch, so the browser mustn't also scroll or
+    // zoom the page. Decorative grids leave vertical page scrolling alone.
+    this.canvas.style.touchAction = this.touchEnabled ? "none" : "pan-y";
     container.appendChild(this.canvas);
     this.ctx = this.canvas.getContext("2d", { alpha: false })!;
 
@@ -114,7 +139,7 @@ export class Grid {
     this.resizeObserver.observe(container);
 
     this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
-    this.canvas.addEventListener("mousedown", this.onMouseDown);
+    this.canvas.addEventListener("pointerdown", this.onPointerDown);
     this.canvas.addEventListener("keydown", this.onKeyDown);
     this.canvas.addEventListener("dblclick", this.onDoubleClick);
     this.canvas.addEventListener("mousemove", this.onHover);
@@ -208,7 +233,7 @@ export class Grid {
     this.scrollIntoView(row, col);
     const text =
       initialText ?? this.source.getEditText?.(row, col) ?? formatCell(this.source.getCell(row, col));
-    this.editor.open(this.cellRect(row, col), text, this.theme);
+    this.editor.open(this.cellRect(row, col), text, this.theme, this.editorFontSize);
   }
 
   /** Cell bounds in css px relative to the container. */
@@ -251,7 +276,9 @@ export class Grid {
     cancelAnimationFrame(this.pendingFrame);
     this.resizeObserver.disconnect();
     this.canvas.removeEventListener("wheel", this.onWheel);
-    this.canvas.removeEventListener("mousedown", this.onMouseDown);
+    this.canvas.removeEventListener("pointerdown", this.onPointerDown);
+    this.endTouch();
+    cancelAnimationFrame(this.momentumFrame);
     this.canvas.removeEventListener("keydown", this.onKeyDown);
     this.canvas.removeEventListener("dblclick", this.onDoubleClick);
     this.canvas.removeEventListener("mousemove", this.onHover);
@@ -326,6 +353,132 @@ export class Grid {
     this.clampScroll();
     this.invalidate();
   };
+
+  // ---------------------------------------------------------------------------
+  // touch: swipe to pan (with momentum), tap to select, double-tap to edit
+
+  private onPointerDown = (e: PointerEvent): void => {
+    if (e.pointerType === "touch") this.onTouchDown(e);
+    else this.onMouseDown(e);
+  };
+
+  private onTouchDown(e: PointerEvent): void {
+    if (!this.touchEnabled || this.touch) return; // one finger at a time
+    cancelAnimationFrame(this.momentumFrame);
+    const rect = this.canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // The scrollbar is 10px wide, too thin for a finger, so give it a wider
+    // touch zone. Dragging the thumb is the only sane way to cross 100M rows.
+    if (x >= this.width - TOUCH_SCROLLBAR_ZONE && y >= this.headerHeight && this.verticalThumb()) {
+      e.preventDefault();
+      this.onScrollbarDown("vscroll", y, e.clientY);
+      return;
+    }
+
+    this.touch = {
+      id: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      scrollX: this.scrollX,
+      scrollY: this.scrollY,
+      panning: false,
+      samples: [{ t: e.timeStamp, x: e.clientX, y: e.clientY }],
+    };
+    window.addEventListener("pointermove", this.onTouchMove);
+    window.addEventListener("pointerup", this.onTouchUp);
+    window.addEventListener("pointercancel", this.onTouchCancel);
+  }
+
+  private onTouchMove = (e: PointerEvent): void => {
+    const t = this.touch;
+    if (!t || e.pointerId !== t.id) return;
+    const dx = e.clientX - t.startX;
+    const dy = e.clientY - t.startY;
+    // a few px of wobble is still a tap
+    if (!t.panning && Math.hypot(dx, dy) > TAP_SLOP) t.panning = true;
+    if (!t.panning) return;
+
+    this.scrollX = t.scrollX - dx;
+    this.scrollY = t.scrollY - dy;
+    this.clampScroll();
+    this.invalidate();
+    t.samples.push({ t: e.timeStamp, x: e.clientX, y: e.clientY });
+    // only the last ~100ms matter for the release velocity
+    while (t.samples.length > 2 && e.timeStamp - t.samples[0].t > 100) t.samples.shift();
+  };
+
+  private onTouchUp = (e: PointerEvent): void => {
+    const t = this.touch;
+    if (!t || e.pointerId !== t.id) return;
+    this.endTouch();
+    this.lastTouchEnd = e.timeStamp;
+
+    if (t.panning) {
+      // fling: carry on at the release velocity and let friction stop it
+      const first = t.samples[0];
+      const dt = e.timeStamp - first.t;
+      if (dt > 0 && dt < 150) {
+        this.startMomentum((first.x - e.clientX) / dt, (first.y - e.clientY) / dt);
+      }
+      return;
+    }
+
+    // it was a tap
+    const rect = this.canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    if (y < this.headerHeight || x < this.rowHeaderWidth) {
+      this.onHeaderDown(x, y, false);
+      return;
+    }
+    const cell = this.hitTest(x, y);
+    if (!cell) return;
+    const prev = this.lastTap;
+    const isDoubleTap =
+      e.timeStamp - prev.time < DOUBLE_TAP_MS && prev.row === cell.row && prev.col === cell.col;
+    this.lastTap = { time: isDoubleTap ? 0 : e.timeStamp, row: cell.row, col: cell.col };
+    this.select(cell.row, cell.col);
+    // Focusing the canvas doesn't pop up the on-screen keyboard (it isn't a
+    // text field), which is what we want for a plain tap. A double tap opens
+    // the real <input> editor, and that brings the keyboard up.
+    if (isDoubleTap) this.startEditing();
+    else this.canvas.focus({ preventScroll: true });
+  };
+
+  private onTouchCancel = (): void => this.endTouch();
+
+  private endTouch(): void {
+    this.touch = null;
+    window.removeEventListener("pointermove", this.onTouchMove);
+    window.removeEventListener("pointerup", this.onTouchUp);
+    window.removeEventListener("pointercancel", this.onTouchCancel);
+  }
+
+  /** Keep scrolling after a fling, decaying exponentially (velocity in px/ms). */
+  private startMomentum(vx: number, vy: number): void {
+    let last = performance.now();
+    const step = (now: number) => {
+      const dt = Math.min(32, now - last);
+      last = now;
+      this.scrollX += vx * dt;
+      this.scrollY += vy * dt;
+      // ~0.95 per 16ms frame, made frame-rate independent
+      const decay = Math.pow(0.95, dt / 16);
+      vx *= decay;
+      vy *= decay;
+      const beforeX = this.scrollX;
+      const beforeY = this.scrollY;
+      this.clampScroll();
+      // hitting an edge kills the velocity in that direction
+      if (this.scrollX !== beforeX) vx = 0;
+      if (this.scrollY !== beforeY) vy = 0;
+      this.draw();
+      if (Math.abs(vx) > 0.02 || Math.abs(vy) > 0.02) this.momentumFrame = requestAnimationFrame(step);
+    };
+    this.momentumFrame = requestAnimationFrame(step);
+  }
 
   private onMouseDown = (e: MouseEvent): void => {
     if (e.button !== 0) return;
@@ -500,10 +653,13 @@ export class Grid {
 
   // Drags listen on window, not the canvas, so they keep working when the
   // mouse leaves the grid (which it always does when resizing near an edge).
+  // Pointer events rather than mouse events so a finger on the scrollbar uses
+  // the same drag code as a mouse.
   private startDrag(drag: Drag): void {
     this.drag = drag;
-    window.addEventListener("mousemove", this.onDragMove);
-    window.addEventListener("mouseup", this.endDrag);
+    window.addEventListener("pointermove", this.onDragMove);
+    window.addEventListener("pointerup", this.endDrag);
+    window.addEventListener("pointercancel", this.endDrag);
   }
 
   private onDragMove = (e: MouseEvent): void => {
@@ -547,8 +703,9 @@ export class Grid {
 
   private endDrag = (): void => {
     this.drag = null;
-    window.removeEventListener("mousemove", this.onDragMove);
-    window.removeEventListener("mouseup", this.endDrag);
+    window.removeEventListener("pointermove", this.onDragMove);
+    window.removeEventListener("pointerup", this.endDrag);
+    window.removeEventListener("pointercancel", this.endDrag);
   };
 
   /** Just updates the cursor so users can tell column borders are draggable. */
@@ -572,6 +729,9 @@ export class Grid {
   }
 
   private onDoubleClick = (e: MouseEvent): void => {
+    // touch double-taps are handled in onTouchUp; some browsers also send a
+    // dblclick for them, which would open the editor twice
+    if (e.timeStamp - this.lastTouchEnd < 600) return;
     const rect = this.canvas.getBoundingClientRect();
     if (this.hitTest(e.clientX - rect.left, e.clientY - rect.top)) {
       this.startEditing();
