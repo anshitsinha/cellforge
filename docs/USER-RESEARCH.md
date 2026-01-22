@@ -136,6 +136,87 @@ calculation; self-expanding tables; input-vs-formula highlighting; cell
 history ("blame"); currency-typed columns; one workbook with named versions
 instead of copies; sign-flip and outlier checks on key totals.
 
+### 7. What Excel users have voted for, and not received
+The most-voted requests on Microsoft's own Excel feedback portal, many marked
+"considering" or "not right now" for four years
+([Excel feedback portal](https://feedbackportal.microsoft.com/feedback/forum/c23f3b77-f01b-ec11-b6e7-0022481f8472)):
+- choose the default paste behaviour (e.g. always paste values)
+- "Center Across Selection" instead of merged cells that break sort and paste
+- "(Blanks)" at the top of the filter list; invert a filter selection in one click
+- undo per workbook instead of across every open file
+- see more sheet tabs (vertical or multi-row tabs, tab groups)
+- "Excel found a problem with formula references": tell me **where**
+- find every external link, not just break them
+- a better conditional formatting manager: named and commented rules, locked
+  ranges that don't fragment on copy/paste, rules applied to named ranges
+- track who changed what (not just versions); a date picker in cells; an
+  eyedropper; a formula bar that grows with the formula; a real NULL()
+- chart axis min/max linked to cells
+- Power Pivot on Mac (Microsoft: unlikely, it depends on Windows)
+- interact with the sheet while the Power Query editor is open
+- tables that keep working on protected sheets
+
+**→ Features:** all of the above are cheap for us and visible to every user;
+being a browser app gives Mac users the big-data tools Excel won't.
+
+### 8. Alteryx: what "recipes" users love and hate
+Users love building the logic once and re-running it in seconds, and above all
+**inspecting the data at every step**. They hate the cost (thousands per seat),
+Windows-only installs, guessing which step is eating memory, and weak reporting
+that forces an export to another tool.
+([G2](https://www.g2.com/products/alteryx/reviews?qs=pros-and-cons))
+
+**→ Features:** recipes show a live preview at every step; a per-step time and
+memory profile; reports in the same tool; runs on any OS.
+
+### 9. Lookups fail silently, and finding out why takes hours
+- `407` vs `"407"` (number vs text) is the classic; accountants use an F9 trick
+  in the formula bar to spot it. Hidden spaces, a stray tilde (a wildcard in
+  MATCH) and apostrophes cause the same "apparently identical cells" failure.
+  ([AccountingWEB](https://www.accountingweb.co.uk/any-answers/excel-match-does-not-match-two-apparently-identical-cells),
+  [AccountingWEB](https://www.accountingweb.co.uk/any-answers/vlookup-not-working-data-format-problem))
+- Comparing two trial balances ("which accounts are in TB1 but not TB2") is a
+  routine chore done with fragile formulas.
+- Fuzzy matching vendor or customer names needs Power Query or an add-in that
+  doesn't run on Mac; "Last, First" vs "First Last" breaks exact matches.
+  ([MrExcel](https://www.mrexcel.com/board/threads/2-lists-with-different-name-structures.1233470/))
+
+**→ Features:** a **"why don't these match?" inspector** showing type, every
+character (including invisible ones) and the exact difference, with one-click
+normalisation of both sides; lookups that warn instead of returning a silent
+`#N/A`; built-in trial balance comparison; name-order normalisation.
+
+### 10. More reconciliation types than bank vs ledger
+Supplier statements vs creditor balances, customer statements, and tracing an
+accrual from its first entry to its final release by a key field are all done by
+"tick and bash" in Excel.
+([AccountingWEB](https://www.accountingweb.co.uk/any-answers/use-power-query-for-month-end-balance-sheet-rec))
+Consolidation spreadsheets lack checks back to each entity, and intercompany
+eliminations are done by hand.
+([AccountingWEB](https://www.accountingweb.co.uk/community/industry-insights/5-common-pitfalls-in-financial-consolidation-and-how-to-avoid-them))
+
+**→ Features:** reconciliation templates for supplier and customer statements;
+item lifecycle tracing; intercompany matching and eliminations with tie-back checks.
+
+### 11. People still lose days of work
+Microsoft's Q&A forum is full of users who lost days of work to crashes,
+overwritten files or AutoRecover that didn't trigger.
+([Microsoft Q&A](https://learn.microsoft.com/en-us/answers/questions/5254950/lost-several-days-worth-of-work-in-an-excel-file))
+
+**→ Features:** every action is journalled to local storage as it happens, so a
+crash loses nothing; local version history that can't be overwritten by a save.
+
+### 12. The audit starts with a tie-out
+An audit begins by checking that the general ledger detail adds up to the trial
+balance, after reformatting the client's export (separate debit/credit columns,
+renamed headings) into the shape the audit software wants.
+([Crunchafi](https://www.crunchafi.com/blog/how-strongbox-revolutionizes-the-pbc-request-list-in-the-modern-audit),
+[CaseWare docs](https://documentation.caseware.com/2021/WorkingPapers/nl/Content/Engagements/File-Preparation/Imports/Import-ASCII-Excel.htm))
+
+**→ Features:** a GL → TB tie-out check (sum detail by account, compare to the TB,
+list differences); a trial balance import mapper (debit/credit vs signed
+amounts, code/name/current/prior); a simple request-list tracker for client data.
+
 ## Test fixture
 
 The MrExcel bank/ledger month (split cheques, repeated numbers, split deposits,

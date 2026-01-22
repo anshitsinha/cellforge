@@ -79,6 +79,10 @@ Feature priorities are grounded in [USER-RESEARCH.md](USER-RESEARCH.md).
 - ⬜ Command palette (Ctrl+K) listing every public action; Alt-key key tips
 - ⬜ Instant structural edits at any size (insert a row in a huge model < 50 ms)
 - ⬜ Cell history ("blame") and input-vs-formula highlighting
+- ⬜ Action journal persisted as it happens (crash-proof), local version history
+- ⬜ Default paste mode setting; Center Across Selection; per-workbook undo
+- ⬜ Sheet navigator (vertical tabs, groups, search); selection stays visible
+- ⬜ Date picker, eyedropper, auto-growing formula bar
 - ⬜ Save / restore in OPFS, autosave, open/save via File System Access
 
 ### M2: Formula engine, complete
@@ -92,6 +96,8 @@ Feature priorities are grounded in [USER-RESEARCH.md](USER-RESEARCH.md).
 - ⬜ Formula auditing: trace precedents/dependents, evaluate step by step,
   watch window, error checking, lint for hard-coded numbers
 - ⬜ Iterative calculation; self-expanding tables; currency-typed columns
+- ⬜ Precise problem locator (broken references in names, charts, rules); external link finder
+- ⬜ Lookups that warn about type and whitespace mismatches; a real `NULL()`
 - ⬜ Compiler coverage for the new functions; Excel conformance corpus in CI
 
 ### M3: Files and messy-export import
@@ -109,9 +115,10 @@ Feature priorities are grounded in [USER-RESEARCH.md](USER-RESEARCH.md).
 - ⬜ Performance doctor for imported `.xlsx`; open, documented native file format
 
 ### M4: Data tools
-- ⬜ Filters and filter views, multi-column sort, custom lists
+- ⬜ Filters and filter views, multi-column sort, custom lists; (Blanks) first; invert selection
 - ⬜ Find & replace (regex, in formulas), Go To Special, search across a folder
-- ⬜ Conditional formatting (rules, scales, bars, icons, formulas)
+- ⬜ Conditional formatting (rules, scales, bars, icons, formulas) with a proper
+  manager: named, commented, grouped rules on locked ranges
 - ⬜ Data validation and dropdowns; smart column types (date, currency, email,
   URL, checkbox, rating, select)
 - ⬜ Remove duplicates, text to columns, flash fill, unpivot / pivot, extract by pattern
@@ -128,6 +135,10 @@ Feature priorities are grounded in [USER-RESEARCH.md](USER-RESEARCH.md).
 - ⬜ Reference normalisation, sum matching, keying-error flags, in-side duplicates,
   proposed adjusting entries, roll-forward of outstanding items, rec statement
 - ⬜ Open-item matching for balance sheet accounts (auto-clear reversals)
+- ⬜ Supplier / customer statement recs; item lifecycle tracing
+- ⬜ "Why don't these match?" inspector with one-click normalisation
+- ⬜ Trial balance compare; GL → TB tie-out; TB import mapper
+- ⬜ Fuzzy name matching incl. name-order normalisation
 - ⬜ Acceptance test: synthetic bank/ledger month modelled on real data (split
   cheques, repeated numbers, split deposits, clearing lag) at 6K and 6M rows
 - ⬜ Key-based file compare; intercompany reconciliation
@@ -135,7 +146,8 @@ Feature priorities are grounded in [USER-RESEARCH.md](USER-RESEARCH.md).
 - ⬜ Scenarios (copy-on-write sheets) and side-by-side compare
 
 ### M6: Recipes, checks, history
-- ⬜ Recipe panel: recorded steps, edit / reorder / disable, parameters
+- ⬜ Recipe panel: recorded steps, edit / reorder / disable, parameters;
+  live data preview at every step; per-step time and memory profile
 - ⬜ Re-run on new files; watch a folder; templates gallery
 - ⬜ Data checks: column rules, master-list lookups, debits = credits; green/red
   checklist; period close checklist that gates export
@@ -157,12 +169,13 @@ Feature priorities are grounded in [USER-RESEARCH.md](USER-RESEARCH.md).
 - ⬜ Evidence linking: attached documents stored outside the workbook, cell ↔
   document-region links, local extraction, validation that compares values
 - ⬜ Native tick marks with legend; review notes that block sign-off
+- ⬜ Client request-list tracker (what data is outstanding, from whom)
 - ⬜ Reversible pseudonymisation; named versions instead of file copies
 
 ### M8: Charts and reports
 - ⬜ Charts: column, bar, line, area, pie/donut, scatter, combo, histogram,
   box, waterfall/bridge, Pareto, Benford, ageing; millions of points downsampled
-- ⬜ Pivot charts, sparklines
+- ⬜ Pivot charts, sparklines; axis limits linked to cells
 - ⬜ Report mode and report packs: narrative + live tables and charts;
   print setup; PDF and self-contained HTML export
 - ⬜ One template, many entities, plus consolidation; automatic period roll-forward;

@@ -107,11 +107,18 @@ red parentheses) are built in.
   standard statement (balance per bank ± outstanding = balance per books)
 - Balance sheet account recs: open-item matching that auto-clears entries which
   reverse each other, closing balance broken into buckets
+- Supplier and customer statement reconciliation; trace an item (an accrual, a
+  deferral) from its first entry to its final release
+- Trial balance comparison and a GL → TB tie-out (detail sums to balances)
+- **"Why don't these match?" inspector:** shows types and every character
+  (including invisible ones) of two values side by side, and fixes both columns
+- Lookups warn about type mismatches and stray spaces instead of a silent `#N/A`
 - Join doctor: match rate, duplicate keys and orphans before any lookup
 - Key-based file compare: added, removed and changed rows between versions
 - Intercompany reconciliation across entities and currencies
 - Entity resolution: one vendor/customer under many spellings across sources
 - Mapping tables (old → new chart of accounts, categories) reused across recipes
+- Fuzzy name matching that handles "Last, First" vs "First Last", on every OS
 - Search across a folder: "find invoice 48213 in every 2025 export"
 
 ### Bank statements and bookkeeping
@@ -122,6 +129,8 @@ red parentheses) are built in.
   from manual tagging; bulk-tag filtered rows; an "uncategorised" queue
 - Summary by category in one click; export templates for accounting software imports
 - Accrual, prepayment and deferred income schedules with monthly releases
+- Trial balance import mapper (debit/credit or signed, code/name/current/prior)
+- A simple request-list tracker for the data you're waiting on from clients
 
 ### Audit and fraud analytics
 - Duplicates: payments (same vendor and amount within N days), invoices, near-duplicates
@@ -182,6 +191,7 @@ red parentheses) are built in.
 - Report books: one PDF with contents and page numbers
 - Incremental refresh: recipes reprocess only what changed
 - Parameterised recipes (period, entity, threshold), re-run on new files
+- Live data preview at every recipe step, plus a per-step time and memory profile
 - Watch a folder: new files are processed when the folder is reopened
 - Report packs: the same formatted workbook or PDF each period
 - Fiscal calendars (custom year start, 4-4-5), MoM / YoY, rolling windows, resampling
@@ -198,6 +208,20 @@ red parentheses) are built in.
 - Scenarios: copy-on-write what-if sheets compared side by side
 - SQL panel for power users; results as linked, re-runnable sheets
 
+### Things Excel users have begged for
+From the most-voted requests on Microsoft's own feedback portal:
+- Choose the default paste (e.g. always paste values)
+- Center Across Selection offered before Merge; merged cells never break sort or paste
+- "(Blanks)" at the top of filter lists; invert a filter in one click
+- Undo that belongs to each workbook
+- Sheet navigator: vertical tabs, tab groups, search sheets by name
+- Formula problems located precisely ("broken reference in chart 2, series 3")
+- Every external link listed and jumpable
+- Conditional formatting manager with named, commented, grouped rules on locked ranges
+- Date picker, eyedropper, auto-growing formula bar, a real `NULL()`
+- Chart axis limits linked to cells
+- Big-data tools (pivots over millions of rows) on Mac as well as Windows
+
 ### Excel habits, respected
 - Alt-key ribbon sequences (key tips) for keyboard-driven finance users
 - Iterative calculation for models with intentional circular references
@@ -205,6 +229,10 @@ red parentheses) are built in.
   add dollars to euros; sign-flip and outlier checks on key totals
 - Performance doctor for imported `.xlsx` files (volatile functions, bloat)
 - Quote-qualified CSV, clean HTML export of all sheets, data-entry forms
+
+### Never lose work
+- Every action is journalled to local storage as it happens: a crash loses nothing
+- Local version history that a careless save can't overwrite
 
 ### Workspace
 - Projects ("engagements"): a folder of source files, workbooks, recipes and evidence
