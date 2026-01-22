@@ -12,12 +12,14 @@ People who handle **large, sensitive, recurring data** and have to **defend thei
 numbers**:
 
 - **finance and accounting:** month-end close, reconciliations, variance analysis
+- **accounting practices:** turning clients' bank statements and records into books
 - **internal and external audit:** journal entry testing, sampling, duplicate payments
 - **operations and procurement:** messy ERP exports, vendor data, inventory counts
 - **compliance, risk and fraud:** red-flag tests on data that may not leave the building
 - **healthcare, government and research admins:** big, regulated datasets
 
-They share four problems that no single tool solves:
+They share four problems that no single tool solves (evidence in
+[USER-RESEARCH.md](USER-RESEARCH.md)):
 
 1. **Messy exports.** ERP, bank and CRM dumps that are huge, with title rows,
    subtotals, page footers and five date formats.
@@ -96,12 +98,30 @@ red parentheses) are built in.
 ### Reconciliation and matching
 - Two-table reconciliation with keys, tolerances (amount, date window), fuzzy
   text, one-to-many and many-to-one; matched / unmatched / mismatched outputs
+- Reference normalisation: cheque suffixes (`279388A` + `279388B` = `279388`),
+  leading zeros, spaces; repeated references resolved by amount and date
+- Sum matching: one ledger line against several bank lines and vice versa
+- Probable keying errors flagged (7,991.10 vs 7,991.00), duplicates within each side
+- Unbooked items (bank charges, interest) proposed as adjusting entries
+- Reconciliations roll forward: outstanding items carry into next month; the
+  standard statement (balance per bank ± outstanding = balance per books)
+- Balance sheet account recs: open-item matching that auto-clears entries which
+  reverse each other, closing balance broken into buckets
 - Join doctor: match rate, duplicate keys and orphans before any lookup
 - Key-based file compare: added, removed and changed rows between versions
 - Intercompany reconciliation across entities and currencies
 - Entity resolution: one vendor/customer under many spellings across sources
 - Mapping tables (old → new chart of accounts, categories) reused across recipes
 - Search across a folder: "find invoice 48213 in every 2025 export"
+
+### Bank statements and bookkeeping
+- PDF and CSV statement import, entirely local: multi-line entries merged, dates
+  repaired, duplicate lines caught, and a **running-balance check** (opening +
+  lines = closing, page by page) so conversion errors are found, not trusted
+- Categorisation rules ("description contains X → category, VAT rate") that learn
+  from manual tagging; bulk-tag filtered rows; an "uncategorised" queue
+- Summary by category in one click; export templates for accounting software imports
+- Accrual, prepayment and deferred income schedules with monthly releases
 
 ### Audit and fraud analytics
 - Duplicates: payments (same vendor and amount within N days), invoices, near-duplicates
@@ -130,12 +150,25 @@ red parentheses) are built in.
 - Safe-share check before export: hidden sheets/rows, PII, external links, comments
 - Password-encrypted workbooks (AES-GCM via WebCrypto) and an app lock
 - "Clear all local data" in one click; offline bundle for air-gapped machines
+- Reversible pseudonymisation: the key never leaves the PC
+- An open, documented file format, so work outlives the product
+- Translate foreign-language narratives locally (multinational ledgers)
+
+### Evidence linking
+- Attach source documents (invoices, statements, contracts) to a workbook,
+  stored alongside it so the workbook never bloats
+- Link any cell to a highlighted region of a document; extract values locally
+- A "validated" mark that actually compares the cell to the document
+- Native tick marks with a legend, instead of pasted pictures
 
 ### Defensibility and review
 - Evidence pack: workbook + recipe + input file fingerprints + action log, re-runnable
   by a reviewer to the same numbers
 - Tamper-evident history: each step's hash chains to the previous one
-- Review marks: tick marks, reviewed-by on cells and ranges, review notes
+- Review marks: reviewed-by on cells and ranges, review notes; sign-off is
+  blocked while notes are open
+- Cell history ("who changed E5, when, from what") and input-vs-formula highlighting
+- One workbook with named versions instead of FINAL_v2 copies
 - Workpaper references: cross-reference codes (A-1, B-2) linking cells and sheets
 - Period snapshots: lock a period's numbers and compare against them later
 - "What changed since last review": a workbook diff
@@ -143,6 +176,11 @@ red parentheses) are built in.
 - Auto-documentation: sheets, sources, steps, checks and assumptions as a write-up
 
 ### Recurring reporting
+- **One template, many entities:** define a report once, generate it per market,
+  branch or company, and consolidate. No 40 hand-maintained copies
+- Automatic period roll-forward (actual and plan columns move on by themselves)
+- Report books: one PDF with contents and page numbers
+- Incremental refresh: recipes reprocess only what changed
 - Parameterised recipes (period, entity, threshold), re-run on new files
 - Watch a folder: new files are processed when the folder is reopened
 - Report packs: the same formatted workbook or PDF each period
@@ -159,6 +197,14 @@ red parentheses) are built in.
 - Column profiles: type, blanks, distinct, min/max, histogram, top values
 - Scenarios: copy-on-write what-if sheets compared side by side
 - SQL panel for power users; results as linked, re-runnable sheets
+
+### Excel habits, respected
+- Alt-key ribbon sequences (key tips) for keyboard-driven finance users
+- Iterative calculation for models with intentional circular references
+- Tables that grow when rows are added; currency-typed columns that refuse to
+  add dollars to euros; sign-flip and outlier checks on key totals
+- Performance doctor for imported `.xlsx` files (volatile functions, bloat)
+- Quote-qualified CSV, clean HTML export of all sheets, data-entry forms
 
 ### Workspace
 - Projects ("engagements"): a folder of source files, workbooks, recipes and evidence

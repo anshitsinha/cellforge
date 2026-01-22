@@ -8,6 +8,8 @@ allow, and the AI last, on top of actions that already work without it.
 
 Status: ✅ done · 🔨 in progress · ⬜ not started
 
+Feature priorities are grounded in [USER-RESEARCH.md](USER-RESEARCH.md).
+
 ## Architecture targets
 
 ```
@@ -74,7 +76,9 @@ Status: ✅ done · 🔨 in progress · ⬜ not started
 - ⬜ Number formats incl. custom codes and accounting styles (K/M, red parentheses)
 - ⬜ Merged cells, row heights, auto-fit, freeze panes, split view, zoom
 - ⬜ Fill handle with series detection; format painter
-- ⬜ Command palette (Ctrl+K) listing every public action
+- ⬜ Command palette (Ctrl+K) listing every public action; Alt-key key tips
+- ⬜ Instant structural edits at any size (insert a row in a huge model < 50 ms)
+- ⬜ Cell history ("blame") and input-vs-formula highlighting
 - ⬜ Save / restore in OPFS, autosave, open/save via File System Access
 
 ### M2: Formula engine, complete
@@ -87,6 +91,7 @@ Status: ✅ done · 🔨 in progress · ⬜ not started
   `SPLIT`, `REGEX*`, `ARRAYFORMULA`, `FLATTEN`)
 - ⬜ Formula auditing: trace precedents/dependents, evaluate step by step,
   watch window, error checking, lint for hard-coded numbers
+- ⬜ Iterative calculation; self-expanding tables; currency-typed columns
 - ⬜ Compiler coverage for the new functions; Excel conformance corpus in CI
 
 ### M3: Files and messy-export import
@@ -99,6 +104,9 @@ Status: ✅ done · 🔨 in progress · ⬜ not started
 - ⬜ Parsers: accounting negatives, locale numbers, any date format, currencies
 - ⬜ Type confidence report with jump-to
 - ⬜ Big-file utilities: preview while loading, split, sample, CSV → Parquet
+- ⬜ Bank statements: local PDF/CSV import, multi-line merge, date repair,
+  running-balance validation per page
+- ⬜ Performance doctor for imported `.xlsx`; open, documented native file format
 
 ### M4: Data tools
 - ⬜ Filters and filter views, multi-column sort, custom lists
@@ -117,6 +125,11 @@ Status: ✅ done · 🔨 in progress · ⬜ not started
 - ⬜ Join doctor (match rate, duplicate keys, orphans) and guided joins
 - ⬜ Reconciliation: keys, tolerances, fuzzy text, 1:N and N:1, matched /
   unmatched / mismatched outputs, exception export
+- ⬜ Reference normalisation, sum matching, keying-error flags, in-side duplicates,
+  proposed adjusting entries, roll-forward of outstanding items, rec statement
+- ⬜ Open-item matching for balance sheet accounts (auto-clear reversals)
+- ⬜ Acceptance test: synthetic bank/ledger month modelled on real data (split
+  cheques, repeated numbers, split deposits, clearing lag) at 6K and 6M rows
 - ⬜ Key-based file compare; intercompany reconciliation
 - ⬜ Entity resolution and reusable mapping tables
 - ⬜ Scenarios (copy-on-write sheets) and side-by-side compare
@@ -126,6 +139,8 @@ Status: ✅ done · 🔨 in progress · ⬜ not started
 - ⬜ Re-run on new files; watch a folder; templates gallery
 - ⬜ Data checks: column rules, master-list lookups, debits = credits; green/red
   checklist; period close checklist that gates export
+- ⬜ Categorisation rules that learn from manual tagging; bulk tagging; uncategorised queue
+- ⬜ Incremental refresh (reprocess only changed inputs)
 - ⬜ Version timeline, per-cell provenance, "explain this cell", lineage view
 
 ### M7: Audit, privacy, evidence
@@ -139,6 +154,10 @@ Status: ✅ done · 🔨 in progress · ⬜ not started
 - ⬜ Password-encrypted workbooks, app lock, clear-all-data, offline bundle
 - ⬜ Evidence packs, hash-chained history, review marks, workpaper references,
   period snapshots, review diff, auto-documentation
+- ⬜ Evidence linking: attached documents stored outside the workbook, cell ↔
+  document-region links, local extraction, validation that compares values
+- ⬜ Native tick marks with legend; review notes that block sign-off
+- ⬜ Reversible pseudonymisation; named versions instead of file copies
 
 ### M8: Charts and reports
 - ⬜ Charts: column, bar, line, area, pie/donut, scatter, combo, histogram,
@@ -146,6 +165,9 @@ Status: ✅ done · 🔨 in progress · ⬜ not started
 - ⬜ Pivot charts, sparklines
 - ⬜ Report mode and report packs: narrative + live tables and charts;
   print setup; PDF and self-contained HTML export
+- ⬜ One template, many entities, plus consolidation; automatic period roll-forward;
+  report books with contents and page numbers
+- ⬜ Accrual / prepayment / deferred income schedules; accounting import export templates
 - ⬜ Time tools: fiscal calendars, MoM/YoY, rolling windows, resampling,
   budget vs actual, multi-currency, simple forecasts
 
@@ -158,7 +180,7 @@ Status: ✅ done · 🔨 in progress · ⬜ not started
   execute → verify → retry
 - ⬜ Ask, Do, Explain, Clean, Insights; audit assistant; variance commentary
 - ⬜ Voice input (Whisper); embeddings for fuzzy matching and semantic search;
-  tables from PDFs and images
+  tables from PDFs and images; category suggestions; local translation of narratives
 - ⬜ Eval harness: accuracy and time-to-answer on a fixed task set, published
 
 ### M10: Docs and launch
