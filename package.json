@@ -9,8 +9,9 @@
   ],
   "scripts": {
     "dev": "npm run dev -w @cellforge/web",
+    "docs": "npm run dev -w @cellforge/docs",
     "build": "npm run build -w @cellforge/web",
-    "typecheck": "tsc --noEmit -p apps/web",
+    "typecheck": "tsc --noEmit -p apps/web && tsc --noEmit -p apps/docs",
     "test": "vitest run",
     "test:watch": "vitest"
   },
