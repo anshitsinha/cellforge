@@ -119,11 +119,29 @@ The data a user sees is three layers stacked:
   bit-twiddled into order-preserving uints and bucketed 16 bits at a time,
   plus one pass on a number/text/blank "kind" byte. No comparator calls.
 
-## Undo
+## Actions and undo
 
-Every user action becomes a `Command` with `undo()` / `redo()` on a pair of
-stacks. Cell edits record the previous *stored* value — `undefined` ("never
-edited, show the original") is kept distinct from `null` ("edited to empty").
+Every change is an *action*: a plain, serialisable `{ type, params }` object,
+validated against a JSON schema before it touches the sheet
+(`packages/actions`, registered in `apps/web/src/actions.ts`). Applying an
+action returns its *inverse*, which is itself an action, so undo is "apply
+the inverse" and redo is "apply the inverse's inverse". Actions may be async
+(sorting runs in a worker); the history applies them one at a time.
+
+- Cell restores keep `undefined` ("never edited, show the original") distinct
+  from `null` ("edited to empty") via a `revert` flag.
+- Inverses too big for JSON (a 100M-row sort order, a set of fills) live in a
+  blob store and are referenced by id.
+- The same objects will be recorded into recipes, kept as provenance, and
+  offered to the AI as tools (`registry.catalog()`). See
+  [development](dev/development.md) for how to add one.
+
+### Formulas and sorting
+
+Formulas are stored by base row but their references are in view
+coordinates. Each formula remembers the view row it was written at
+(`anchor`); its relative references are shifted by however far a sort has
+moved it, so same-row references stay on the same row, as in Excel.
 
 ## Known limits (for now)
 
