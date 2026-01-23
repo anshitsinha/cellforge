@@ -3,10 +3,10 @@ import { Grid, columnLetter } from "@cellforge/grid";
 import { parseTsv, rangeSize, rangeToTsv } from "./clipboard";
 import { computeStats } from "./stats";
 import { SyntheticSource } from "./demo";
-import { formatFormula } from "@cellforge/core";
-import { BlankSource, EditableSource, isFormula, parseInput, type Fill, type Stored } from "./editable";
+import { type Action, ActionHistory, BlobStore } from "@cellforge/actions";
+import { setCells, sheetActions, type SheetCtx } from "./actions";
+import { BlankSource, EditableSource, isFormula, type Fill } from "./editable";
 import { download, exportCsv } from "./exporter";
-import { History } from "./history";
 import { extractKeys, sortInWorker } from "./sort";
 import { formatBytes, importCsv } from "./importer";
 
@@ -96,18 +96,53 @@ grid.onSelectionChange = () => {
 
 // --- edits + undo/redo -------------------------------------------------------------
 
-const history = new History();
+// Every change goes through an action (see actions.ts): validated, undoable,
+// and recordable into recipes later. Sorting runs in a worker, so actions
+// can be async; the history applies them one at a time.
+
 const undoButton = document.getElementById("btn-undo") as HTMLButtonElement;
 const redoButton = document.getElementById("btn-redo") as HTMLButtonElement;
 
-// `undefined` means "no edit" (show the underlying data), which is different
-// from null ("edited to be empty") - undo needs to tell those apart.
-type CellChange = { row: number; col: number; value: Stored | undefined };
+const registry = sheetActions();
+const blobs = new BlobStore();
+let cancelSort: (() => void) | null = null;
 
-function applyChanges(target: EditableSource, changes: CellChange[]) {
-  for (const { row, col, value } of changes) {
-    if (value === undefined) target.revertCell(row, col);
-    else target.setCell(row, col, value);
+/** Sort keys are read on the main thread in slices; the radix sort runs in a worker. */
+async function sortRows(target: EditableSource, col: number, descending: boolean): Promise<Uint32Array | null> {
+  cancelSort?.();
+  const name = target.getColumnName(col) ?? columnLetter(col);
+  let cancelled = false;
+  cancelSort = () => (cancelled = true);
+  statusLeft.textContent = `Sorting by ${name}: reading values…`;
+  const { keys, kinds } = await extractKeys(target, col, descending, (f) => {
+    statusLeft.textContent = `Sorting by ${name}: reading values… ${Math.round(f * 100)}%`;
+  });
+  if (cancelled) return null;
+  const job = sortInWorker({ keys, kinds, descending }, (f) => {
+    statusLeft.textContent = `Sorting by ${name}… ${Math.round(f * 100)}%`;
+  });
+  cancelSort = job.cancel;
+  try {
+    return (await job.result).order;
+  } catch {
+    return null; // cancelled
+  } finally {
+    cancelSort = null;
+  }
+}
+
+const ctx = (): SheetCtx => ({ sheet: source, blobs, sortRows });
+const history = new ActionHistory(registry, ctx);
+
+/** Run a user action; problems are reported in the status bar, not thrown. */
+async function run(action: Action) {
+  try {
+    const applied = await history.run(action);
+    refresh();
+    return applied;
+  } catch (e) {
+    statusLeft.textContent = (e as Error).message;
+    return null;
   }
 }
 
@@ -121,40 +156,40 @@ function refresh() {
   redoButton.disabled = !history.canRedo;
 }
 
-/** Write several cells as one undoable step. */
-function writeCells(changes: CellChange[], label: string) {
-  if (changes.length === 0) return;
-  // capture the sheet itself - history is cleared when a new sheet loads, but
-  // being explicit means an undo can never write into the wrong one
-  const target = source;
-  const before = changes.map(({ row, col }) => ({ row, col, value: target.getStored(row, col) }));
-  applyChanges(target, changes);
-  history.push({
-    label,
-    undo: () => applyChanges(target, before),
-    redo: () => applyChanges(target, changes),
-  });
-  refresh();
+type CellInput = { row: number; col: number; input: string | null };
+
+/** Write several cells (as typed text, or null to empty) as one undoable step. */
+function writeCells(cells: CellInput[], label: string) {
+  if (cells.length === 0) return;
+  void run(setCells(cells, label));
 }
 
-function undo() {
-  const cmd = history.undo();
-  if (cmd) statusLeft.textContent = `Undid ${cmd.label}`;
-  refresh();
+async function undo() {
+  try {
+    const label = await history.undo();
+    refresh();
+    if (label) statusLeft.textContent = `Undid ${label}`;
+  } catch (e) {
+    statusLeft.textContent = `Couldn't undo: ${(e as Error).message}`;
+  }
 }
 
-function redo() {
-  const cmd = history.redo();
-  if (cmd) statusLeft.textContent = `Redid ${cmd.label}`;
-  refresh();
+async function redo() {
+  try {
+    const label = await history.redo();
+    refresh();
+    if (label) statusLeft.textContent = `Redid ${label}`;
+  } catch (e) {
+    statusLeft.textContent = `Couldn't redo: ${(e as Error).message}`;
+  }
 }
 
 undoButton.addEventListener("click", () => {
-  undo();
+  void undo();
   grid.focus();
 });
 redoButton.addEventListener("click", () => {
-  redo();
+  void redo();
   grid.focus();
 });
 
@@ -165,62 +200,24 @@ document.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   if (k === "z" && !e.shiftKey) {
     e.preventDefault();
-    undo();
+    void undo();
   } else if (k === "y" || (k === "z" && e.shiftKey)) {
     e.preventDefault();
-    redo();
+    void redo();
   }
 });
 
 // --- sorting ---------------------------------------------------------------------
-
-// Keys are extracted on the main thread (in slices) and the radix sort runs
-// in a worker. Peak memory is ~17 bytes/row (8 key + 1 kind + 2x4 index), so
-// the 100M demo needs ~1.7GB free.
-let cancelSort: (() => void) | null = null;
+// Peak memory is ~17 bytes/row (8 key + 1 kind + 2x4 index), so the 100M demo
+// needs ~1.7GB free.
 
 async function sortBy(descending: boolean) {
   const { col } = grid.selection;
   const name = source.getColumnName(col) ?? columnLetter(col);
-  cancelSort?.();
-
   const started = performance.now();
-  const target = source;
-  const before = target.rowOrder;
-  // a newer sort / undo / file load makes this one pointless
-  const stale = () => source !== target || target.rowOrder !== before;
-
-  statusLeft.textContent = `Sorting by ${name}: reading values…`;
-  let cancelled = false;
-  cancelSort = () => (cancelled = true);
-  const { keys, kinds } = await extractKeys(target, col, descending, (f) => {
-    statusLeft.textContent = `Sorting by ${name}: reading values… ${Math.round(f * 100)}%`;
-  });
-  if (cancelled || stale()) return;
-
-  const job = sortInWorker({ keys, kinds, descending }, (f) => {
-    statusLeft.textContent = `Sorting by ${name}… ${Math.round(f * 100)}%`;
-  });
-  cancelSort = job.cancel;
-  let viewOrder: Uint32Array;
-  try {
-    viewOrder = (await job.result).order;
-  } catch {
-    return; // cancelled
-  }
-  if (stale()) return;
-
-  // worker result is in view rows - map through the order we sorted from
-  const after = before ? viewOrder.map((v) => before[v]) : viewOrder;
-  target.setRowOrder(after);
-  history.push({
-    label: `sort by ${name}`,
-    undo: () => target.setRowOrder(before),
-    redo: () => target.setRowOrder(after),
-  });
-  cancelSort = null;
-  refresh();
-  statusLeft.textContent = `Sorted ${rowFormat.format(target.rowCount)} rows by ${name} in ${(
+  const applied = await run({ type: "rows.sort", params: { col, descending } });
+  if (!applied) return; // cancelled by a newer sort, or failed
+  statusLeft.textContent = `Sorted ${rowFormat.format(source.rowCount)} rows by ${name} in ${(
     (performance.now() - started) / 1000
   ).toFixed(2)}s`;
 }
@@ -239,67 +236,38 @@ document.getElementById("btn-sort-desc")!.addEventListener("click", () => {
 // unsorted sheet each column becomes a single Fill object - O(1) storage no
 // matter how many rows - whose formula gets compiled to a typed-array kernel.
 
-function fillDown() {
+async function fillDown() {
   const range = grid.range;
   if (range.bottom === range.top) {
     statusLeft.textContent = "Select the cell to copy and the cells below it, then fill down (Ctrl+D).";
     return;
   }
   const rows = range.bottom - range.top;
-  const target = source;
-
-  if (target.rowOrder) {
-    // sorted: rows below each other in the view are scattered in the data,
-    // so a fill can't be one contiguous block. Write cells individually.
-    if (rows * (range.right - range.left + 1) > MAX_BULK_CELLS) {
-      statusLeft.textContent = `Fill down on a sorted sheet is limited to ${rowFormat.format(MAX_BULK_CELLS)} cells.`;
-      return;
-    }
-    const changes: CellChange[] = [];
-    for (let col = range.left; col <= range.right; col++) {
-      const { template, origin } = target.getTemplate(range.top, col);
-      for (let row = range.top + 1; row <= range.bottom; row++) {
-        const value = isFormula(template)
-          ? { ...template, shift: row - origin, text: template.ast ? formatFormula(template.ast, row - origin) : template.text }
-          : template;
-        changes.push({ row, col, value });
-      }
-    }
-    writeCells(changes, "fill down");
+  // sorted sheets fill cell by cell (rows adjacent in the view are scattered
+  // in the data), which goes through the sparse edit map
+  if (source.rowOrder && rows * (range.right - range.left + 1) > MAX_BULK_CELLS) {
+    statusLeft.textContent = `Fill down on a sorted sheet is limited to ${rowFormat.format(MAX_BULK_CELLS)} cells.`;
     return;
   }
+  const target = source;
+  const applied = await run({ type: "fill.down", params: { range } });
+  if (!applied) return;
 
-  // unsorted: one Fill per column, plus whatever explicit edits it covered
-  // (kept so undo can put them back)
-  const fills: Fill[] = [];
-  const covered: { row: number; col: number; value: Stored }[] = [];
-  for (let col = range.left; col <= range.right; col++) {
-    const { template, origin } = target.getTemplate(range.top, col);
-    covered.push(...target.takeEdits(col, range.top + 1, range.bottom));
-    fills.push(target.addFill(col, range.top + 1, range.bottom, template, origin));
+  // unsorted fills are one compiled-or-interpreted Fill per column: say which
+  let how = "";
+  const inverse = applied.inverse;
+  if (inverse?.type === "fill.remove") {
+    const fills = blobs.get<Fill[]>((inverse.params as { fills: string }).fills);
+    const compiled = fills.filter((f) => target.isCompiled(f)).length;
+    const formulaFills = fills.filter((f) => isFormula(f.template)).length;
+    how =
+      formulaFills === 0 ? "" : compiled === formulaFills ? " · compiled" : compiled === 0 ? " · interpreted" : ` · ${compiled}/${formulaFills} columns compiled`;
   }
-  history.push({
-    label: "fill down",
-    undo: () => {
-      for (const f of fills) target.removeFill(f);
-      for (const c of covered) target.setCell(c.row, c.col, c.value);
-    },
-    redo: () => {
-      for (const c of covered) target.revertCell(c.row, c.col);
-      for (const f of fills) target.restoreFill(f);
-    },
-  });
-
-  const compiled = fills.filter((f) => target.isCompiled(f)).length;
-  const formulaFills = fills.filter((f) => isFormula(f.template)).length;
-  const how =
-    formulaFills === 0 ? "" : compiled === formulaFills ? " · compiled" : compiled === 0 ? " · interpreted" : ` · ${compiled}/${formulaFills} columns compiled`;
-  refresh();
   statusLeft.textContent = `Filled ${rowFormat.format(rows)} rows${how}`;
 }
 
 document.getElementById("btn-fill")!.addEventListener("click", () => {
-  fillDown();
+  void fillDown();
   grid.focus();
 });
 
@@ -307,7 +275,7 @@ document.addEventListener("keydown", (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "d") return;
   if (document.activeElement instanceof HTMLInputElement) return;
   e.preventDefault(); // otherwise the browser opens "bookmark this page"
-  fillDown();
+  void fillDown();
 });
 
 function attachKernelReporting(s: EditableSource) {
@@ -335,7 +303,7 @@ function attachKernelReporting(s: EditableSource) {
 attachKernelReporting(source);
 
 grid.onCellEdit = ({ row, col }, text) => {
-  writeCells([{ row, col, value: parseInput(text) }], `edit in ${columnLetter(col)}${row + 1}`);
+  writeCells([{ row, col, input: text }], `edit in ${columnLetter(col)}${row + 1}`);
 };
 
 // Clearing goes cell by cell into the sparse edit map, so a whole 100M row
@@ -347,13 +315,13 @@ grid.onClearRange = (range) => {
     statusLeft.textContent = `Clearing more than ${rowFormat.format(MAX_BULK_CELLS)} cells at once isn't supported yet.`;
     return;
   }
-  const changes: CellChange[] = [];
+  const cells: CellInput[] = [];
   for (let row = range.top; row <= range.bottom; row++) {
     for (let col = range.left; col <= range.right; col++) {
-      if (source.getCell(row, col) !== null) changes.push({ row, col, value: null });
+      if (source.getCell(row, col) !== null) cells.push({ row, col, input: null });
     }
   }
-  writeCells(changes, "clear");
+  writeCells(cells, "clear");
 };
 
 // --- clipboard ------------------------------------------------------------------
@@ -393,15 +361,15 @@ document.addEventListener("paste", (e) => {
 
   const rows = parseTsv(text.replace(/\r?\n$/, "")); // Excel adds a trailing newline
   const { row: top, col: left } = grid.selection;
-  const changes: CellChange[] = [];
+  const cells: CellInput[] = [];
   let right = left;
   for (let i = 0; i < rows.length && top + i < source.rowCount; i++) {
     for (let j = 0; j < rows[i].length && left + j < source.colCount; j++) {
-      changes.push({ row: top + i, col: left + j, value: parseInput(rows[i][j]) });
+      cells.push({ row: top + i, col: left + j, input: rows[i][j] });
       right = Math.max(right, left + j);
     }
   }
-  writeCells(changes, "paste");
+  writeCells(cells, "paste");
   // select what was pasted so it's obvious where it went
   grid.selectRange({
     top,
@@ -439,7 +407,9 @@ function loadSource(next: EditableSource, name: string) {
   source = next;
   currentName = name;
   attachKernelReporting(source);
+  cancelSort?.();
   history.clear();
+  blobs.clear();
   grid.setSource(source);
   fileName.textContent = name;
   refresh();
