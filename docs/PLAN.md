@@ -61,13 +61,28 @@ Feature priorities are grounded in [USER-RESEARCH.md](USER-RESEARCH.md).
 - **Evidence is cryptographic:** SHA-256 fingerprints of inputs and a hash chain
   over the action log, via WebCrypto.
 
+## Now
+
+The item being built right now, broken into the steps it takes. The docs
+site's progress page shows this expanded.
+
+### Workbook with multiple sheets
+- [ ] `Workbook` model: an ordered list of sheets, each with an id, name and its own data
+- [ ] Sheet actions: add, rename, delete, duplicate, reorder, set colour, hide / unhide (all undoable)
+- [ ] Every cell action targets a sheet by id
+- [ ] Sheet tab bar in the app: click to switch, double-click to rename, drag to reorder, right-click menu
+- [ ] Keyboard: Ctrl+PgUp / Ctrl+PgDn to switch sheets
+- [ ] Tests for every sheet action, including undo of delete restoring the data
+- [ ] User guide page: working with sheets
+
 ## Milestones
 
 ### M1: Spreadsheet core 🔨
 - ✅ `actions` package: registry, schemas, apply/invert, history, blob store
-- 🔨 Port edits, paste, clear, fill and sort onto actions
-- ⬜ Fix: formulas keep same-row references after sorting (Excel semantics)
-- ⬜ Workbook with multiple sheets (add, rename, reorder, colour, hide, duplicate, delete)
+- ✅ Port edits, paste, clear, fill and sort onto actions
+- ✅ Fix: formulas keep same-row references after sorting (Excel semantics)
+- ✅ Docs site with user guide, developer guide and this checklist
+- 🔨 Workbook with multiple sheets (add, rename, reorder, colour, hide, duplicate, delete)
 - ⬜ Cross-sheet references (`Sheet2!A1`, `'My Sheet'!A1:B9`)
 - ⬜ Dependency graph + incremental recalc
 - ⬜ Insert / delete / hide rows and columns with reference adjustment
