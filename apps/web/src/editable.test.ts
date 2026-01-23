@@ -101,3 +101,31 @@ describe("EditableSource formulas", () => {
     expect(s.editCount).toBe(0);
   });
 });
+
+describe("formulas follow their row when sorted", () => {
+  it("same-row references stay on the same row, like Excel", () => {
+    const s = new EditableSource(new BlankSource(3, 2));
+    s.setCell(0, 0, 30);
+    s.setCell(1, 0, 10);
+    s.setCell(2, 0, 20);
+    s.setCell(0, 1, parseInput("=A1*2")); // row 1's own value doubled
+    // ascending by A: row with 30 moves to the bottom
+    s.setRowOrder(Uint32Array.from([1, 2, 0]));
+    expect([0, 1, 2].map((r) => s.getCell(r, 0))).toEqual([10, 20, 30]);
+    expect(s.getCell(2, 1)).toBe(60); // still doubles its own row
+    expect(s.getEditText(2, 1)).toBe("=A3*2");
+    s.setRowOrder(null);
+    expect(s.getCell(0, 1)).toBe(60);
+    expect(s.getEditText(0, 1)).toBe("=A1*2");
+  });
+
+  it("absolute references don't move", () => {
+    const s = new EditableSource(new BlankSource(2, 2));
+    s.setCell(0, 0, 5);
+    s.setCell(1, 0, 7);
+    s.setCell(1, 1, parseInput("=$A$1+A2"));
+    s.setRowOrder(Uint32Array.from([1, 0]));
+    // row with 7 is now on top; $A$1 is whatever is in A1 now (7)
+    expect(s.getCell(0, 1)).toBe(14);
+  });
+});

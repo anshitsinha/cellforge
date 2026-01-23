@@ -33,6 +33,20 @@ export interface Formula {
   ast: Node | null; // null when it didn't parse
   /** Evaluate as if filled this many rows down from where it was written. */
   shift?: number;
+  /**
+   * The view row the formula was written at. Relative references are kept
+   * relative to the formula's own row, so when a sort moves the row, its
+   * references move with it (Excel's behaviour). Set by setCell.
+   */
+  anchor?: number;
+}
+
+/**
+ * How far a stored formula's references are shifted when shown at view row
+ * `row`: its own fill shift plus however far sorting has moved it.
+ */
+export function effectiveShift(f: Formula, row: number): number {
+  return (f.shift ?? 0) + (row - (f.anchor ?? row));
 }
 
 /** What can live in a cell: a plain value or a formula. */
@@ -173,7 +187,7 @@ export class EditableSource implements DataSource {
   getEditText(row: number, col: number): string {
     const b = this.toBase(row);
     const stored = this.edits.get(b)?.get(col);
-    if (isFormula(stored)) return formulaText(stored, stored.shift ?? 0);
+    if (isFormula(stored)) return formulaText(stored, effectiveShift(stored, row));
     if (stored === undefined) {
       const fill = this.fillAt(b, col);
       if (fill && isFormula(fill.template)) return formulaText(fill.template, row - fill.origin);
@@ -193,7 +207,7 @@ export class EditableSource implements DataSource {
   getTemplate(row: number, col: number): { template: Stored; origin: number } {
     const b = this.toBase(row);
     const stored = this.edits.get(b)?.get(col);
-    if (isFormula(stored)) return { template: { ...stored, shift: 0 }, origin: row - (stored.shift ?? 0) };
+    if (isFormula(stored)) return { template: { ...stored, shift: 0, anchor: undefined }, origin: row - effectiveShift(stored, row) };
     if (stored !== undefined) return { template: stored, origin: row };
     const fill = this.fillAt(b, col);
     if (fill) return { template: fill.template, origin: fill.origin };
@@ -201,6 +215,7 @@ export class EditableSource implements DataSource {
   }
 
   setCell(row: number, col: number, value: Stored): void {
+    if (isFormula(value)) value = { ...value, anchor: row };
     const b = this.toBase(row);
     let rowEdits = this.edits.get(b);
     if (!rowEdits) {
@@ -454,7 +469,7 @@ export class EditableSource implements DataSource {
     const b = this.toBase(row);
     const stored = this.edits.get(b)?.get(col);
     if (stored !== undefined) {
-      return isFormula(stored) ? this.evalFormula(row, col, stored, stored.shift ?? 0) : stored;
+      return isFormula(stored) ? this.evalFormula(row, col, stored, effectiveShift(stored, row)) : stored;
     }
     const fill = this.fillAt(b, col);
     if (!fill) return col < this.base.colCount ? this.base.getCell(b, col) : null;
