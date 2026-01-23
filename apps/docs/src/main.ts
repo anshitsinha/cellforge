@@ -1,6 +1,6 @@
 import "./style.css";
 import { marked } from "marked";
-import { counts, parsePlan, type Status } from "./plan";
+import { counts, parsePlan, type Status } from "@cellforge/plan";
 import { findPage, pages, planMarkdown, routeForLink } from "./pages";
 import { buildIndex, search, slugify, terms } from "./search";
 

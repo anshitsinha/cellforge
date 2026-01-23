@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { counts, parsePlan } from "./plan";
+import { counts, parsePlan } from "../src";
 
 const sample = `# Plan
 

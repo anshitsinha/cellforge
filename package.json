@@ -10,8 +10,9 @@
   "scripts": {
     "dev": "npm run dev -w @cellforge/web",
     "docs": "npm run dev -w @cellforge/docs",
+    "tracker": "npm run dev -w @cellforge/tracker",
     "build": "npm run build -w @cellforge/web",
-    "typecheck": "tsc --noEmit -p apps/web && tsc --noEmit -p apps/docs",
+    "typecheck": "tsc --noEmit -p apps/web && tsc --noEmit -p apps/docs && tsc --noEmit -p apps/tracker",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -19,6 +20,7 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "@types/node": "^26.6.6",
     "@webgpu/types": "^0.1.74",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
