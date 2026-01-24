@@ -9,8 +9,9 @@ Requires Node 20+.
 
 ```bash
 npm install
-npm run dev        # the app        → http://localhost:5173  (/app.html for the sheet)
-npm run docs       # these docs     → http://localhost:5174  (#/progress for the checklist)
+npm run dev        # the app           → http://localhost:5173  (/app.html for the sheet)
+npm run tracker    # live build tracker → http://localhost:5174  (checklist, current step, commits)
+npm run docs       # this documentation → http://localhost:5175
 npm test           # all unit tests (vitest)
 npm run typecheck  # strict TypeScript, no emit
 npm run build      # static site in apps/web/dist
@@ -23,7 +24,9 @@ apps/web/           landing page, the app (app.html), /bench.html
   src/actions.ts      the sheet's actions (edits, fill, sort)
   src/app.ts          app shell: wires grid, data, actions, toolbar
   src/editable.ts     edit layer over the columnar data, fills, row order
-apps/docs/          this documentation site (user guide, dev guide, progress)
+apps/docs/          this documentation site (user guide, dev guide, search)
+apps/tracker/       live build tracker: checklist, current step, recent commits
+packages/plan/      parses docs/PLAN.md (shared by the tracker and the docs)
 packages/actions/   action registry, schemas, history, blob store
 packages/core/      columnar table, CSV parser, formula parser/evaluator/compiler
 packages/grid/      virtualized canvas grid
@@ -84,8 +87,10 @@ Checklist for a new action:
 - exactly one item is 🔨, and the `## Now` section breaks it into steps
   (`- [ ]` / `- [x]`).
 
-The [progress page](#/progress) is generated from that file, so updating the
-plan *is* updating the checklist. When an item is finished: tick its steps,
+The live tracker (`npm run tracker`) and the docs' [progress page](#/progress)
+are generated from that file, so updating the plan *is* updating the checklist.
+The tracker polls it every two seconds, along with the latest commits, and marks
+the first unticked step of the current item as the one being worked on. When an item is finished: tick its steps,
 mark it ✅, mark the next one 🔨, and replace the `## Now` section.
 
 ## Commits
