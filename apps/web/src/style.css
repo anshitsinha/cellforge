@@ -36,7 +36,7 @@ body {
 
 #app {
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto auto 1fr auto auto;
   height: 100%;
   /* on phones, 100% includes the area behind the browser's address bar;
      dvh is the actually-visible height */
@@ -242,4 +242,179 @@ button:disabled {
   #formula-input {
     font-size: 16px;
   }
+}
+
+/* --- sheet tabs ------------------------------------------------------------ */
+
+.sheet-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  min-height: 34px;
+  padding: 0 6px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.tab-tool {
+  flex: none;
+  width: 30px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 17px;
+  cursor: pointer;
+  border-radius: 6px;
+  margin: 3px 0;
+}
+
+.tab-tool:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.tab-strip {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+}
+
+.tab-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  flex: none;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 3px solid var(--tab-color, transparent);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--text);
+  background: var(--border);
+}
+
+.tab.active {
+  color: var(--text);
+  font-weight: 600;
+  background: var(--bg);
+  box-shadow: inset 0 3px 0 var(--accent);
+}
+
+.tab.dragging {
+  opacity: 0.4;
+}
+
+.tab.drop-target {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.tab-rename {
+  width: 160px;
+  margin: 4px 0;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.tab-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.menu-item:hover:not(:disabled),
+.menu-item:focus-visible {
+  background: var(--accent-soft, rgba(26, 115, 232, 0.1));
+  outline: none;
+}
+
+.menu-item:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.menu-item.current {
+  font-weight: 600;
+}
+
+.swatches {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.swatch.on {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
+
+.sheet-list input {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13.5px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.sheet-list-items {
+  max-height: 300px;
+  overflow-y: auto;
+  color: var(--muted);
+  font-size: 13px;
 }

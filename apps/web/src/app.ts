@@ -1,5 +1,5 @@
 import "./style.css";
-import { Grid, columnLetter } from "@cellforge/grid";
+import { type CellRange, Grid, columnLetter } from "@cellforge/grid";
 import { parseTsv, rangeSize, rangeToTsv } from "./clipboard";
 import { computeStats } from "./stats";
 import { SyntheticSource } from "./demo";
@@ -7,6 +7,8 @@ import { type Action, ActionHistory, BlobStore } from "@cellforge/actions";
 import { setCells, sheetActions, type SheetCtx } from "./actions";
 import { BlankSource, EditableSource, isFormula, type Fill } from "./editable";
 import { download, exportCsv } from "./exporter";
+import { SheetTabs } from "./tabs";
+import { sheetNameProblem, Workbook } from "./workbook";
 import { extractKeys, sortInWorker } from "./sort";
 import { formatBytes, importCsv } from "./importer";
 
@@ -28,10 +30,26 @@ const startWithDemo = new URLSearchParams(location.search).has("demo");
 // imported/demo data gets a few empty columns after it, for calculated columns
 const SPARE_COLUMNS = 10;
 
-let source = startWithDemo
-  ? new EditableSource(new SyntheticSource(DEMO_ROWS), SPARE_COLUMNS)
-  : new EditableSource(new BlankSource());
+/** A file name made into a valid sheet name ("sales/2026.csv" → "sales_2026"). */
+function sheetNameFrom(file: string): string {
+  const name = file
+    .replace(/.(csv|tsv|txt)$/i, "")
+    .replace(/[\/?*[]:]/g, "_")
+    .replace(/^'+|'+$/g, "")
+    .slice(0, 31)
+    .trim();
+  return name && !sheetNameProblem(name) ? name : "Sheet1";
+}
+
+let workbook = startWithDemo
+  ? new Workbook({ name: "Demo", source: new EditableSource(new SyntheticSource(DEMO_ROWS), SPARE_COLUMNS) })
+  : new Workbook();
+let activeId = workbook.sheets[0].id;
+/** the sheet on screen */
+let source = workbook.sheets[0].source;
 let currentName = startWithDemo ? "demo — synthetic sales" : "Untitled";
+// each sheet keeps its own selection when you switch away and back
+const selections = new Map<string, CellRange>();
 // Fingers need bigger targets than a mouse, and iOS zooms the page when an
 // input with <16px text gets focus.
 const coarsePointer = matchMedia("(pointer: coarse)").matches;
@@ -131,7 +149,15 @@ async function sortRows(target: EditableSource, col: number, descending: boolean
   }
 }
 
-const ctx = (): SheetCtx => ({ sheet: source, blobs, sortRows });
+// a sheet that an action just added or restored is shown once it finishes
+let pendingShow: string | null = null;
+const ctx = (): SheetCtx => ({
+  workbook,
+  activeSheet: activeId,
+  blobs,
+  sortRows,
+  onSheetShown: (id) => (pendingShow = id),
+});
 const history = new ActionHistory(registry, ctx);
 
 /** Run a user action; problems are reported in the status bar, not thrown. */
@@ -146,8 +172,40 @@ async function run(action: Action) {
   }
 }
 
+/** Show another sheet. Switching is view state, so it isn't undoable (as in Excel). */
+function showSheet(id: string) {
+  if (id === activeId) return;
+  selections.set(activeId, grid.range);
+  const sheet = workbook.get(id);
+  activeId = id;
+  source = sheet.source;
+  attachKernelReporting(source);
+  grid.setSource(source);
+  const saved = selections.get(id);
+  grid.selectRange(saved ?? { top: 0, left: 0, bottom: 0, right: 0 });
+  tabs.render();
+  refresh();
+}
+
+/** Keep the view on a sheet that exists and is visible after any action. */
+function settleActiveSheet() {
+  if (pendingShow && workbook.has(pendingShow)) {
+    const id = pendingShow;
+    pendingShow = null;
+    showSheet(id);
+    return;
+  }
+  pendingShow = null;
+  if (!workbook.has(activeId) || workbook.get(activeId).hidden) {
+    const next = workbook.visible[Math.min(workbook.visible.length - 1, 0)] ?? workbook.sheets[0];
+    showSheet(next.id);
+  }
+}
+
 /** Repaint and update everything that shows cell contents. */
 function refresh() {
+  settleActiveSheet();
+  tabs.render();
   grid.invalidate();
   syncFormulaBar();
   updateStatus();
@@ -397,6 +455,38 @@ sheet.addEventListener("input", (e) => {
   if (e.target instanceof HTMLInputElement) formulaInput.value = e.target.value;
 });
 
+function workbookEdited() {
+  return workbook.sheets.length > 1 || workbook.sheets.some((x) => x.source.editCount > 0);
+}
+
+const tabs = new SheetTabs(document.getElementById("sheet-tabs")!, {
+  workbook: () => workbook,
+  active: () => activeId,
+  switchTo: (id) => {
+    showSheet(id);
+    grid.focus();
+  },
+  run: (action) => run(action),
+});
+tabs.render();
+
+// Ctrl+PgUp / Ctrl+PgDn: previous / next sheet (capture, before the grid's own PgUp/PgDn)
+document.addEventListener(
+  "keydown",
+  (e) => {
+    if (!(e.ctrlKey || e.metaKey) || (e.key !== "PageUp" && e.key !== "PageDown")) return;
+    if (document.activeElement instanceof HTMLInputElement && !sheet.contains(document.activeElement)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const visible = workbook.visible;
+    const i = visible.findIndex((x) => x.id === activeId);
+    const next = visible[(i + (e.key === "PageDown" ? 1 : -1) + visible.length) % visible.length];
+    showSheet(next.id);
+    grid.focus();
+  },
+  true,
+);
+
 fileName.textContent = currentName;
 statusRight.textContent = infoText;
 syncFormulaBar();
@@ -404,6 +494,9 @@ updateStatus();
 grid.focus();
 
 function loadSource(next: EditableSource, name: string) {
+  workbook = new Workbook({ name: sheetNameFrom(name), source: next });
+  activeId = workbook.sheets[0].id;
+  selections.clear();
   source = next;
   currentName = name;
   attachKernelReporting(source);
@@ -417,12 +510,12 @@ function loadSource(next: EditableSource, name: string) {
 }
 
 document.getElementById("btn-new")!.addEventListener("click", () => {
-  if (source.editCount && !confirm("Discard your changes and start a new sheet?")) return;
+  if (workbookEdited() && !confirm("Discard your changes and start a new workbook?")) return;
   loadSource(new EditableSource(new BlankSource()), "Untitled");
 });
 
 document.getElementById("btn-demo")!.addEventListener("click", () => {
-  if (source.editCount && !confirm("Discard your changes and load the demo?")) return;
+  if (workbookEdited() && !confirm("Discard your changes and load the demo?")) return;
   loadSource(new EditableSource(new SyntheticSource(DEMO_ROWS), SPARE_COLUMNS), "demo — synthetic sales");
 });
 
