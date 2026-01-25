@@ -8,7 +8,9 @@ allow, and the AI last, on top of actions that already work without it.
 
 Status: ✅ done · 🔨 in progress · ⬜ not started
 
-Feature priorities are grounded in [USER-RESEARCH.md](USER-RESEARCH.md).
+Feature priorities are grounded in [USER-RESEARCH.md](USER-RESEARCH.md). The
+plan was reviewed for bloat: anything that doesn't serve the niche was cut or
+moved to "Later" (see the end of this file).
 
 ## Architecture targets
 
@@ -16,7 +18,7 @@ Feature priorities are grounded in [USER-RESEARCH.md](USER-RESEARCH.md).
 ┌──────────────────────────────────────────────────────────────────────┐
 │ apps/web      app shell, panels (recipes, checks, reconcile, audit,  │
 │               explore, AI, review), command palette                  │
-│ apps/docs     documentation site, function reference (generated)     │
+│ apps/docs     documentation · apps/tracker  live build tracker       │
 ├──────────────────────────────────────────────────────────────────────┤
 │ actions       typed actions: apply / invert / serialise / describe   │
 │               ← used by UI, undo, recipes, provenance, AI tools      │
@@ -26,15 +28,15 @@ Feature priorities are grounded in [USER-RESEARCH.md](USER-RESEARCH.md).
 ├───────────────┬──────────────────┬───────────────────┬───────────────┤
 │ core          │ formula          │ query (lazy)      │ files (lazy)  │
 │ columnar data │ parser, function │ DuckDB-WASM over  │ xlsx, csv,    │
-│ edit overlay  │ registry, Excel  │ Arrow views of    │ parquet, ods, │
-│ sort, fills   │ semantics, spill │ sheet columns     │ json, pdf     │
+│ edit overlay  │ registry, Excel  │ Arrow views of    │ parquet, json │
+│ sort, fills   │ semantics, spill │ sheet columns     │ pdf statements│
 ├───────────────┴──────────────────┴───────────────────┴───────────────┤
 │ analytics     reconcile, match, audit tests, sampling, checks, PII   │
 ├──────────────────────────────────────────────────────────────────────┤
 │ grid          canvas renderer: styles, merges, freeze, spill, marks  │
 ├──────────────────────────────────────────────────────────────────────┤
 │ ai (lazy)     kiln runtime, model manager, constrained decoding,     │
-│               tool loop over actions, embeddings, Whisper, OCR       │
+│               tool loop over actions                                 │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -54,8 +56,8 @@ Feature priorities are grounded in [USER-RESEARCH.md](USER-RESEARCH.md).
 - **Analytics are actions too.** "Reconcile", "find duplicate payments" or
   "Benford test" produce new sheets through actions, so they're undoable,
   recordable into recipes and callable by the AI.
-- **Heavy things load lazily** (query engine, codecs, models, OCR) and are
-  cached in the Origin Private File System.
+- **Heavy things load lazily** (query engine, codecs, models) and are cached in
+  the Origin Private File System.
 - **Local AI is designed for small models:** deterministic parsing first,
   grammar-constrained output, execute-verify-retry.
 - **Evidence is cryptographic:** SHA-256 fingerprints of inputs and a hash chain
@@ -63,14 +65,14 @@ Feature priorities are grounded in [USER-RESEARCH.md](USER-RESEARCH.md).
 
 ## Now
 
-The item being built right now, broken into the steps it takes. The docs
-site's progress page shows this expanded.
+The item being built right now, broken into the steps it takes. The live
+tracker shows this expanded, with the first unticked step as the current one.
 
 ### Workbook with multiple sheets
 - [ ] `Workbook` model: an ordered list of sheets, each with an id, name and its own data
 - [ ] Sheet actions: add, rename, delete, duplicate, reorder, set colour, hide / unhide (all undoable)
 - [ ] Every cell action targets a sheet by id
-- [ ] Sheet tab bar in the app: click to switch, double-click to rename, drag to reorder, right-click menu
+- [ ] Sheet tab bar in the app: click to switch, double-click to rename, drag to reorder, right-click menu, sheet search
 - [ ] Keyboard: Ctrl+PgUp / Ctrl+PgDn to switch sheets
 - [ ] Tests for every sheet action, including undo of delete restoring the data
 - [ ] User guide page: working with sheets
@@ -81,142 +83,143 @@ site's progress page shows this expanded.
 - ✅ `actions` package: registry, schemas, apply/invert, history, blob store
 - ✅ Port edits, paste, clear, fill and sort onto actions
 - ✅ Fix: formulas keep same-row references after sorting (Excel semantics)
-- ✅ Docs site with user guide, developer guide and this checklist
-- 🔨 Workbook with multiple sheets (add, rename, reorder, colour, hide, duplicate, delete)
+- ✅ Docs site with user guide, developer guide and a live build tracker
+- 🔨 Workbook with multiple sheets (add, rename, delete, duplicate, reorder, colour, hide) and sheet search
 - ⬜ Cross-sheet references (`Sheet2!A1`, `'My Sheet'!A1:B9`)
 - ⬜ Dependency graph + incremental recalc
-- ⬜ Insert / delete / hide rows and columns with reference adjustment
+- ⬜ Insert / delete / hide rows and columns with reference adjustment, instant at any size
 - ⬜ Range-run styles: font, size, bold/italic/underline/strike, colours, fill,
-  borders, alignment, indent, rotation, wrap
+  borders, alignment, wrap; format painter
 - ⬜ Number formats incl. custom codes and accounting styles (K/M, red parentheses)
-- ⬜ Merged cells, row heights, auto-fit, freeze panes, split view, zoom
-- ⬜ Fill handle with series detection; format painter
-- ⬜ Command palette (Ctrl+K) listing every public action; Alt-key key tips
-- ⬜ Instant structural edits at any size (insert a row in a huge model < 50 ms)
-- ⬜ Cell history ("blame") and input-vs-formula highlighting
-- ⬜ Action journal persisted as it happens (crash-proof), local version history
-- ⬜ Default paste mode setting; Center Across Selection; per-workbook undo
-- ⬜ Sheet navigator (vertical tabs, groups, search); selection stays visible
-- ⬜ Date picker, eyedropper, auto-growing formula bar
-- ⬜ Save / restore in OPFS, autosave, open/save via File System Access
+- ⬜ Merge cells and Center Across Selection; row heights, auto-fit, freeze panes
+- ⬜ Fill handle with series detection; default paste mode setting
+- ⬜ Command palette (Ctrl+K) listing every public action
+- ⬜ Crash-proof saving: action journal in OPFS, autosave, open/save via File System Access
+- ⬜ History panel: timeline, named versions, compare any two points, per-cell history
 
-### M2: Formula engine, complete
+### M2: Formula engine
 - ⬜ Function registry + generated reference and autocomplete with argument hints
 - ⬜ Excel type system and coercion; dates as serials (incl. the 1900 bug)
-- ⬜ Dynamic arrays and spill, `LET`, `LAMBDA`, `MAP`/`REDUCE`/`SCAN`/`BYROW`
-- ⬜ Named ranges, tables with structured references
-- ⬜ All categories: math, statistical, logical, lookup, text, date/time,
-  financial, information, engineering, database; Sheets extras (`QUERY`,
-  `SPLIT`, `REGEX*`, `ARRAYFORMULA`, `FLATTEN`)
-- ⬜ Formula auditing: trace precedents/dependents, evaluate step by step,
-  watch window, error checking, lint for hard-coded numbers
-- ⬜ Iterative calculation; self-expanding tables; currency-typed columns
-- ⬜ Precise problem locator (broken references in names, charts, rules); external link finder
-- ⬜ Lookups that warn about type and whitespace mismatches; a real `NULL()`
+- ⬜ The ~150 functions that cover real use: lookup (XLOOKUP, INDEX/MATCH),
+  maths, statistics, text, dates, financial, logic, information
+- ⬜ Dynamic arrays and spill, `LET`, `LAMBDA`
+- ⬜ Named ranges; tables with structured references that grow with new rows
+- ⬜ Lookups that warn about type and whitespace mismatches instead of a silent `#N/A`
+- ⬜ Formula auditing: trace precedents/dependents, step-by-step evaluation,
+  precise broken-reference locator, hard-coded-number lint
+- ⬜ Iterative calculation for intentional circular references
 - ⬜ Compiler coverage for the new functions; Excel conformance corpus in CI
 
 ### M3: Files and messy-export import
 - ⬜ Streaming `.xlsx` reader and writer (values, formulas, styles, merges,
   names, multiple sheets), round-trip tested
-- ⬜ Parquet, JSON, ODS, fixed-width text; encoding detection
+- ⬜ Parquet and JSON; CSV options (delimiter, encoding)
 - ⬜ Report un-wrapping: header-row detection, drop title/subtotal/footer rows,
   fill down group labels, flatten multi-row headers
 - ⬜ Folder import with column alignment across files
 - ⬜ Parsers: accounting negatives, locale numbers, any date format, currencies
 - ⬜ Type confidence report with jump-to
-- ⬜ Big-file utilities: preview while loading, split, sample, CSV → Parquet
-- ⬜ Bank statements: local PDF/CSV import, multi-line merge, date repair,
+- ⬜ Bank statements: local text-PDF/CSV import, multi-line merge, date repair,
   running-balance validation per page
-- ⬜ Performance doctor for imported `.xlsx`; open, documented native file format
+- ⬜ Trial balance import mapper (debit/credit or signed, code/name/current/prior)
 
 ### M4: Data tools
-- ⬜ Filters and filter views, multi-column sort, custom lists; (Blanks) first; invert selection
-- ⬜ Find & replace (regex, in formulas), Go To Special, search across a folder
-- ⬜ Conditional formatting (rules, scales, bars, icons, formulas) with a proper
-  manager: named, commented, grouped rules on locked ranges
-- ⬜ Data validation and dropdowns; smart column types (date, currency, email,
-  URL, checkbox, rating, select)
-- ⬜ Remove duplicates, text to columns, flash fill, unpivot / pivot, extract by pattern
-- ⬜ What-if: goal seek, data tables, scenario manager; subtotals, consolidate
-- ⬜ Comments, notes, hyperlinks, images in cells, checkboxes
+- ⬜ Filters and filter views, (Blanks) first, invert selection; multi-column sort
+- ⬜ Find & replace (regex, in formulas)
+- ⬜ Conditional formatting with a proper rules manager
+- ⬜ Data validation and dropdowns; date, currency and checkbox column types
+- ⬜ Remove duplicates, text to columns, unpivot / pivot, extract by pattern
+- ⬜ Goal Seek
+- ⬜ Notes on cells, hyperlinks
 
 ### M5: Query engine, explore, reconcile
-- ⬜ DuckDB-WASM on demand; sheets exposed as Arrow views; SQL panel
+- ⬜ Query engine (DuckDB-WASM, loaded on demand) over sheet columns
 - ⬜ Pivot tables (drag fields, drill-down to rows), slicers
 - ⬜ Column profiles
 - ⬜ Join doctor (match rate, duplicate keys, orphans) and guided joins
+- ⬜ "Why don't these match?" inspector with one-click normalisation
 - ⬜ Reconciliation: keys, tolerances, fuzzy text, 1:N and N:1, matched /
   unmatched / mismatched outputs, exception export
 - ⬜ Reference normalisation, sum matching, keying-error flags, in-side duplicates,
   proposed adjusting entries, roll-forward of outstanding items, rec statement
-- ⬜ Open-item matching for balance sheet accounts (auto-clear reversals)
-- ⬜ Supplier / customer statement recs; item lifecycle tracing
-- ⬜ "Why don't these match?" inspector with one-click normalisation
-- ⬜ Trial balance compare; GL → TB tie-out; TB import mapper
-- ⬜ Fuzzy name matching incl. name-order normalisation
-- ⬜ Acceptance test: synthetic bank/ledger month modelled on real data (split
-  cheques, repeated numbers, split deposits, clearing lag) at 6K and 6M rows
-- ⬜ Key-based file compare; intercompany reconciliation
-- ⬜ Entity resolution and reusable mapping tables
-- ⬜ Scenarios (copy-on-write sheets) and side-by-side compare
+- ⬜ Open-item matching for balance sheet accounts; supplier / customer statement recs
+- ⬜ Trial balance compare; GL → TB tie-out
+- ⬜ Fuzzy name matching incl. name order; mapping tables
+- ⬜ Key-based file compare
+- ⬜ Scenarios (copy-on-write sheets) compared side by side
+- ⬜ Acceptance test: synthetic bank/ledger month modelled on real data at 6K and 6M rows
 
-### M6: Recipes, checks, history
-- ⬜ Recipe panel: recorded steps, edit / reorder / disable, parameters;
-  live data preview at every step; per-step time and memory profile
-- ⬜ Re-run on new files; watch a folder; templates gallery
+### M6: Recipes and checks
+- ⬜ Recipe panel: recorded steps, edit / reorder / disable, parameters,
+  live preview at every step, per-step time and memory profile
+- ⬜ Re-run a recipe on new files or a folder
+- ⬜ Templates for the three hero workflows: monthly close, bank rec, audit tests
 - ⬜ Data checks: column rules, master-list lookups, debits = credits; green/red
-  checklist; period close checklist that gates export
+  checklist that gates export
 - ⬜ Categorisation rules that learn from manual tagging; bulk tagging; uncategorised queue
-- ⬜ Incremental refresh (reprocess only changed inputs)
-- ⬜ Version timeline, per-cell provenance, "explain this cell", lineage view
+- ⬜ Explain: where any number came from (formula chain, recipe step, source rows),
+  lineage view, one-click write-up
 
-### M7: Audit, privacy, evidence
-- ⬜ Duplicate and near-duplicate tests; sequence gaps
+### M7: Audit, evidence, sharing
+- ⬜ Duplicate tests (exact, near, fuzzy, multi-column); sequence gaps
 - ⬜ Benford (1st and 1st-two digits) with chi-square / MAD and chart
 - ⬜ Journal entry testing suite; red-flag overlaps (vendor vs employee etc.)
-- ⬜ Stratification, top-N, Pareto, ageing buckets, materiality calculator
+- ⬜ Stratification, top-N, Pareto, ageing buckets, materiality
 - ⬜ Sampling (random, systematic, stratified, monetary-unit) with recorded seed
 - ⬜ Footing / cross-footing and roll-forward checks
-- ⬜ PII scanner; mask / hash / redact; anonymised export; safe-share check
-- ⬜ Password-encrypted workbooks, app lock, clear-all-data, offline bundle
-- ⬜ Evidence packs, hash-chained history, review marks, workpaper references,
-  period snapshots, review diff, auto-documentation
+- ⬜ Evidence pack: workbook + recipe + input fingerprints + hash-chained action log
 - ⬜ Evidence linking: attached documents stored outside the workbook, cell ↔
-  document-region links, local extraction, validation that compares values
-- ⬜ Native tick marks with legend; review notes that block sign-off
-- ⬜ Client request-list tracker (what data is outstanding, from whom)
-- ⬜ Reversible pseudonymisation; named versions instead of file copies
+  document-region links, validation that compares values
+- ⬜ Review mode: tick marks with legend, reviewed-by, notes that block sign-off,
+  workpaper references
+- ⬜ Share safely: PII scan, mask / hash / pseudonymise / redact, hidden-content
+  check, encrypted export; clear all local data; offline bundle
 
 ### M8: Charts and reports
-- ⬜ Charts: column, bar, line, area, pie/donut, scatter, combo, histogram,
-  box, waterfall/bridge, Pareto, Benford, ageing; millions of points downsampled
-- ⬜ Pivot charts, sparklines; axis limits linked to cells
-- ⬜ Report mode and report packs: narrative + live tables and charts;
-  print setup; PDF and self-contained HTML export
-- ⬜ One template, many entities, plus consolidation; automatic period roll-forward;
-  report books with contents and page numbers
+- ⬜ Charts: column, bar, line, area, pie, scatter, combo, histogram, waterfall,
+  Pareto, Benford, ageing; millions of points downsampled; axis limits from cells
+- ⬜ Pivot charts
+- ⬜ Reports: narrative + live tables and charts, one template for many entities,
+  consolidation, period roll-forward, PDF report books with contents
+- ⬜ Time tools: fiscal years, MoM/YoY, rolling windows, budget vs actual, multi-currency
 - ⬜ Accrual / prepayment / deferred income schedules; accounting import export templates
-- ⬜ Time tools: fiscal calendars, MoM/YoY, rolling windows, resampling,
-  budget vs actual, multi-currency, simple forecasts
 
 ### M9: Local AI
-- ⬜ kiln: decoder LLM support (small int4 models), KV cache, sampling,
-  grammar-constrained decoding
+- ⬜ kiln: small decoder LLMs (int4), KV cache, grammar-constrained decoding
 - ⬜ Model manager: hardware detection, tiered models, OPFS cache, offline use
 - ⬜ Deterministic command parser for common phrasings
-- ⬜ Tool loop over the action catalog: context builder → constrained action →
-  execute → verify → retry
-- ⬜ Ask, Do, Explain, Clean, Insights; audit assistant; variance commentary
-- ⬜ Voice input (Whisper); embeddings for fuzzy matching and semantic search;
-  tables from PDFs and images; category suggestions; local translation of narratives
-- ⬜ Eval harness: accuracy and time-to-answer on a fixed task set, published
+- ⬜ Tool loop over the action catalog: context → constrained action → execute → verify → retry
+- ⬜ Ask, Do, Explain, Clean; audit assistant; category suggestions
+- ⬜ Internal eval harness for accuracy and time-to-answer
 
 ### M10: Docs and launch
-- ⬜ `apps/docs`: getting started, the three hero workflows as tutorials,
-  function reference (generated), audit test catalogue, AI cookbook,
-  shortcuts, "moving from Excel" and "moving from IDEA/ACL" guides
-- ⬜ Landing page around the niche and hero workflows; installable, offline
-- ⬜ Accessibility; locale formats and separators; translated UI
+- ⬜ Docs: the three hero workflows as tutorials, generated function reference,
+  audit test catalogue, "moving from Excel" and "moving from IDEA/ACL" guides
+- ⬜ Ask the docs with the local model
+- ⬜ Landing page around the niche; installable and offline
+- ⬜ Accessibility pass; locale number formats and separators
+
+## Later (only if users ask)
+
+Deferred on purpose, to keep the product focused. Each needs real demand first.
+
+- The long tail of functions (engineering, cube, rarely used statistics)
+- Sparklines, Flash Fill, data tables, subtotals tool, forecasts
+- Semantic search; OCR of scanned PDFs and screenshots
+- Watch-a-folder automation; intercompany reconciliation; 4-4-5 calendars
+- Performance doctor for imported `.xlsx`; filter by colour; custom sort lists; date picker
+- SQL editor panel; a wider template gallery; a public AI benchmark
+- Translated interface
+
+## Cut
+
+Removed after review as bloat for this audience: voice input, a `NULL()`
+function (breaks Excel compatibility), eyedropper, vertical tabs and tab
+groups, images in cells, data-entry forms, Airtable-style column types, Excel's
+Consolidate and Scenario Manager (replaced by our own tools), app lock,
+client request-list tracker, translation model, AI-written variance
+commentary, HTML report export, Alt-key ribbon emulation, strict currency
+column blocking (now a warning in data checks), GPU research items.
 
 ## Quality bars (every milestone)
 

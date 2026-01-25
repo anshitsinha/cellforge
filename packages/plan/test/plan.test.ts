@@ -62,6 +62,6 @@ describe("parsePlan", () => {
     expect(doing.length).toBe(1);
     // the Now section names the in-progress item (which may carry extra detail)
     expect(doing[0].text.startsWith(real.now!.title)).toBe(true);
-    expect(real.milestones.flatMap((m) => m.items).length).toBeGreaterThan(80);
+    expect(real.milestones.flatMap((m) => m.items).length).toBeGreaterThan(60);
   });
 });
