@@ -157,6 +157,23 @@ export class EditableSource implements DataSource {
     private readonly extraColumns = 0,
   ) {}
 
+  /**
+   * An independent copy for "duplicate sheet". The imported data is
+   * immutable, so it's shared; edits, fills and row order are copied.
+   */
+  clone(): EditableSource {
+    const copy = new EditableSource(this.base, this.extraColumns);
+    for (const [row, cols] of this.edits) copy.edits.set(row, new Map(cols));
+    copy.editsPerColumn = new Map(this.editsPerColumn);
+    copy.count = this.count;
+    copy.formulas = this.formulas;
+    // kernels are pure functions of the template, so they can be shared;
+    // cached chunks can't (they belong to this sheet's data)
+    copy.fills = this.fills.map((f) => ({ ...f, chunks: new Map(), computing: false }));
+    copy.order = this.order ? this.order.slice() : null;
+    return copy;
+  }
+
   get rowCount(): number {
     return this.base.rowCount;
   }
