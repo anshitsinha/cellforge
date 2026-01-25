@@ -1,18 +1,28 @@
 /**
- * The sheet's actions. Everything that changes data goes through here, so it
- * is undoable, can be recorded into a recipe, and can be called by the AI
+ * The workbook's actions. Everything that changes data goes through here, so
+ * it is undoable, can be recorded into a recipe, and can be called by the AI
  * with the same validation a user's edit gets.
+ *
+ * Cell actions take an optional `sheet` id (default: the sheet on screen).
+ * Inverses always name their sheet explicitly, so undoing after switching
+ * tabs still changes the right sheet.
  */
-import { type Action, ActionRegistry, BlobStore, s } from "@cellforge/actions";
+import { type Action, ActionRegistry, type BlobStore, type JsonSchema, s } from "@cellforge/actions";
 import { columnLetter } from "@cellforge/grid";
 import { formatFormula, parseFormula, type Node } from "@cellforge/core";
 import { type EditableSource, effectiveShift, type Fill, isFormula, parseInput, type Stored } from "./editable";
+import { BlankSource, EditableSource as Source } from "./editable";
+import type { Sheet, Workbook } from "./workbook";
 
 export interface SheetCtx {
-  sheet: EditableSource;
+  workbook: Workbook;
+  /** id of the sheet on screen: the default target of cell actions */
+  activeSheet: string;
   blobs: BlobStore;
   /** sorts in a worker; resolves to a view->base order, or null if cancelled */
   sortRows(sheet: EditableSource, col: number, descending: boolean): Promise<Uint32Array | null>;
+  /** called when a sheet is added or restored, so the UI can show it */
+  onSheetShown?(id: string): void;
 }
 
 /** A stored value as plain JSON (undo entries and recipes must serialise). */
@@ -44,6 +54,10 @@ export function fromJson(v: StoredJson): Stored {
 
 const cellRef = (row: number, col: number) => `${columnLetter(col)}${row + 1}`;
 
+const sheetParam = s.string("sheet id; defaults to the sheet on screen");
+const withSheet = (props: Record<string, JsonSchema>, required: string[]) =>
+  s.object({ ...props, sheet: sheetParam }, required);
+
 const rangeSchema = s.object(
   {
     top: s.int("first row, 0-based", 0),
@@ -69,6 +83,12 @@ const storedSchema = s.anyOf(
   s.object({ formula: s.string(), shift: s.int() }, ["formula"]),
 );
 
+/** The sheet a cell action targets, and its id for the inverse. */
+function target(ctx: SheetCtx, sheet: string | undefined): { id: string; data: EditableSource } {
+  const id = sheet ?? ctx.activeSheet;
+  return { id, data: ctx.workbook.get(id).source };
+}
+
 // "restore" writes exact previous values: `revert` means "no edit at all,
 // show the original data", which is different from an edit to empty.
 type RestoreCell = { row: number; col: number; value?: StoredJson; revert?: boolean };
@@ -93,12 +113,18 @@ function describeCells(cells: { row: number; col: number }[], verb: string) {
   return `${verb} ${cells.length.toLocaleString()} cells`;
 }
 
+const restoreParams = (sheet: string, cells: RestoreCell[], label?: string) => (label ? { sheet, cells, label } : { sheet, cells });
+
 export function sheetActions(): ActionRegistry<SheetCtx> {
-  return new ActionRegistry<SheetCtx>()
-    .register<{ cells: { row: number; col: number; input: string | null }[]; label?: string }>({
+  const registry = new ActionRegistry<SheetCtx>();
+
+  // ------------------------------------------------------------ cells --
+
+  registry
+    .register<{ cells: { row: number; col: number; input: string | null }[]; label?: string; sheet?: string }>({
       type: "cells.set",
       title: "Write values or formulas into cells, exactly as a user would type them",
-      schema: s.object(
+      schema: withSheet(
         {
           cells: s.array(
             s.object({
@@ -115,18 +141,19 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       ),
       describe: (p) => p.label ?? describeCells(p.cells, "edit"),
       recordable: true,
-      apply({ sheet }, p) {
-        checkBounds(sheet, p.cells);
-        const before = snapshot(sheet, p.cells);
-        for (const c of p.cells) sheet.setCell(c.row, c.col, c.input === null ? null : parseInput(c.input));
-        return { type: "cells.restore", params: p.label ? { cells: before, label: p.label } : { cells: before } };
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        checkBounds(data, p.cells);
+        const before = snapshot(data, p.cells);
+        for (const c of p.cells) data.setCell(c.row, c.col, c.input === null ? null : parseInput(c.input));
+        return { type: "cells.restore", params: restoreParams(id, before, p.label) };
       },
     })
-    .register<{ cells: RestoreCell[]; label?: string }>({
+    .register<{ cells: RestoreCell[]; label?: string; sheet?: string }>({
       type: "cells.restore",
       title: "Put cells back exactly as they were",
       internal: true,
-      schema: s.object(
+      schema: withSheet(
         {
           cells: s.array(
             s.object({ row: s.int(undefined, 0), col: s.int(undefined, 0), value: storedSchema, revert: s.bool() }, ["row", "col"]),
@@ -136,31 +163,32 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         ["cells"],
       ),
       describe: (p) => p.label ?? describeCells(p.cells, "restore"),
-      apply({ sheet }, p) {
-        const before = snapshot(sheet, p.cells);
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const before = snapshot(data, p.cells);
         for (const c of p.cells) {
-          if (c.revert) sheet.revertCell(c.row, c.col);
-          else sheet.setCell(c.row, c.col, fromJson(c.value ?? null));
+          if (c.revert) data.revertCell(c.row, c.col);
+          else data.setCell(c.row, c.col, fromJson(c.value ?? null));
         }
-        return { type: "cells.restore", params: p.label ? { cells: before, label: p.label } : { cells: before } };
+        return { type: "cells.restore", params: restoreParams(id, before, p.label) };
       },
     })
-    .register<{ range: Range }>({
+    .register<{ range: Range; sheet?: string }>({
       type: "fill.down",
       title: "Copy the top row of a range into every row below it (Ctrl+D)",
-      schema: s.object({ range: rangeSchema }),
+      schema: withSheet({ range: rangeSchema }, ["range"]),
       describe: () => "fill down",
       recordable: true,
-      apply(ctx, { range }) {
-        const { sheet } = ctx;
+      apply(ctx, { range, sheet }) {
+        const { id, data } = target(ctx, sheet);
         if (range.bottom <= range.top || range.right < range.left) return null;
-        checkBounds(sheet, [{ row: range.bottom, col: range.right }]);
-        if (sheet.rowOrder) {
+        checkBounds(data, [{ row: range.bottom, col: range.right }]);
+        if (data.rowOrder) {
           // sorted: rows adjacent in the view are scattered in the data, so a
           // fill can't be one block. Write the cells individually.
           const cells: { row: number; col: number; value: StoredJson }[] = [];
           for (let col = range.left; col <= range.right; col++) {
-            const { template, origin } = sheet.getTemplate(range.top, col);
+            const { template, origin } = data.getTemplate(range.top, col);
             for (let row = range.top + 1; row <= range.bottom; row++) {
               const value: Stored = isFormula(template)
                 ? { ...template, shift: row - origin, text: template.ast ? formatFormula(template.ast, row - origin) : template.text }
@@ -168,78 +196,202 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
               cells.push({ row, col, value: toJson(value, row) });
             }
           }
-          const before = snapshot(sheet, cells);
-          for (const c of cells) sheet.setCell(c.row, c.col, fromJson(c.value));
-          return { type: "cells.restore", params: { cells: before, label: "fill down" } };
+          const before = snapshot(data, cells);
+          for (const c of cells) data.setCell(c.row, c.col, fromJson(c.value));
+          return { type: "cells.restore", params: restoreParams(id, before, "fill down") };
         }
         // unsorted: one Fill per column (O(1) storage, compiled when possible),
         // plus whatever explicit edits it covered so undo can put them back
         const fills: Fill[] = [];
         const covered: { row: number; col: number; value: Stored }[] = [];
         for (let col = range.left; col <= range.right; col++) {
-          const { template, origin } = sheet.getTemplate(range.top, col);
-          covered.push(...sheet.takeEdits(col, range.top + 1, range.bottom));
-          fills.push(sheet.addFill(col, range.top + 1, range.bottom, template, origin));
+          const { template, origin } = data.getTemplate(range.top, col);
+          covered.push(...data.takeEdits(col, range.top + 1, range.bottom));
+          fills.push(data.addFill(col, range.top + 1, range.bottom, template, origin));
         }
-        return { type: "fill.remove", params: { fills: ctx.blobs.put(fills), covered: ctx.blobs.put(covered) } };
+        return { type: "fill.remove", params: { sheet: id, fills: ctx.blobs.put(fills), covered: ctx.blobs.put(covered) } };
       },
     })
-    .register<{ fills: string; covered: string }>({
+    .register<{ fills: string; covered: string; sheet?: string }>({
       type: "fill.remove",
       title: "Undo a fill down",
       internal: true,
-      schema: s.object({ fills: s.string(), covered: s.string() }),
+      schema: withSheet({ fills: s.string(), covered: s.string() }, ["fills", "covered"]),
       describe: () => "fill down",
-      apply({ sheet, blobs }, p) {
-        for (const f of blobs.get<Fill[]>(p.fills)) sheet.removeFill(f);
-        for (const c of blobs.get<{ row: number; col: number; value: Stored }[]>(p.covered)) sheet.setCell(c.row, c.col, c.value);
-        return { type: "fill.restore", params: p };
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        for (const f of ctx.blobs.get<Fill[]>(p.fills)) data.removeFill(f);
+        for (const c of ctx.blobs.get<{ row: number; col: number; value: Stored }[]>(p.covered)) data.setCell(c.row, c.col, c.value);
+        return { type: "fill.restore", params: { ...p, sheet: id } };
       },
     })
-    .register<{ fills: string; covered: string }>({
+    .register<{ fills: string; covered: string; sheet?: string }>({
       type: "fill.restore",
       title: "Redo a fill down",
       internal: true,
-      schema: s.object({ fills: s.string(), covered: s.string() }),
+      schema: withSheet({ fills: s.string(), covered: s.string() }, ["fills", "covered"]),
       describe: () => "fill down",
-      apply({ sheet, blobs }, p) {
-        for (const c of blobs.get<{ row: number; col: number }[]>(p.covered)) sheet.revertCell(c.row, c.col);
-        for (const f of blobs.get<Fill[]>(p.fills)) sheet.restoreFill(f);
-        return { type: "fill.remove", params: p };
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        for (const c of ctx.blobs.get<{ row: number; col: number }[]>(p.covered)) data.revertCell(c.row, c.col);
+        for (const f of ctx.blobs.get<Fill[]>(p.fills)) data.restoreFill(f);
+        return { type: "fill.remove", params: { ...p, sheet: id } };
       },
     })
-    .register<{ col: number; descending?: boolean }>({
+    .register<{ col: number; descending?: boolean; sheet?: string }>({
       type: "rows.sort",
       title: "Sort all rows by one column",
-      schema: s.object({ col: s.int("column to sort by, 0-based", 0), descending: s.bool("largest first") }, ["col"]),
+      schema: withSheet({ col: s.int("column to sort by, 0-based", 0), descending: s.bool("largest first") }, ["col"]),
       describe: (p) => `sort by column ${columnLetter(p.col)}${p.descending ? " (descending)" : ""}`,
       recordable: true,
       async apply(ctx, p) {
-        const { sheet } = ctx;
-        checkBounds(sheet, [{ row: 0, col: p.col }]);
-        const before = sheet.rowOrder;
-        const viewOrder = await ctx.sortRows(sheet, p.col, !!p.descending);
+        const { id, data } = target(ctx, p.sheet);
+        checkBounds(data, [{ row: 0, col: p.col }]);
+        const before = data.rowOrder;
+        const viewOrder = await ctx.sortRows(data, p.col, !!p.descending);
         if (!viewOrder) return null; // cancelled
         // the worker sorts view rows; map them through the order we started from
-        sheet.setRowOrder(before ? viewOrder.map((v) => before[v]) : viewOrder);
-        return { type: "rows.order", params: { order: before ? ctx.blobs.put(before) : null } };
+        data.setRowOrder(before ? viewOrder.map((v) => before[v]) : viewOrder);
+        return { type: "rows.order", params: { sheet: id, order: before ? ctx.blobs.put(before) : null } };
       },
     })
-    .register<{ order: string | null }>({
+    .register<{ order: string | null; sheet?: string }>({
       type: "rows.order",
       title: "Restore a previous row order",
       internal: true,
-      schema: s.object({ order: s.anyOf(s.string(), s.null()) }),
+      schema: withSheet({ order: s.anyOf(s.string(), s.null()) }, ["order"]),
       describe: () => "sort",
       apply(ctx, p) {
-        const current = ctx.sheet.rowOrder;
-        ctx.sheet.setRowOrder(p.order ? ctx.blobs.get<Uint32Array>(p.order) : null);
-        return { type: "rows.order", params: { order: current ? ctx.blobs.put(current) : null } };
+        const { id, data } = target(ctx, p.sheet);
+        const current = data.rowOrder;
+        data.setRowOrder(p.order ? ctx.blobs.get<Uint32Array>(p.order) : null);
+        return { type: "rows.order", params: { sheet: id, order: current ? ctx.blobs.put(current) : null } };
       },
     });
+
+  // ----------------------------------------------------------- sheets --
+
+  registry
+    .register<{ name?: string; index?: number; rows?: number; cols?: number }>({
+      type: "sheet.add",
+      title: "Add a blank sheet",
+      schema: s.object(
+        {
+          name: s.string("sheet name; defaults to the next free 'SheetN'"),
+          index: s.int("position, 0-based; defaults to after the last sheet", 0),
+          rows: s.int("rows", 1, 1_048_576),
+          cols: s.int("columns", 1, 16_384),
+        },
+        [],
+      ),
+      describe: (p) => `add sheet${p.name ? ` "${p.name}"` : ""}`,
+      recordable: true,
+      apply(ctx, p) {
+        const name = p.name ?? ctx.workbook.freeName();
+        const sheet = ctx.workbook.add(name, new Source(new BlankSource(p.rows ?? 1000, p.cols ?? 26)), p.index);
+        ctx.onSheetShown?.(sheet.id);
+        return { type: "sheet.delete", params: { sheet: sheet.id } };
+      },
+    })
+    .register<{ sheet: string }>({
+      type: "sheet.delete",
+      title: "Delete a sheet",
+      schema: s.object({ sheet: s.string("sheet id") }),
+      describe: () => "delete sheet",
+      recordable: true,
+      apply(ctx, p) {
+        const { sheet, index } = ctx.workbook.remove(p.sheet);
+        return { type: "sheet.restore", params: { blob: ctx.blobs.put(sheet), index } };
+      },
+    })
+    .register<{ blob: string; index: number }>({
+      type: "sheet.restore",
+      title: "Put a deleted sheet back",
+      internal: true,
+      schema: s.object({ blob: s.string(), index: s.int(undefined, 0) }),
+      describe: () => "delete sheet",
+      apply(ctx, p) {
+        const old = ctx.blobs.get<Sheet>(p.blob);
+        const { id, name, source, ...extra } = old;
+        ctx.workbook.add(name, source, p.index, id, extra);
+        ctx.onSheetShown?.(id);
+        return { type: "sheet.delete", params: { sheet: id } };
+      },
+    })
+    .register<{ sheet: string; name?: string }>({
+      type: "sheet.duplicate",
+      title: "Copy a sheet, with all its data, next to it",
+      schema: s.object({ sheet: s.string("sheet id"), name: s.string("name for the copy") }, ["sheet"]),
+      describe: () => "duplicate sheet",
+      recordable: true,
+      apply(ctx, p) {
+        const original = ctx.workbook.get(p.sheet);
+        const name = p.name ?? ctx.workbook.freeName(`${original.name} (2)`);
+        const copy = ctx.workbook.add(name, original.source.clone(), ctx.workbook.indexOf(p.sheet) + 1, undefined, {
+          color: original.color,
+        });
+        ctx.onSheetShown?.(copy.id);
+        return { type: "sheet.delete", params: { sheet: copy.id } };
+      },
+    })
+    .register<{ sheet: string; name: string }>({
+      type: "sheet.rename",
+      title: "Rename a sheet",
+      schema: s.object({ sheet: s.string("sheet id"), name: s.string("new name", { minLength: 1, maxLength: 31 }) }),
+      describe: (p) => `rename sheet to "${p.name}"`,
+      recordable: true,
+      apply(ctx, p) {
+        const old = ctx.workbook.rename(p.sheet, p.name);
+        return old === p.name ? null : { type: "sheet.rename", params: { sheet: p.sheet, name: old } };
+      },
+    })
+    .register<{ sheet: string; index: number }>({
+      type: "sheet.move",
+      title: "Move a sheet to another position",
+      schema: s.object({ sheet: s.string("sheet id"), index: s.int("new position, 0-based", 0) }),
+      describe: () => "move sheet",
+      recordable: true,
+      apply(ctx, p) {
+        const from = ctx.workbook.move(p.sheet, p.index);
+        return from === ctx.workbook.indexOf(p.sheet) ? null : { type: "sheet.move", params: { sheet: p.sheet, index: from } };
+      },
+    })
+    .register<{ sheet: string; color: string | null }>({
+      type: "sheet.color",
+      title: "Set or clear a sheet tab's colour",
+      schema: s.object({ sheet: s.string("sheet id"), color: s.anyOf(s.string("CSS colour"), s.null()) }),
+      describe: () => "colour sheet tab",
+      recordable: true,
+      apply(ctx, p) {
+        const sheet = ctx.workbook.get(p.sheet);
+        const before = sheet.color ?? null;
+        if (before === p.color) return null;
+        sheet.color = p.color ?? undefined;
+        return { type: "sheet.color", params: { sheet: p.sheet, color: before } };
+      },
+    })
+    .register<{ sheet: string; hidden: boolean }>({
+      type: "sheet.hide",
+      title: "Hide or unhide a sheet",
+      schema: s.object({ sheet: s.string("sheet id"), hidden: s.bool("true to hide, false to show") }),
+      describe: (p) => (p.hidden ? "hide sheet" : "unhide sheet"),
+      recordable: true,
+      apply(ctx, p) {
+        const was = ctx.workbook.setHidden(p.sheet, p.hidden);
+        if (was === p.hidden) return null;
+        if (!p.hidden) ctx.onSheetShown?.(p.sheet);
+        return { type: "sheet.hide", params: { sheet: p.sheet, hidden: was } };
+      },
+    });
+
+  return registry;
 }
 
 /** Convenience for building cells.set from a block of typed text. */
-export function setCells(cells: { row: number; col: number; input: string | null }[], label?: string): Action {
-  return { type: "cells.set", params: label ? { cells, label } : { cells } };
+export function setCells(cells: { row: number; col: number; input: string | null }[], label?: string, sheet?: string): Action {
+  const params: Record<string, unknown> = { cells };
+  if (label) params.label = label;
+  if (sheet) params.sheet = sheet;
+  return { type: "cells.set", params };
 }
+

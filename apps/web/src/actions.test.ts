@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ActionHistory, BlobStore } from "@cellforge/actions";
 import { setCells, sheetActions, type SheetCtx } from "./actions";
 import { BlankSource, EditableSource } from "./editable";
+import { Workbook } from "./workbook";
 
 /** Sort by a column's display value in-process (the app does this in a worker). */
 async function sortRows(sheet: EditableSource, col: number, descending: boolean) {
@@ -19,10 +20,11 @@ async function sortRows(sheet: EditableSource, col: number, descending: boolean)
 }
 
 function setup(rows = 10, cols = 4) {
-  const ctx: SheetCtx = { sheet: new EditableSource(new BlankSource(rows, cols)), blobs: new BlobStore(), sortRows };
+  const workbook = new Workbook({ name: "Sheet1", source: new EditableSource(new BlankSource(rows, cols)) });
+  const ctx: SheetCtx = { workbook, activeSheet: workbook.sheets[0].id, blobs: new BlobStore(), sortRows };
   const registry = sheetActions();
   const history = new ActionHistory(registry, () => ctx);
-  return { ctx, registry, history, sheet: ctx.sheet };
+  return { ctx, registry, history, workbook, sheet: workbook.sheets[0].source };
 }
 
 const column = (sheet: EditableSource, col: number, n: number) => Array.from({ length: n }, (_, r) => sheet.getCell(r, col));
@@ -130,6 +132,106 @@ describe("sheet actions", () => {
 
   it("only public actions are offered as tools", () => {
     const { registry } = setup();
-    expect(registry.catalog().map((c) => c.type)).toEqual(["cells.set", "fill.down", "rows.sort"]);
+    expect(registry.catalog().map((c) => c.type)).toEqual([
+      "cells.set",
+      "fill.down",
+      "rows.sort",
+      "sheet.add",
+      "sheet.delete",
+      "sheet.duplicate",
+      "sheet.rename",
+      "sheet.move",
+      "sheet.color",
+      "sheet.hide",
+    ]);
+  });
+});
+
+describe("sheet actions", () => {
+  const names = (wb: Workbook) => wb.sheets.map((x) => x.name);
+
+  it("adds sheets with the next free name, and undo removes them", async () => {
+    const { history, workbook } = setup();
+    await history.run({ type: "sheet.add", params: {} });
+    await history.run({ type: "sheet.add", params: { name: "Bank" } });
+    expect(names(workbook)).toEqual(["Sheet1", "Sheet2", "Bank"]);
+    await history.undo();
+    await history.undo();
+    expect(names(workbook)).toEqual(["Sheet1"]);
+    await history.redo();
+    expect(names(workbook)).toEqual(["Sheet1", "Sheet2"]);
+  });
+
+  it("enforces Excel's naming rules and unique names", async () => {
+    const { history, workbook } = setup();
+    const id = workbook.sheets[0].id;
+    await expect(history.run({ type: "sheet.add", params: { name: "sheet1" } })).rejects.toThrow(/already a sheet/);
+    await expect(history.run({ type: "sheet.rename", params: { sheet: id, name: "a/b" } })).rejects.toThrow(/can't contain/);
+    await expect(history.run({ type: "sheet.rename", params: { sheet: id, name: "x".repeat(32) } })).rejects.toThrow();
+    expect(names(workbook)).toEqual(["Sheet1"]);
+  });
+
+  it("delete keeps the data for undo; the last visible sheet can't go", async () => {
+    const { history, workbook, sheet } = setup();
+    await history.run(setCells([{ row: 0, col: 0, input: "keep" }]));
+    await history.run({ type: "sheet.add", params: { name: "Other" } });
+    const first = workbook.sheets[0].id;
+    await history.run({ type: "sheet.delete", params: { sheet: first } });
+    expect(names(workbook)).toEqual(["Other"]);
+    await expect(history.run({ type: "sheet.delete", params: { sheet: workbook.sheets[0].id } })).rejects.toThrow(/at least one visible/);
+    await history.undo();
+    expect(names(workbook)).toEqual(["Sheet1", "Other"]);
+    expect(workbook.sheets[0].source).toBe(sheet);
+    expect(sheet.getCell(0, 0)).toBe("keep");
+  });
+
+  it("duplicate is independent of the original", async () => {
+    const { history, workbook, sheet } = setup();
+    await history.run(setCells([{ row: 0, col: 0, input: "2" }, { row: 0, col: 1, input: "=A1*10" }]));
+    await history.run({ type: "sheet.duplicate", params: { sheet: workbook.sheets[0].id } });
+    expect(names(workbook)).toEqual(["Sheet1", "Sheet1 (2)"]);
+    const copy = workbook.sheets[1];
+    expect(copy.source.getCell(0, 1)).toBe(20);
+    await history.run(setCells([{ row: 0, col: 0, input: "5" }], undefined, copy.id));
+    expect(copy.source.getCell(0, 1)).toBe(50);
+    expect(sheet.getCell(0, 1)).toBe(20);
+  });
+
+  it("undo targets the sheet that was edited, even after switching", async () => {
+    const { history, workbook, ctx, sheet } = setup();
+    await history.run(setCells([{ row: 0, col: 0, input: "on sheet 1" }]));
+    await history.run({ type: "sheet.add", params: { name: "Two" } });
+    ctx.activeSheet = workbook.sheets[1].id; // user switched tabs
+    await history.run(setCells([{ row: 0, col: 0, input: "on sheet 2" }]));
+    await history.undo(); // sheet 2 edit
+    await history.undo(); // add sheet
+    await history.undo(); // sheet 1 edit
+    expect(sheet.getStored(0, 0)).toBeUndefined();
+    expect(names(workbook)).toEqual(["Sheet1"]);
+  });
+
+  it("rename, move, colour and hide are undoable", async () => {
+    const { history, workbook } = setup();
+    await history.run({ type: "sheet.add", params: { name: "B" } });
+    await history.run({ type: "sheet.add", params: { name: "C" } });
+    const [a, , c] = workbook.sheets.map((x) => x.id);
+    await history.run({ type: "sheet.rename", params: { sheet: a, name: "A" } });
+    await history.run({ type: "sheet.move", params: { sheet: c, index: 0 } });
+    await history.run({ type: "sheet.color", params: { sheet: a, color: "#e37400" } });
+    await history.run({ type: "sheet.hide", params: { sheet: a, hidden: true } });
+    expect(names(workbook)).toEqual(["C", "A", "B"]);
+    expect(workbook.visible.map((x) => x.name)).toEqual(["C", "B"]);
+    expect(workbook.get(a).color).toBe("#e37400");
+    for (let i = 0; i < 4; i++) await history.undo();
+    expect(names(workbook)).toEqual(["Sheet1", "B", "C"]);
+    expect(workbook.get(a).color).toBeUndefined();
+    expect(workbook.get(a).hidden).toBeUndefined();
+  });
+
+  it("can't hide the only visible sheet", async () => {
+    const { history, workbook } = setup();
+    await expect(history.run({ type: "sheet.hide", params: { sheet: workbook.sheets[0].id, hidden: true } })).rejects.toThrow(
+      /at least one visible/,
+    );
   });
 });
