@@ -54,5 +54,3 @@ Select cells and press **Delete**.
 
 - Clearing, copying or filling a sorted sheet works on up to 1,000,000 cells
   at a time.
-- One sheet per file; multiple sheets are being built right now
-  ([progress](#/progress)).
