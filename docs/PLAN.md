@@ -68,14 +68,14 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Workbook with multiple sheets
-- [ ] `Workbook` model: an ordered list of sheets, each with an id, name and its own data
-- [ ] Sheet actions: add, rename, delete, duplicate, reorder, set colour, hide / unhide (all undoable)
-- [ ] Every cell action targets a sheet by id
-- [ ] Sheet tab bar in the app: click to switch, double-click to rename, drag to reorder, right-click menu, sheet search
-- [ ] Keyboard: Ctrl+PgUp / Ctrl+PgDn to switch sheets
-- [ ] Tests for every sheet action, including undo of delete restoring the data
-- [ ] User guide page: working with sheets
+### Cross-sheet references
+- [ ] Parser: `Sheet2!A1`, `'My Sheet'!A1:B9`, `Data!C:C` (names case-insensitive)
+- [ ] Printer: quotes sheet names that need it; fill-down shifts keep the sheet
+- [ ] Evaluation: references resolve through the workbook; unknown sheet → `#REF!`
+- [ ] Edits on one sheet recalculate formulas on others
+- [ ] Renaming a sheet rewrites formulas that refer to it (undoable); deleting shows `#REF!` until undone
+- [ ] Compiler: fills reading other sheets fall back to the interpreter
+- [ ] Tests, and the formulas guide updated
 
 ## Milestones
 
@@ -84,8 +84,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Port edits, paste, clear, fill and sort onto actions
 - ✅ Fix: formulas keep same-row references after sorting (Excel semantics)
 - ✅ Docs site with user guide, developer guide and a live build tracker
-- 🔨 Workbook with multiple sheets (add, rename, delete, duplicate, reorder, colour, hide) and sheet search
-- ⬜ Cross-sheet references (`Sheet2!A1`, `'My Sheet'!A1:B9`)
+- ✅ Workbook with multiple sheets (add, rename, delete, duplicate, reorder, colour, hide) and sheet search
+- 🔨 Cross-sheet references (`Sheet2!A1`, `'My Sheet'!A1:B9`)
 - ⬜ Dependency graph + incremental recalc
 - ⬜ Insert / delete / hide rows and columns with reference adjustment, instant at any size
 - ⬜ Range-run styles: font, size, bold/italic/underline/strike, colours, fill,
