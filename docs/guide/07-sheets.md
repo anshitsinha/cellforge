@@ -30,5 +30,5 @@ characters, unique (ignoring upper/lower case), not empty, without
 **Open CSV** and **New** start a new workbook. A CSV opens as one sheet named
 after the file. **New** and **100M demo** ask before discarding unsaved changes.
 
-Formulas that refer to other sheets (`=Sales!B4`) are coming next; see
-[progress](#/progress).
+Formulas can use values from other sheets, like `=Sales!B4`; see
+[formulas](#/guide/03-formulas).
