@@ -477,9 +477,47 @@ export class EditableSource implements DataSource {
   // evaluation
 
   private invalidate(): void {
+    this.clearCaches();
+    this.onChange?.();
+  }
+
+  /**
+   * Drop cached results without telling anyone. The workbook calls this on
+   * the other sheets when one changes, since their formulas may read it.
+   */
+  clearCaches(): void {
     this.cache.clear();
     for (const f of this.fills) f.chunks.clear();
     this.chunkCount = 0;
+  }
+
+  /** Called after any change to this sheet's data. Set by the workbook. */
+  onChange: (() => void) | null = null;
+
+  /** Finds another sheet by name for cross-sheet references. Set by the workbook. */
+  resolveSheet: ((name: string) => EditableSource | null) | null = null;
+
+  /** What formulas on other sheets read this sheet through. */
+  get evalContext(): EvalContext {
+    return this.ctx;
+  }
+
+  /**
+   * Point references to sheet `from` at `to` instead (a sheet was renamed).
+   * Returns how many formulas changed.
+   */
+  renameSheetRefs(from: string, to: string): number {
+    let changed = 0;
+    const fix = (f: Formula) => {
+      if (f.ast && renameRefs(f.ast, from, to)) {
+        f.text = formatFormula(f.ast, 0);
+        changed++;
+      }
+    };
+    for (const row of this.edits.values()) for (const v of row.values()) if (isFormula(v)) fix(v);
+    for (const fill of this.fills) if (isFormula(fill.template)) fix(fill.template);
+    if (changed) this.clearCaches();
+    return changed;
   }
 
   private value(row: number, col: number): Scalar {
@@ -525,6 +563,7 @@ export class EditableSource implements DataSource {
     cell: (row, col) =>
       row < this.rowCount && col < this.colCount ? this.value(row, col) : errors.ref,
     eachInRange: (range, visit) => this.eachInRange(range, visit),
+    sheet: (name) => this.resolveSheet?.(name)?.evalContext ?? null,
   };
 
   private eachInRange(range: RangeRef, visit: (v: Scalar) => void): void {
@@ -592,4 +631,31 @@ export function parseInput(text: string): Stored {
     return Number(trimmed);
   }
   return text;
+}
+
+/** Rename sheet references inside an AST, in place. True if anything changed. */
+function renameRefs(node: Node, from: string, to: string): boolean {
+  switch (node.type) {
+    case "ref":
+    case "range":
+      if (node.sheet !== undefined && node.sheet.toLowerCase() === from.toLowerCase()) {
+        node.sheet = to;
+        return true;
+      }
+      return false;
+    case "unary":
+      return renameRefs(node.arg, from, to);
+    case "binary": {
+      const a = renameRefs(node.left, from, to);
+      const b = renameRefs(node.right, from, to);
+      return a || b;
+    }
+    case "call": {
+      let any = false;
+      for (const arg of node.args) any = renameRefs(arg, from, to) || any;
+      return any;
+    }
+    default:
+      return false;
+  }
 }

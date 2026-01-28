@@ -235,3 +235,48 @@ describe("sheet actions", () => {
     );
   });
 });
+
+describe("cross-sheet references", () => {
+  async function twoSheets() {
+    const t = setup();
+    await t.history.run({ type: "sheet.add", params: { name: "Data" } });
+    const data = t.workbook.sheets[1];
+    await t.history.run(setCells([{ row: 0, col: 0, input: "10" }, { row: 1, col: 0, input: "32" }], undefined, data.id));
+    return { ...t, data };
+  }
+
+  it("reads other sheets and follows their edits", async () => {
+    const { history, sheet, data } = await twoSheets();
+    await history.run(setCells([{ row: 0, col: 0, input: "=SUM(Data!A1:A2)*2" }]));
+    expect(sheet.getCell(0, 0)).toBe(84);
+    await history.run(setCells([{ row: 0, col: 0, input: "100" }], undefined, data.id));
+    expect(sheet.getCell(0, 0)).toBe(264); // recalculated after an edit elsewhere
+  });
+
+  it("renaming a sheet rewrites formulas that point at it, and undo reverts", async () => {
+    const { history, sheet, data } = await twoSheets();
+    await history.run(setCells([{ row: 0, col: 0, input: "=Data!A2" }]));
+    await history.run({ type: "sheet.rename", params: { sheet: data.id, name: "Bank Jan" } });
+    expect(sheet.getEditText(0, 0)).toBe("='Bank Jan'!A2");
+    expect(sheet.getCell(0, 0)).toBe(32);
+    await history.undo();
+    expect(sheet.getEditText(0, 0)).toBe("=Data!A2");
+    expect(sheet.getCell(0, 0)).toBe(32);
+  });
+
+  it("deleting a sheet shows #REF! until undone", async () => {
+    const { history, sheet, data } = await twoSheets();
+    await history.run(setCells([{ row: 0, col: 0, input: "=Data!A1+1" }]));
+    await history.run({ type: "sheet.delete", params: { sheet: data.id } });
+    expect(sheet.getCell(0, 0)).toBe("#REF!");
+    await history.undo();
+    expect(sheet.getCell(0, 0)).toBe(11);
+  });
+
+  it("a cycle across sheets is #CYCLE!, not a hang", async () => {
+    const { history, sheet, data } = await twoSheets();
+    await history.run(setCells([{ row: 0, col: 1, input: "=Data!B1" }]));
+    await history.run(setCells([{ row: 0, col: 1, input: "=Sheet1!B1" }], undefined, data.id));
+    expect(sheet.getCell(0, 1)).toBe("#CYCLE!");
+  });
+});

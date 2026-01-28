@@ -76,6 +76,8 @@ export class Workbook {
     if (this.byName(name)) throw new Error(`There's already a sheet called "${name}".`);
     const sheet: Sheet = { id, name, source, ...extra };
     this.sheets.splice(Math.max(0, Math.min(index, this.sheets.length)), 0, sheet);
+    this.connect(source);
+    this.clearAll(); // formulas elsewhere may refer to this name
     const n = Number(id.slice(1));
     if (Number.isInteger(n) && n >= this.nextId) this.nextId = n + 1;
     return sheet;
@@ -88,6 +90,7 @@ export class Workbook {
       throw new Error("A workbook needs at least one visible sheet.");
     }
     const [sheet] = this.sheets.splice(index, 1);
+    this.clearAll(); // references to it now show #REF!
     return { sheet, index };
   }
 
@@ -99,6 +102,9 @@ export class Workbook {
     if (clash && clash.id !== id) throw new Error(`There's already a sheet called "${name}".`);
     const old = sheet.name;
     sheet.name = name;
+    // formulas that pointed at the old name follow the sheet (as in Excel)
+    if (old !== name) for (const s of this.sheets) s.source.renameSheetRefs(old, name);
+    this.clearAll();
     return old;
   }
 
@@ -118,6 +124,22 @@ export class Workbook {
     const was = !!sheet.hidden;
     sheet.hidden = hidden || undefined;
     return was;
+  }
+
+  /**
+   * Cross-sheet wiring: a sheet resolves other sheets by name, and any change
+   * to it drops the cached results of the others, since their formulas may
+   * read it. (The dependency graph will narrow this to what actually depends.)
+   */
+  private connect(source: EditableSource): void {
+    source.resolveSheet = (name) => this.byName(name)?.source ?? null;
+    source.onChange = () => {
+      for (const s of this.sheets) if (s.source !== source && s.source.hasFormulas) s.source.clearCaches();
+    };
+  }
+
+  private clearAll(): void {
+    for (const s of this.sheets) s.source.clearCaches();
   }
 
   get visible(): Sheet[] {
