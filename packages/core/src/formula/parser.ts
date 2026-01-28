@@ -19,12 +19,15 @@ type Token =
   | { t: "str"; v: string }
   | { t: "ref"; row: number; col: number; absRow: boolean; absCol: boolean }
   | { t: "ident"; v: string }
+  | { t: "sheet"; v: string }
   | { t: "op"; v: string }
   | { t: "eof" };
 
 export class FormulaSyntaxError extends Error {}
 
 const REF = /^(\$?)([A-Za-z]{1,3})(\$?)(\d+)/;
+// a sheet prefix: Sheet2!  or  'Bank Jan'!  (a quote inside is written '')
+const SHEET_PLAIN = /^([A-Za-z_][A-Za-z0-9_.]*)!/;
 const NUMBER = /^(\d+\.?\d*|\.\d+)(e[-+]?\d+)?/i;
 const IDENT = /^[A-Za-z_][A-Za-z0-9_.]*/;
 const OPS = ["<>", "<=", ">=", "+", "-", "*", "/", "^", "&", "=", "<", ">", "(", ")", ",", ":", "%"];
@@ -68,7 +71,36 @@ function tokenize(src: string): Token[] {
       continue;
     }
 
-    let m = NUMBER.exec(rest);
+    if (ch === "'") {
+      let name = "";
+      let j = i + 1;
+      for (;;) {
+        if (j >= src.length) throw new FormulaSyntaxError("Unterminated sheet name");
+        if (src[j] === "'") {
+          if (src[j + 1] === "'") {
+            name += "'";
+            j += 2;
+            continue;
+          }
+          j++;
+          break;
+        }
+        name += src[j++];
+      }
+      if (src[j] !== "!") throw new FormulaSyntaxError("Expected '!' after a quoted sheet name");
+      tokens.push({ t: "sheet", v: name });
+      i = j + 1;
+      continue;
+    }
+
+    let m = SHEET_PLAIN.exec(rest);
+    if (m) {
+      tokens.push({ t: "sheet", v: m[1] });
+      i += m[0].length;
+      continue;
+    }
+
+    m = NUMBER.exec(rest);
     if (m) {
       tokens.push({ t: "num", v: Number(m[0]) });
       i += m[0].length;
@@ -174,6 +206,17 @@ export function parseFormula(src: string): Node {
     const tok = peek();
     pos++;
     switch (tok.t) {
+      case "sheet": {
+        // Sheet2!A1, Sheet2!A1:B3 or Sheet2!C:C - parse the reference, then tag it
+        const next = peek();
+        if (next.t !== "ref" && !(next.t === "ident" && /^[A-Z]{1,3}$/.test(next.v))) {
+          throw new FormulaSyntaxError("Expected a cell or range after the sheet name");
+        }
+        const node = primary();
+        if (node.type !== "ref" && node.type !== "range") throw new FormulaSyntaxError("Expected a cell or range after the sheet name");
+        node.sheet = tok.v;
+        return node;
+      }
       case "num":
         return { type: "number", value: tok.v };
       case "str":

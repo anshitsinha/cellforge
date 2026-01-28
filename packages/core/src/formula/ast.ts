@@ -14,10 +14,12 @@ export type Node =
   | { type: "number"; value: number }
   | { type: "string"; value: string }
   | { type: "boolean"; value: boolean }
-  | { type: "ref"; row: number; col: number; absRow?: boolean; absCol?: boolean }
+  | { type: "ref"; row: number; col: number; absRow?: boolean; absCol?: boolean; sheet?: string }
   | {
       type: "range";
       range: RangeRef;
+      /** another sheet's name, as written (matched case-insensitively) */
+      sheet?: string;
       absTop?: boolean;
       absBottom?: boolean;
       absLeft?: boolean;

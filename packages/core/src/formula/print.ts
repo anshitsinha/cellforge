@@ -28,6 +28,14 @@ function letters(col: number): string {
   return s;
 }
 
+/** Sheet prefix as Excel writes it: Sheet2!  or  'Bank Jan'!  */
+export function sheetPrefix(name: string | undefined): string {
+  if (name === undefined) return "";
+  // quote anything that isn't a plain identifier, or that looks like a cell (AB12)
+  const plain = /^[A-Za-z_][A-Za-z0-9_.]*$/.test(name) && !/^[A-Za-z]{1,3}\d+$/.test(name);
+  return plain ? `${name}!` : `'${name.replace(/'/g, "''")}'!`;
+}
+
 function precOf(node: Node): number {
   if (node.type === "binary") return PREC[node.op];
   if (node.type === "unary") return node.op === "%" ? POSTFIX : UNARY;
@@ -55,15 +63,16 @@ function print(node: Node, shift: number): string {
     case "ref": {
       const row = node.absRow ? node.row : node.row + shift;
       if (row < 0) return "#REF!";
-      return `${node.absCol ? "$" : ""}${letters(node.col)}${node.absRow ? "$" : ""}${row + 1}`;
+      return `${sheetPrefix(node.sheet)}${node.absCol ? "$" : ""}${letters(node.col)}${node.absRow ? "$" : ""}${row + 1}`;
     }
     case "range": {
       const r = shiftRange(node, shift);
       if (!r) return "#REF!";
-      if (r.bottom === Infinity) return `${letters(r.left)}:${letters(r.right)}`;
+      const pre = sheetPrefix(node.sheet);
+      if (r.bottom === Infinity) return `${pre}${letters(r.left)}:${letters(r.right)}`;
       const a = `${node.absLeft ? "$" : ""}${letters(r.left)}${node.absTop ? "$" : ""}${r.top + 1}`;
       const b = `${node.absRight ? "$" : ""}${letters(r.right)}${node.absBottom ? "$" : ""}${r.bottom + 1}`;
-      return `${a}:${b}`;
+      return `${pre}${a}:${b}`;
     }
     case "unary": {
       const inner = wrap(node.arg, shift, node.op === "%" ? POSTFIX : UNARY);

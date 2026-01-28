@@ -14,9 +14,17 @@ export interface EvalContext {
    * columnar fast path can skip per-cell lookups entirely.
    */
   eachInRange(range: RangeRef, visit: (v: Scalar) => void): void;
+  /** Another sheet's context, by name (case-insensitive); null if there's no such sheet. */
+  sheet?(name: string): EvalContext | null;
 }
 
-type Arg = { kind: "value"; value: Scalar } | { kind: "range"; range: RangeRef };
+/** The context a reference reads from: its own sheet's, or the one it names. */
+function contextFor(node: { sheet?: string }, ctx: EvalContext): EvalContext | null {
+  if (node.sheet === undefined) return ctx;
+  return ctx.sheet?.(node.sheet) ?? null;
+}
+
+type Arg = { kind: "value"; value: Scalar } | { kind: "range"; range: RangeRef; ctx: EvalContext };
 
 // ---------------------------------------------------------------------------
 // coercion helpers
@@ -97,7 +105,8 @@ export function evaluate(node: Node, ctx: EvalContext, rowShift = 0): Scalar {
       return node.value;
     case "ref": {
       const row = node.absRow ? node.row : node.row + rowShift;
-      return row < 0 ? errors.ref : ctx.cell(row, node.col);
+      const target = contextFor(node, ctx);
+      return row < 0 || !target ? errors.ref : target.cell(row, node.col);
     }
     case "range":
       // a bare range outside a function (=A1:A3) - Excel would spill it; we
@@ -119,8 +128,9 @@ export function evaluate(node: Node, ctx: EvalContext, rowShift = 0): Scalar {
       for (const a of node.args) {
         if (a.type === "range") {
           const range = shiftRange(a, rowShift);
-          if (!range) return errors.ref;
-          args.push({ kind: "range", range });
+          const target = contextFor(a, ctx);
+          if (!range || !target) return errors.ref;
+          args.push({ kind: "range", range, ctx: target });
         } else {
           args.push({ kind: "value", value: evaluate(a, ctx, rowShift) });
         }
@@ -198,9 +208,9 @@ type Fn = (args: Arg[], ctx: EvalContext) => Scalar;
  * `fromRange` lets aggregates apply Excel's rule that text inside a range is
  * ignored but text passed directly ("=SUM("abc")") is an error.
  */
-function eachValue(args: Arg[], ctx: EvalContext, visit: (v: Scalar, fromRange: boolean) => void) {
+function eachValue(args: Arg[], _ctx: EvalContext, visit: (v: Scalar, fromRange: boolean) => void) {
   for (const arg of args) {
-    if (arg.kind === "range") ctx.eachInRange(arg.range, (v) => visit(v, true));
+    if (arg.kind === "range") arg.ctx.eachInRange(arg.range, (v) => visit(v, true));
     else visit(arg.value, false);
   }
 }
@@ -319,22 +329,22 @@ export const FUNCTIONS: Record<string, Fn> = {
     });
     return n;
   },
-  COUNTIF: (args, ctx) => {
+  COUNTIF: (args) => {
     if (args.length !== 2 || args[0].kind !== "range") return errors.value;
     const test = criterion(scalarArg(args[1]));
     let n = 0;
-    ctx.eachInRange(args[0].range, (v) => {
+    args[0].ctx.eachInRange(args[0].range, (v) => {
       if (test(v)) n++;
     });
     return n;
   },
-  SUMIF: (args, ctx) => {
+  SUMIF: (args) => {
     // SUMIF(range, criterion) - the 3-arg form needs paired iteration over two
     // ranges, which eachInRange doesn't do yet
     if (args.length !== 2 || args[0].kind !== "range") return errors.value;
     const test = criterion(scalarArg(args[1]));
     let sum = 0;
-    ctx.eachInRange(args[0].range, (v) => {
+    args[0].ctx.eachInRange(args[0].range, (v) => {
       if (typeof v === "number" && test(v)) sum += v;
     });
     return tidy(sum);

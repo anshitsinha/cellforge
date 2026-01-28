@@ -97,7 +97,26 @@ const RUNTIME = {
  * Compile a fill-down template. `origin` is the view row the template's refs
  * are written relative to (i.e. where rowShift is 0).
  */
+/** True if any reference in the formula reads another sheet. */
+export function readsOtherSheets(node: Node): boolean {
+  switch (node.type) {
+    case "ref":
+    case "range":
+      return node.sheet !== undefined;
+    case "unary":
+      return readsOtherSheets(node.arg);
+    case "binary":
+      return readsOtherSheets(node.left) || readsOtherSheets(node.right);
+    case "call":
+      return node.args.some(readsOtherSheets);
+    default:
+      return false;
+  }
+}
+
 export function compileFill(ast: Node, origin: number): CompiledFill | null {
+  // kernels read this sheet's columns directly; other sheets go through the interpreter
+  if (readsOtherSheets(ast)) return null;
   const columns: ColumnInput[] = [];
   const scalars: ScalarInput[] = [];
   const colIndex = new Map<string, number>();
