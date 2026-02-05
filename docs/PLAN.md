@@ -68,14 +68,13 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Cross-sheet references
-- [ ] Parser: `Sheet2!A1`, `'My Sheet'!A1:B9`, `Data!C:C` (names case-insensitive)
-- [ ] Printer: quotes sheet names that need it; fill-down shifts keep the sheet
-- [ ] Evaluation: references resolve through the workbook; unknown sheet → `#REF!`
-- [ ] Edits on one sheet recalculate formulas on others
-- [ ] Renaming a sheet rewrites formulas that refer to it (undoable); deleting shows `#REF!` until undone
-- [ ] Compiler: fills reading other sheets fall back to the interpreter
-- [ ] Tests, and the formulas guide updated
+### Dependency graph + incremental recalc
+- [ ] Range index: which formulas read which rectangles (a filled column is one entry)
+- [ ] Edits invalidate only their dependents, transitively; unrelated cached results and compiled fill chunks survive
+- [ ] Sorting rebuilds the index; structural changes stay correct
+- [ ] Cross-sheet: a change only touches sheets whose formulas name the changed sheet
+- [ ] Randomised test: incremental results always equal a full recalculation
+- [ ] Benchmark: editing a cell next to a compiled 1M-row fill no longer recomputes it
 
 ## Milestones
 
@@ -85,8 +84,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Fix: formulas keep same-row references after sorting (Excel semantics)
 - ✅ Docs site with user guide, developer guide and a live build tracker
 - ✅ Workbook with multiple sheets (add, rename, delete, duplicate, reorder, colour, hide) and sheet search
-- 🔨 Cross-sheet references (`Sheet2!A1`, `'My Sheet'!A1:B9`)
-- ⬜ Dependency graph + incremental recalc
+- ✅ Cross-sheet references (`Sheet2!A1`, `'My Sheet'!A1:B9`)
+- 🔨 Dependency graph + incremental recalc
 - ⬜ Insert / delete / hide rows and columns with reference adjustment, instant at any size
 - ⬜ Range-run styles: font, size, bold/italic/underline/strike, colours, fill,
   borders, alignment, wrap; format painter
