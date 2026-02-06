@@ -14,6 +14,10 @@ import {
   type Scalar,
 } from "@cellforge/core";
 import { formatCell, type CellValue, type DataSource } from "@cellforge/grid";
+import { DepIndex, type Rect } from "./deps";
+
+/** Something whose cached result depends on other cells. */
+type Dep = { kind: "cell"; row: number; col: number } | { kind: "fill"; fill: Fill };
 
 /** An empty sheet - what you get from "New". */
 export class BlankSource implements DataSource {
@@ -104,7 +108,8 @@ const hasNumericColumns = (s: DataSource): s is DataSource & NumericColumns =>
 
 // cell -> single number key for the cache. 16384 is Excel's column limit and
 // 1e8 * 16384 is still well inside Number.MAX_SAFE_INTEGER.
-const key = (row: number, col: number) => row * 16384 + col;
+const KEY_COLS = 16384;
+const key = (row: number, col: number) => row * KEY_COLS + col;
 
 /** Kernel input encoding: numbers as-is, blank -> 0, anything else -> NaN. */
 function asInput(v: Scalar): number {
@@ -141,6 +146,17 @@ export class EditableSource implements DataSource {
   private order: Uint32Array | null = null;
 
   private cache = new Map<number, Scalar>();
+
+  // Dependency index: which formulas read which rectangles, so an edit only
+  // drops the results that depend on it. Kept while unsorted (view rows ==
+  // base rows); a sorted sheet falls back to dropping everything, and the
+  // index is rebuilt when the sort is undone.
+  private deps = new DepIndex<Dep>();
+  private cellDeps = new Map<number, Dep>(); // key(row, col) -> its dep
+  private fillDeps = new Map<Fill, Dep>();
+  /** lower-case names of other sheets this sheet's formulas read, with counts */
+  private foreign = new Map<string, number>();
+  private depForeign = new Map<Dep, string[]>();
   private inProgress = new Set<number>(); // for cycle detection
 
   private chunkCount = 0;
@@ -171,6 +187,7 @@ export class EditableSource implements DataSource {
     // cached chunks can't (they belong to this sheet's data)
     copy.fills = this.fills.map((f) => ({ ...f, chunks: new Map(), computing: false }));
     copy.order = this.order ? this.order.slice() : null;
+    copy.rebuildDeps();
     return copy;
   }
 
@@ -247,7 +264,7 @@ export class EditableSource implements DataSource {
     if (isFormula(prev)) this.formulas--;
     if (isFormula(value)) this.formulas++;
     rowEdits.set(col, value);
-    this.invalidate();
+    this.cellChanged(row, col, value);
   }
 
   /** Forget an edit entirely, so the cell shows the underlying data again. */
@@ -262,7 +279,7 @@ export class EditableSource implements DataSource {
     const n = this.editsPerColumn.get(col)! - 1;
     if (n === 0) this.editsPerColumn.delete(col);
     else this.editsPerColumn.set(col, n);
-    this.invalidate();
+    this.cellChanged(row, col, undefined);
   }
 
   // ---------------------------------------------------------------------------
@@ -283,19 +300,19 @@ export class EditableSource implements DataSource {
     }
     const fill: Fill = { col, top, bottom, origin, template, kernel, chunks: new Map(), computing: false };
     this.fills.push(fill);
-    this.invalidate();
+    this.fillChanged(fill, true);
     return fill;
   }
 
   removeFill(fill: Fill): void {
     this.fills = this.fills.filter((f) => f !== fill);
-    this.invalidate();
+    this.fillChanged(fill, false);
   }
 
   /** Re-add a fill removed by undo (keeps its compiled kernel). */
   restoreFill(fill: Fill): void {
     this.fills.push(fill);
-    this.invalidate();
+    this.fillChanged(fill, true);
   }
 
   /** Drop explicit edits in a block of one column, returning them for undo. */
@@ -432,6 +449,7 @@ export class EditableSource implements DataSource {
   setRowOrder(order: Uint32Array | null): void {
     if (order && order.length !== this.rowCount) throw new Error("row order has the wrong length");
     this.order = order;
+    this.rebuildDeps();
     this.invalidate();
   }
 
@@ -491,6 +509,147 @@ export class EditableSource implements DataSource {
     this.chunkCount = 0;
   }
 
+  /** True if any formula here reads the sheet called `name`. */
+  refersTo(name: string): boolean {
+    const lower = name.toLowerCase();
+    if (!this.order) return this.foreign.has(lower);
+    // sorted: no index; scan the formulas (only happens on other sheets' edits)
+    const reads = (f: Stored) => isFormula(f) && !!f.ast && sheetNames(f.ast).includes(lower);
+    for (const row of this.edits.values()) for (const v of row.values()) if (reads(v)) return true;
+    return this.fills.some((f) => reads(f.template));
+  }
+
+  /** How many formulas the dependency index tracks (for tests and diagnostics). */
+  get trackedDependents(): number {
+    return this.deps.size;
+  }
+
+  // -- dependency tracking ------------------------------------------------------
+
+  private addDep(dep: Dep, ast: Node | null, shiftTop: number, shiftBottom: number): void {
+    if (!ast) return;
+    const rects: Rect[] = [];
+    const names: string[] = [];
+    collectReads(ast, shiftTop, shiftBottom, rects, names);
+    this.deps.set(dep, rects);
+    if (names.length) {
+      this.depForeign.set(dep, names);
+      for (const n of names) this.foreign.set(n, (this.foreign.get(n) ?? 0) + 1);
+    }
+  }
+
+  private dropDep(dep: Dep): void {
+    this.deps.delete(dep);
+    for (const n of this.depForeign.get(dep) ?? []) {
+      const left = (this.foreign.get(n) ?? 1) - 1;
+      if (left === 0) this.foreign.delete(n);
+      else this.foreign.set(n, left);
+    }
+    this.depForeign.delete(dep);
+  }
+
+  /** Re-register every formula: after unsorting, cloning or renaming sheets. */
+  private rebuildDeps(): void {
+    this.deps.clear();
+    this.cellDeps.clear();
+    this.fillDeps.clear();
+    this.foreign.clear();
+    this.depForeign.clear();
+    if (this.order) return; // sorted sheets don't keep an index
+    for (const [row, cols] of this.edits) {
+      for (const [col, v] of cols) {
+        if (!isFormula(v)) continue;
+        const dep: Dep = { kind: "cell", row, col };
+        this.cellDeps.set(key(row, col), dep);
+        const shift = effectiveShift(v, row);
+        this.addDep(dep, v.ast, shift, shift);
+      }
+    }
+    for (const fill of this.fills) this.registerFill(fill);
+  }
+
+  private registerFill(fill: Fill): void {
+    if (!isFormula(fill.template)) return;
+    const dep: Dep = { kind: "fill", fill };
+    this.fillDeps.set(fill, dep);
+    this.addDep(dep, fill.template.ast, fill.top - fill.origin, fill.bottom - fill.origin);
+  }
+
+  private cellChanged(row: number, col: number, value: Stored | undefined): void {
+    if (this.order) {
+      this.invalidate();
+      return;
+    }
+    const k = key(row, col);
+    const old = this.cellDeps.get(k);
+    if (old) {
+      this.dropDep(old);
+      this.cellDeps.delete(k);
+    }
+    if (isFormula(value)) {
+      const dep: Dep = { kind: "cell", row, col };
+      this.cellDeps.set(k, dep);
+      const shift = effectiveShift(value, row);
+      this.addDep(dep, value.ast, shift, shift);
+    }
+    this.cache.delete(k);
+    this.ripple([{ top: row, bottom: row, left: col, right: col }]);
+    this.onChange?.();
+  }
+
+  private fillChanged(fill: Fill, present: boolean): void {
+    if (this.order) {
+      this.invalidate();
+      return;
+    }
+    const old = this.fillDeps.get(fill);
+    if (old) {
+      this.dropDep(old);
+      this.fillDeps.delete(fill);
+    }
+    if (present) this.registerFill(fill);
+    this.forgetFillResults(fill);
+    this.ripple([{ top: fill.top, bottom: fill.bottom, left: fill.col, right: fill.col }]);
+    this.onChange?.();
+  }
+
+  /**
+   * Drop the cached results of everything that reads `changed`, then of
+   * everything that reads those, and so on.
+   */
+  private ripple(changed: Rect[]): void {
+    const queue = [...changed];
+    const seen = new Set<Dep>();
+    while (queue.length) {
+      for (const dep of this.deps.readersOf(queue.pop()!)) {
+        if (seen.has(dep)) continue;
+        seen.add(dep);
+        if (dep.kind === "cell") {
+          this.cache.delete(key(dep.row, dep.col));
+          queue.push({ top: dep.row, bottom: dep.row, left: dep.col, right: dep.col });
+        } else {
+          this.forgetFillResults(dep.fill);
+          queue.push({ top: dep.fill.top, bottom: dep.fill.bottom, left: dep.fill.col, right: dep.fill.col });
+        }
+      }
+    }
+  }
+
+  /** A fill's compiled chunks and any interpreted results for its rows. */
+  private forgetFillResults(fill: Fill): void {
+    this.chunkCount -= fill.chunks.size;
+    fill.chunks.clear();
+    const rows = fill.bottom - fill.top + 1;
+    if (rows <= this.cache.size) {
+      for (let r = fill.top; r <= fill.bottom; r++) this.cache.delete(key(r, fill.col));
+    } else {
+      for (const k of this.cache.keys()) {
+        const r = Math.floor(k / KEY_COLS);
+        if (k % KEY_COLS === fill.col && r >= fill.top && r <= fill.bottom) this.cache.delete(k);
+      }
+    }
+  }
+
   /** Called after any change to this sheet's data. Set by the workbook. */
   onChange: (() => void) | null = null;
 
@@ -516,7 +675,10 @@ export class EditableSource implements DataSource {
     };
     for (const row of this.edits.values()) for (const v of row.values()) if (isFormula(v)) fix(v);
     for (const fill of this.fills) if (isFormula(fill.template)) fix(fill.template);
-    if (changed) this.clearCaches();
+    if (changed) {
+      this.rebuildDeps();
+      this.clearCaches();
+    }
     return changed;
   }
 
@@ -658,4 +820,53 @@ function renameRefs(node: Node, from: string, to: string): boolean {
     default:
       return false;
   }
+}
+
+/**
+ * The rectangles a formula reads on its own sheet, for every row it's
+ * evaluated at: shifts from `shiftTop` to `shiftBottom` (equal for one cell,
+ * the whole block for a fill). Other sheets' names go to `names`.
+ */
+function collectReads(node: Node, shiftTop: number, shiftBottom: number, rects: Rect[], names: string[]): void {
+  switch (node.type) {
+    case "ref": {
+      if (node.sheet !== undefined) {
+        names.push(node.sheet.toLowerCase());
+        return;
+      }
+      const top = node.absRow ? node.row : node.row + shiftTop;
+      const bottom = node.absRow ? node.row : node.row + shiftBottom;
+      if (bottom >= 0) rects.push({ top: Math.max(0, top), bottom, left: node.col, right: node.col });
+      return;
+    }
+    case "range": {
+      if (node.sheet !== undefined) {
+        names.push(node.sheet.toLowerCase());
+        return;
+      }
+      const { top, bottom, left, right } = node.range;
+      const t = node.absTop ? top : top + shiftTop;
+      const b = node.absBottom || bottom === Infinity ? bottom : bottom + shiftBottom;
+      if (b >= 0) rects.push({ top: Math.max(0, Math.min(t, b)), bottom: Math.max(t, b), left, right });
+      return;
+    }
+    case "unary":
+      collectReads(node.arg, shiftTop, shiftBottom, rects, names);
+      return;
+    case "binary":
+      collectReads(node.left, shiftTop, shiftBottom, rects, names);
+      collectReads(node.right, shiftTop, shiftBottom, rects, names);
+      return;
+    case "call":
+      for (const a of node.args) collectReads(a, shiftTop, shiftBottom, rects, names);
+      return;
+    default:
+      return;
+  }
+}
+
+function sheetNames(node: Node): string[] {
+  const names: string[] = [];
+  collectReads(node, 0, 0, [], names);
+  return names;
 }

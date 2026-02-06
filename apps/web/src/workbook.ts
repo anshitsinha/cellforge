@@ -129,13 +129,31 @@ export class Workbook {
   /**
    * Cross-sheet wiring: a sheet resolves other sheets by name, and any change
    * to it drops the cached results of the others, since their formulas may
-   * read it. (The dependency graph will narrow this to what actually depends.)
+   * read it; propagate() limits that to the sheets that name it.
    */
   private connect(source: EditableSource): void {
     source.resolveSheet = (name) => this.byName(name)?.source ?? null;
-    source.onChange = () => {
-      for (const s of this.sheets) if (s.source !== source && s.source.hasFormulas) s.source.clearCaches();
-    };
+    source.onChange = () => this.propagate(source);
+  }
+
+  /**
+   * A sheet changed: drop cached results on the sheets whose formulas name
+   * it, then on the sheets that name those, and so on.
+   */
+  private propagate(changed: EditableSource): void {
+    const done = new Set([changed]);
+    const queue = [changed];
+    while (queue.length) {
+      const src = queue.pop()!;
+      const name = this.sheets.find((x) => x.source === src)?.name;
+      if (!name) continue;
+      for (const s of this.sheets) {
+        if (done.has(s.source) || !s.source.refersTo(name)) continue;
+        done.add(s.source);
+        s.source.clearCaches();
+        queue.push(s.source);
+      }
+    }
   }
 
   private clearAll(): void {
