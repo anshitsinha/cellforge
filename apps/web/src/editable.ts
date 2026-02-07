@@ -129,10 +129,11 @@ function asInput(v: Scalar): number {
  * an edit moves along with the rest of its row. Formula references are in
  * view coordinates, same as what the user sees.
  *
- * Formula results are cached and everything is dropped on any change. That's
- * crude - a dependency graph would only recompute what changed - but always
- * correct. Fills are the exception to "per cell": the first time any cell of
- * a compiled fill is needed, the kernel computes the whole fill in one pass.
+ * Formula results are cached. A dependency index tracks which formulas read
+ * which rectangles, so a change drops only the results that depend on it
+ * (transitively); sorted sheets fall back to dropping everything. Fills are
+ * the exception to "per cell": the first time any cell of a compiled fill is
+ * needed, the kernel computes its chunk of rows in one pass.
  */
 export class EditableSource implements DataSource {
   // base row -> (col -> value). Nested so looking up a row is cheap.
