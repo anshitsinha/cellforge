@@ -60,6 +60,8 @@ function print(node: Node, shift: number): string {
       return `"${node.value.replace(/"/g, '""')}"`;
     case "boolean":
       return node.value ? "TRUE" : "FALSE";
+    case "error":
+      return node.code;
     case "ref": {
       const row = node.absRow ? node.row : node.row + shift;
       if (row < 0) return "#REF!";

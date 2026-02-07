@@ -92,3 +92,16 @@ describe("cross-sheet references", () => {
     expect(compileFill(parseFormula("=A1*Data!B1"), 0)).toBeNull();
   });
 });
+
+describe("#REF! inside formulas", () => {
+  it("parses, prints and evaluates like Excel", () => {
+    const ast = parseFormula("=A1+#REF!");
+    expect(formatFormula(ast)).toBe("=A1+#REF!");
+    const ctx: EvalContext = { cell: () => 1, eachInRange: () => {} };
+    expect(value(evaluate(ast, ctx))).toBe("#REF!");
+    expect(value(evaluate(parseFormula("=IFERROR(#REF!,0)"), ctx))).toBe(0);
+    expect(formatFormula(parseFormula("=SUM(#REF!)"))).toBe("=SUM(#REF!)");
+    expect(compileFill(parseFormula("=A1+#REF!"), 0)).toBeNull();
+    expect(() => parseFormula("=#FOO")).toThrow();
+  });
+});

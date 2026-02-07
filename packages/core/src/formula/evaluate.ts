@@ -103,6 +103,8 @@ export function evaluate(node: Node, ctx: EvalContext, rowShift = 0): Scalar {
     case "string":
     case "boolean":
       return node.value;
+    case "error":
+      return new CellError(node.code);
     case "ref": {
       const row = node.absRow ? node.row : node.row + rowShift;
       const target = contextFor(node, ctx);

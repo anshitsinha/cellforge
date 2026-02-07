@@ -27,7 +27,9 @@ export type Node =
     }
   | { type: "unary"; op: "-" | "+" | "%"; arg: Node }
   | { type: "binary"; op: BinaryOp; left: Node; right: Node }
-  | { type: "call"; name: string; args: Node[] };
+  | { type: "call"; name: string; args: Node[] }
+  /** an error written into the formula, e.g. #REF! where a deleted cell was */
+  | { type: "error"; code: ErrorCode };
 
 export type BinaryOp = "+" | "-" | "*" | "/" | "^" | "&" | "=" | "<>" | "<" | ">" | "<=" | ">=";
 

@@ -1,4 +1,4 @@
-import type { BinaryOp, Node } from "./ast";
+import type { BinaryOp, ErrorCode, Node } from "./ast";
 
 /**
  * Tokenizer + recursive descent parser for spreadsheet formulas.
@@ -20,6 +20,7 @@ type Token =
   | { t: "ref"; row: number; col: number; absRow: boolean; absCol: boolean }
   | { t: "ident"; v: string }
   | { t: "sheet"; v: string }
+  | { t: "err"; v: ErrorCode }
   | { t: "op"; v: string }
   | { t: "eof" };
 
@@ -28,6 +29,8 @@ export class FormulaSyntaxError extends Error {}
 const REF = /^(\$?)([A-Za-z]{1,3})(\$?)(\d+)/;
 // a sheet prefix: Sheet2!  or  'Bank Jan'!  (a quote inside is written '')
 const SHEET_PLAIN = /^([A-Za-z_][A-Za-z0-9_.]*)!/;
+// error literals, as Excel writes them inside formulas (=A1+#REF!)
+const ERROR_LITERAL = /^(#REF!|#DIV\/0!|#VALUE!|#NAME\?|#NUM!|#N\/A)/i;
 const NUMBER = /^(\d+\.?\d*|\.\d+)(e[-+]?\d+)?/i;
 const IDENT = /^[A-Za-z_][A-Za-z0-9_.]*/;
 const OPS = ["<>", "<=", ">=", "+", "-", "*", "/", "^", "&", "=", "<", ">", "(", ")", ",", ":", "%"];
@@ -68,6 +71,14 @@ function tokenize(src: string): Token[] {
         s += src[i++];
       }
       tokens.push({ t: "str", v: s });
+      continue;
+    }
+
+    if (ch === "#") {
+      const e = ERROR_LITERAL.exec(rest);
+      if (!e) throw new FormulaSyntaxError("Unexpected character '#'");
+      tokens.push({ t: "err", v: e[1].toUpperCase() as ErrorCode });
+      i += e[1].length;
       continue;
     }
 
@@ -219,6 +230,8 @@ export function parseFormula(src: string): Node {
       }
       case "num":
         return { type: "number", value: tok.v };
+      case "err":
+        return { type: "error", code: tok.v };
       case "str":
         return { type: "string", value: tok.v };
       case "ref": {
