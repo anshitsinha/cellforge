@@ -86,8 +86,16 @@ The data a user sees is three layers stacked:
   evaluator. Errors (`#DIV/0!`, `#VALUE!`, ...) are values that flow through
   formulas, not exceptions.
 - References are in view coordinates — what the user sees.
-- Results are cached per cell and the cache is dropped on any edit. Crude, but
-  always correct, and only visible cells get evaluated.
+- Results are cached per cell. A **dependency index** (`deps.ts`) records the
+  rectangles each formula reads; a filled column registers once, for its whole
+  block. An edit drops only the cached results (and compiled fill chunks) of
+  formulas that read it, transitively, so unrelated work survives: editing a
+  note next to a compiled 100M-row fill doesn't recompute it. A randomised
+  test checks that incremental results always equal a full recalculation.
+- Sorted sheets don't keep the index (positions move); they drop everything
+  on an edit, and the index is rebuilt when the sort is undone.
+- Across sheets, a change clears only the sheets whose formulas name the
+  changed sheet, following chains.
 - Ranges are visited through `EvalContext.eachInRange`. When a range covers
   untouched numeric columns of an imported table, the sheet iterates the
   `Float64Array` directly instead of calling `getCell` per row.
@@ -149,7 +157,8 @@ moved it, so same-row references stay on the same row, as in Excel.
 - Sorting 100M rows needs ~1.7GB free memory (keys + index arrays).
 - Selection stats over edited or generated columns use the per-cell path,
   sliced so the UI stays responsive.
-- Any edit drops every cached formula result and fill chunk; there's no
-  dependency graph yet.
+- On a sorted sheet any edit still drops every cached result (see above).
+- With a circular reference, which cell shows `#CYCLE!` depends on the order
+  cells were evaluated in; iterative calculation (M2) will define it.
 - Very long dependency chains (a running total filled down 100K+ rows) recurse
   once per row in the interpreter and show `#CYCLE!` if they hit the stack limit.

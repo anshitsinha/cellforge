@@ -69,12 +69,12 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Dependency graph + incremental recalc
-- [ ] Range index: which formulas read which rectangles (a filled column is one entry)
-- [ ] Edits invalidate only their dependents, transitively; unrelated cached results and compiled fill chunks survive
-- [ ] Sorting rebuilds the index; structural changes stay correct
-- [ ] Cross-sheet: a change only touches sheets whose formulas name the changed sheet
-- [ ] Randomised test: incremental results always equal a full recalculation
-- [ ] Benchmark: editing a cell next to a compiled 1M-row fill no longer recomputes it
+- [x] Range index: which formulas read which rectangles (a filled column is one entry)
+- [x] Edits invalidate only their dependents, transitively; unrelated cached results and compiled fill chunks survive
+- [x] Sorting rebuilds the index; structural changes stay correct
+- [x] Cross-sheet: a change only touches sheets whose formulas name the changed sheet
+- [x] Randomised test: incremental results always equal a full recalculation
+- [x] Benchmark: editing a cell next to a compiled 1M-row fill no longer recomputes it
 
 ## Milestones
 
