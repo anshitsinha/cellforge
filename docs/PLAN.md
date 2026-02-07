@@ -68,13 +68,15 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Dependency graph + incremental recalc
-- [x] Range index: which formulas read which rectangles (a filled column is one entry)
-- [x] Edits invalidate only their dependents, transitively; unrelated cached results and compiled fill chunks survive
-- [x] Sorting rebuilds the index; structural changes stay correct
-- [x] Cross-sheet: a change only touches sheets whose formulas name the changed sheet
-- [x] Randomised test: incremental results always equal a full recalculation
-- [x] Benchmark: editing a cell next to a compiled 1M-row fill no longer recomputes it
+### Insert / delete / hide rows and columns
+- [ ] `#REF!` as a formula value (parsed, printed, evaluated) for references to deleted cells
+- [ ] Reference adjustment for a row change: points shift, deleted points become `#REF!`, ranges grow and shrink like Excel
+- [ ] Insert and delete rows: stable row ids, so undoing a delete restores the exact data
+- [ ] Formulas on every sheet adjusted, including filled blocks (split where needed)
+- [ ] Insert and delete columns, same rules
+- [ ] Hide / unhide rows and columns
+- [ ] Header right-click menu and shortcuts (Ctrl+Shift+= insert, Ctrl+- delete)
+- [ ] Tests against Excel's behaviour, randomised round-trips, user guide
 
 ## Milestones
 
@@ -85,8 +87,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Docs site with user guide, developer guide and a live build tracker
 - ✅ Workbook with multiple sheets (add, rename, delete, duplicate, reorder, colour, hide) and sheet search
 - ✅ Cross-sheet references (`Sheet2!A1`, `'My Sheet'!A1:B9`)
-- 🔨 Dependency graph + incremental recalc
-- ⬜ Insert / delete / hide rows and columns with reference adjustment, instant at any size
+- ✅ Dependency graph + incremental recalc
+- 🔨 Insert / delete / hide rows and columns with reference adjustment, instant at any size
 - ⬜ Range-run styles: font, size, bold/italic/underline/strike, colours, fill,
   borders, alignment, wrap; format painter
 - ⬜ Number formats incl. custom codes and accounting styles (K/M, red parentheses)
