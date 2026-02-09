@@ -1,6 +1,10 @@
 import {
+  adjustForRowChange,
+  breakpoints,
   CellError,
   compileFill,
+  mapRow,
+  type RowChange,
   errors,
   evaluate,
   formatFormula,
@@ -143,8 +147,12 @@ export class EditableSource implements DataSource {
   private formulas = 0;
   private fills: Fill[] = [];
 
-  // view row -> base row. null means "unsorted" (identity).
+  // view row -> row id. null means identity (unsorted, nothing inserted or
+  // deleted). Ids below base.rowCount are rows of the original data; inserted
+  // rows get fresh ids from nextRowId. A deleted row's id just leaves the
+  // view, so its edits are still here when an undo puts it back.
   private order: Uint32Array | null = null;
+  private nextRowId: number;
 
   private cache = new Map<number, Scalar>();
 
@@ -172,7 +180,9 @@ export class EditableSource implements DataSource {
   constructor(
     private readonly base: DataSource,
     private readonly extraColumns = 0,
-  ) {}
+  ) {
+    this.nextRowId = base.rowCount;
+  }
 
   /**
    * An independent copy for "duplicate sheet". The imported data is
@@ -188,12 +198,18 @@ export class EditableSource implements DataSource {
     // cached chunks can't (they belong to this sheet's data)
     copy.fills = this.fills.map((f) => ({ ...f, chunks: new Map(), computing: false }));
     copy.order = this.order ? this.order.slice() : null;
+    copy.nextRowId = this.nextRowId;
     copy.rebuildDeps();
     return copy;
   }
 
   get rowCount(): number {
-    return this.base.rowCount;
+    return this.order ? this.order.length : this.base.rowCount;
+  }
+
+  /** A value from the original data; rows inserted since have none. */
+  private baseValue(id: number, col: number): CellValue {
+    return id < this.base.rowCount && col < this.base.colCount ? this.base.getCell(id, col) : null;
   }
 
   get colCount(): number {
@@ -246,7 +262,7 @@ export class EditableSource implements DataSource {
     if (stored !== undefined) return { template: stored, origin: row };
     const fill = this.fillAt(b, col);
     if (fill) return { template: fill.template, origin: fill.origin };
-    return { template: col < this.base.colCount ? this.base.getCell(b, col) : null, origin: row };
+    return { template: this.baseValue(b, col), origin: row };
   }
 
   setCell(row: number, col: number, value: Stored): void {
@@ -438,8 +454,232 @@ export class EditableSource implements DataSource {
    * sort and stats.
    */
   baseColumn(col: number): ColumnData | null {
-    if (!(this.base instanceof Table) || this.columnTouched(col)) return null;
+    // after inserting rows, ids can point past the imported arrays
+    if (!(this.base instanceof Table) || this.columnTouched(col) || this.nextRowId > this.base.rowCount) return null;
     return this.base.columns[col] ?? null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // inserting and deleting rows
+
+  /** Insert `count` empty rows before view row `at`. Returns their ids. */
+  insertRows(at: number, count: number): number[] {
+    const ids = Array.from({ length: count }, () => this.nextRowId++);
+    this.spliceRows(at, 0, ids);
+    return ids;
+  }
+
+  /** Remove view rows at..at+count-1. Returns their ids (to put them back). */
+  deleteRows(at: number, count: number): number[] {
+    return this.spliceRows(at, count, []);
+  }
+
+  /** Put previously removed rows back at `at` (undo of a delete). */
+  restoreRows(at: number, ids: number[]): void {
+    this.spliceRows(at, 0, ids);
+  }
+
+  private spliceRows(at: number, remove: number, insert: number[]): number[] {
+    const n = this.rowCount;
+    if (at < 0 || at + remove > n) throw new Error("rows out of range");
+    const current = this.order ?? identityOrder(n);
+    const next = new Uint32Array(n - remove + insert.length);
+    next.set(current.subarray(0, at));
+    next.set(insert, at);
+    next.set(current.subarray(at + remove), at + insert.length);
+    const removed = Array.from(current.subarray(at, at + remove));
+    // back to the identity (e.g. an insert was undone): fast paths come back
+    this.order = isIdentity(next, this.base.rowCount) ? null : next;
+    this.rebuildDeps();
+    this.invalidate();
+    return removed;
+  }
+
+  // ---------------------------------------------------------------------------
+  // formula snapshots and adjustment (structural changes)
+
+  /** Every formula on the sheet, deep-copied, to undo a rewrite exactly. */
+  formulaSnapshot(): FormulaSnapshot {
+    const cells: FormulaSnapshot["cells"] = [];
+    for (const [id, cols] of this.edits) {
+      for (const [col, v] of cols) if (isFormula(v)) cells.push({ id, col, formula: { ...v, ast: v.ast && cloneAst(v.ast) } });
+    }
+    return {
+      cells,
+      fills: this.fills.map((f) => ({ ...f, template: isFormula(f.template) ? { ...f.template, ast: f.template.ast && cloneAst(f.template.ast) } : f.template, chunks: new Map(), computing: false })),
+    };
+  }
+
+  /** Put every formula back as it was in a snapshot. */
+  restoreFormulas(snap: FormulaSnapshot): void {
+    for (const [id, cols] of this.edits) {
+      for (const [col, v] of cols) if (isFormula(v)) this.dropEdit(id, col);
+    }
+    for (const c of snap.cells) this.putEdit(c.id, c.col, { ...c.formula, ast: c.formula.ast && cloneAst(c.formula.ast) });
+    this.fills = snap.fills.map((f) => ({ ...f, chunks: new Map(), computing: false }));
+    this.rebuildDeps();
+    this.invalidate();
+  }
+
+  /**
+   * Rewrite formulas for rows inserted or deleted on sheet `sheetName`.
+   * `self` is true when that's this sheet (then formulas' own rows move too);
+   * otherwise only references naming that sheet change. Call *before* the
+   * rows themselves are spliced. Returns how many formulas were rewritten.
+   */
+  adjustForRows(change: RowChange, self: boolean, sheetName: string): number {
+    const lower = sheetName.toLowerCase();
+    const applies = self
+      ? (sh: string | undefined) => sh === undefined || sh.toLowerCase() === lower
+      : (sh: string | undefined) => sh !== undefined && sh.toLowerCase() === lower;
+    let rewritten = 0;
+
+    // where each edited row is on screen now
+    const viewOf = this.viewLookup();
+
+    for (const [id, cols] of this.edits) {
+      for (const [col, f] of cols) {
+        if (!isFormula(f) || !f.ast) continue;
+        const L = viewOf(id);
+        if (L < 0) continue; // a deleted row: unchanged, comes back as it was
+        const moved = self ? mapRow(change, L) : L;
+        if (moved === null) continue; // being deleted now
+        const shift = effectiveShift(f, L);
+        const ast = adjustForRowChange(f.ast, change, shift, shift + (moved - L), applies);
+        if (ast !== f.ast && formatFormula(ast, 0) !== formatFormula(f.ast, 0)) {
+          cols.set(col, { ...f, ast, text: formatFormula(ast, 0) });
+          rewritten++;
+        }
+      }
+    }
+
+    const next: Fill[] = [];
+    for (const fill of this.fills) {
+      if (!isFormula(fill.template) || !fill.template.ast) {
+        next.push(fill);
+        continue;
+      }
+      const pieces = this.order
+        ? this.adjustFillMapped(fill, change, self, applies)
+        : this.adjustFillUnsorted(fill, change, self, applies);
+      if (pieces.length !== 1 || pieces[0] !== fill) rewritten++;
+      next.push(...pieces);
+    }
+    this.fills = next;
+    if (rewritten) {
+      this.rebuildDeps();
+      this.clearCaches();
+    }
+    return rewritten;
+  }
+
+  /** Unsorted: view rows are row ids, so a fill splits into contiguous pieces. */
+  private adjustFillUnsorted(fill: Fill, change: RowChange, self: boolean, applies: (s: string | undefined) => boolean): Fill[] {
+    const t = fill.template as Formula;
+    const cuts = breakpoints(t.ast!, change, fill.origin, self, applies).filter((r) => r > fill.top && r <= fill.bottom);
+    const starts = [fill.top, ...cuts];
+    const pieces: Fill[] = [];
+    for (let i = 0; i < starts.length; i++) {
+      const top = starts[i];
+      const bottom = i + 1 < starts.length ? starts[i + 1] - 1 : fill.bottom;
+      // adjust using the first row of the piece that survives the change
+      let probe = top;
+      while (probe <= bottom && self && mapRow(change, probe) === null) probe++;
+      if (probe > bottom) {
+        pieces.push(this.makeFill(fill, top, bottom, t)); // all deleted: keep for undo
+        continue;
+      }
+      const moved = self ? mapRow(change, probe)! : probe;
+      const ast = adjustForRowChange(t.ast!, change, probe - fill.origin, moved - fill.origin, applies);
+      const template: Formula = { ...t, ast, text: formatFormula(ast, 0) };
+      const prev = pieces[pieces.length - 1];
+      if (prev && prev.bottom === top - 1 && formatFormula((prev.template as Formula).ast!, 0) === template.text) prev.bottom = bottom;
+      else pieces.push(this.makeFill(fill, top, bottom, template));
+    }
+    if (pieces.length === 1 && pieces[0].top === fill.top && pieces[0].bottom === fill.bottom && (pieces[0].template as Formula).text === formatFormula(t.ast!, 0)) {
+      return [fill]; // nothing changed
+    }
+    return pieces;
+  }
+
+  /**
+   * Sorted or restructured: a fill's rows are scattered on screen, so it
+   * can't be split into contiguous pieces. The template takes the adjustment
+   * most rows need; rows near the change that need something else get an
+   * explicit formula of their own (there are few of them).
+   */
+  private adjustFillMapped(fill: Fill, change: RowChange, self: boolean, applies: (s: string | undefined) => boolean): Fill[] {
+    const t = fill.template as Formula;
+    const cuts = breakpoints(t.ast!, change, fill.origin, self, applies);
+    const order = this.order!;
+    const lo = Math.max(0, (cuts[0] ?? 0) - 1);
+    const hi = Math.min(order.length - 1, (cuts[cuts.length - 1] ?? -2) + 1);
+    // far from every breakpoint, the adjustment is the same above and below
+    // for references to this sheet; otherwise (another sheet's rows moving
+    // under a scattered fill) the fill has to become explicit formulas
+    const far = (v: number) => {
+      const moved = self ? mapRow(change, v) : v;
+      return moved === null ? null : formatFormula(adjustForRowChange(t.ast!, change, v - fill.origin, moved - fill.origin, applies), 0);
+    };
+    const below = far(Math.max(hi + 1, change.at + change.count + 1));
+    const above = lo > 0 ? far(0) : below;
+    const window = hi - lo + 1;
+    if (above !== below || window > 200_000) {
+      throw new Error("Can't insert or delete rows here: a filled formula on a sorted sheet would need too many rewrites. Undo the sort first.");
+    }
+    for (let v = lo; v <= hi && cuts.length; v++) {
+      const id = order[v];
+      if (id < fill.top || id > fill.bottom || this.edits.get(id)?.has(fill.col)) continue;
+      const moved = self ? mapRow(change, v) : v;
+      if (moved === null) continue;
+      const shift = v - fill.origin;
+      const ast = adjustForRowChange(t.ast!, change, shift, moved - fill.origin, applies);
+      if (formatFormula(ast, 0) === below) continue;
+      this.putEdit(id, fill.col, { kind: "formula", text: formatFormula(ast, 0), ast, shift: moved - fill.origin, anchor: moved });
+    }
+    if (below === formatFormula(t.ast!, 0)) return [fill];
+    const ast = parseFormula(below!);
+    return [this.makeFill(fill, fill.top, fill.bottom, { ...t, ast, text: below! })];
+  }
+
+  private makeFill(like: Fill, top: number, bottom: number, template: Formula): Fill {
+    let kernel = template.ast ? compileFill(template.ast, like.origin) : null;
+    if (kernel?.columns.some((c) => c.col === like.col)) kernel = null;
+    return { col: like.col, top, bottom, origin: like.origin, template, kernel, chunks: new Map(), computing: false };
+  }
+
+  /** Row id -> current view row (-1 if not on screen). */
+  private viewLookup(): (id: number) => number {
+    if (!this.order) return (id) => id;
+    const inverse = new Int32Array(this.nextRowId).fill(-1);
+    this.order.forEach((id, v) => (inverse[id] = v));
+    return (id) => (id < inverse.length ? inverse[id] : -1);
+  }
+
+  /** Raw edit write/remove, keeping counts right; callers rebuild and invalidate. */
+  private putEdit(id: number, col: number, value: Stored): void {
+    let row = this.edits.get(id);
+    if (!row) this.edits.set(id, (row = new Map()));
+    const prev = row.get(col);
+    if (!row.has(col)) {
+      this.count++;
+      this.editsPerColumn.set(col, (this.editsPerColumn.get(col) ?? 0) + 1);
+    }
+    if (isFormula(prev)) this.formulas--;
+    if (isFormula(value)) this.formulas++;
+    row.set(col, value);
+  }
+
+  private dropEdit(id: number, col: number): void {
+    const row = this.edits.get(id);
+    if (!row?.has(col)) return;
+    if (isFormula(row.get(col))) this.formulas--;
+    row.delete(col);
+    if (row.size === 0) this.edits.delete(id);
+    this.count--;
+    const n = this.editsPerColumn.get(col)! - 1;
+    if (n === 0) this.editsPerColumn.delete(col);
+    else this.editsPerColumn.set(col, n);
   }
 
   get rowOrder(): Uint32Array | null {
@@ -465,20 +705,21 @@ export class EditableSource implements DataSource {
    */
   usedRange(): { rows: number; cols: number } {
     const blank = this.base instanceof BlankSource;
-    let rows = blank ? 0 : this.base.rowCount;
+    let rows = blank ? 0 : this.rowCount;
     let cols = blank ? 0 : this.base.colCount; // spare columns only count once used
 
-    // edits are keyed by base row, so map back to view rows if sorted
+    // edits are keyed by row id, so map back to view rows if sorted or
+    // restructured; edits on deleted rows (not in the view) don't count
     let toView: (b: number) => number = (b) => b;
-    if (blank && this.order) {
-      const inverse = new Uint32Array(this.order.length);
+    if (this.order) {
+      const inverse = new Int32Array(this.nextRowId).fill(-1);
       this.order.forEach((b, v) => (inverse[b] = v));
       toView = (b) => inverse[b];
     }
 
     for (const [b, rowEdits] of this.edits) {
       for (const [c, v] of rowEdits) {
-        if (v === null) continue;
+        if (v === null || toView(b) < 0) continue;
         rows = Math.max(rows, toView(b) + 1);
         cols = Math.max(cols, c + 1);
       }
@@ -690,7 +931,7 @@ export class EditableSource implements DataSource {
       return isFormula(stored) ? this.evalFormula(row, col, stored, effectiveShift(stored, row)) : stored;
     }
     const fill = this.fillAt(b, col);
-    if (!fill) return col < this.base.colCount ? this.base.getCell(b, col) : null;
+    if (!fill) return this.baseValue(b, col);
     if (!isFormula(fill.template)) return fill.template;
 
     // compiled fast path: finite kernel output is exactly the interpreter's
@@ -870,4 +1111,25 @@ function sheetNames(node: Node): string[] {
   const names: string[] = [];
   collectReads(node, 0, 0, [], names);
   return names;
+}
+
+export interface FormulaSnapshot {
+  cells: { id: number; col: number; formula: Formula }[];
+  fills: Fill[];
+}
+
+function identityOrder(n: number): Uint32Array {
+  const a = new Uint32Array(n);
+  for (let i = 0; i < n; i++) a[i] = i;
+  return a;
+}
+
+function isIdentity(order: Uint32Array, baseRows: number): boolean {
+  if (order.length !== baseRows) return false;
+  for (let i = 0; i < order.length; i++) if (order[i] !== i) return false;
+  return true;
+}
+
+function cloneAst(node: Node): Node {
+  return structuredClone(node);
 }
