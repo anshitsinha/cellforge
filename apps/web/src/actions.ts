@@ -9,8 +9,8 @@
  */
 import { type Action, ActionRegistry, type BlobStore, type JsonSchema, s } from "@cellforge/actions";
 import { columnLetter } from "@cellforge/grid";
-import { formatFormula, parseFormula, type Node } from "@cellforge/core";
-import { type EditableSource, effectiveShift, type Fill, isFormula, parseInput, type Stored } from "./editable";
+import { formatFormula, parseFormula, type Node, type RowChange } from "@cellforge/core";
+import { type EditableSource, effectiveShift, type Fill, type FormulaSnapshot, isFormula, parseInput, type Stored } from "./editable";
 import { BlankSource, EditableSource as Source } from "./editable";
 import type { Sheet, Workbook } from "./workbook";
 
@@ -269,6 +269,66 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       },
     });
 
+  // -------------------------------------------------------- structure --
+
+  registry
+    .register<{ at: number; count?: number; sheet?: string }>({
+      type: "rows.insert",
+      title: "Insert empty rows; formulas everywhere adjust like Excel",
+      schema: withSheet({ at: s.int("insert before this row, 0-based", 0), count: s.int("how many rows", 1, 1_000_000) }, ["at"]),
+      describe: (p) => `insert ${(p.count ?? 1).toLocaleString()} row${(p.count ?? 1) > 1 ? "s" : ""}`,
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const count = p.count ?? 1;
+        if (p.at > data.rowCount) throw new Error(`Row ${p.at + 1} is past the end of the sheet.`);
+        const formulas = adjustEverywhere(ctx, id, { at: p.at, count, insert: true });
+        data.insertRows(p.at, count);
+        return { type: "rows.splice", params: { sheet: id, at: p.at, remove: count, insert: null, formulas: ctx.blobs.put(formulas) } };
+      },
+    })
+    .register<{ at: number; count?: number; sheet?: string }>({
+      type: "rows.delete",
+      title: "Delete rows; references to them become #REF! like Excel",
+      schema: withSheet({ at: s.int("first row to delete, 0-based", 0), count: s.int("how many rows", 1, 1_000_000) }, ["at"]),
+      describe: (p) => `delete ${(p.count ?? 1).toLocaleString()} row${(p.count ?? 1) > 1 ? "s" : ""}`,
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const count = p.count ?? 1;
+        if (p.at + count > data.rowCount) throw new Error("Those rows are past the end of the sheet.");
+        if (count >= data.rowCount) throw new Error("A sheet needs at least one row.");
+        const formulas = adjustEverywhere(ctx, id, { at: p.at, count, insert: false });
+        const removed = data.deleteRows(p.at, count);
+        return { type: "rows.splice", params: { sheet: id, at: p.at, remove: 0, insert: ctx.blobs.put(removed), formulas: ctx.blobs.put(formulas) } };
+      },
+    })
+    .register<{ sheet: string; at: number; remove: number; insert: string | null; formulas: string }>({
+      type: "rows.splice",
+      title: "Undo or redo a row insert or delete",
+      internal: true,
+      schema: s.object({
+        sheet: s.string(),
+        at: s.int(undefined, 0),
+        remove: s.int(undefined, 0),
+        insert: s.anyOf(s.string(), s.null()),
+        formulas: s.string(),
+      }),
+      describe: () => "insert or delete rows",
+      apply(ctx, p) {
+        const data = ctx.workbook.get(p.sheet).source;
+        const before = snapshotFormulas(ctx);
+        const removed = data.deleteRows(p.at, p.remove);
+        const inserted = p.insert ? ctx.blobs.get<number[]>(p.insert) : [];
+        if (inserted.length) data.restoreRows(p.at, inserted);
+        restoreFormulas(ctx, ctx.blobs.get(p.formulas));
+        return {
+          type: "rows.splice",
+          params: { sheet: p.sheet, at: p.at, remove: inserted.length, insert: removed.length ? ctx.blobs.put(removed) : null, formulas: ctx.blobs.put(before) },
+        };
+      },
+    });
+
   // ----------------------------------------------------------- sheets --
 
   registry
@@ -395,3 +455,38 @@ export function setCells(cells: { row: number; col: number; input: string | null
   return { type: "cells.set", params };
 }
 
+
+// ------------------------------------------------------------ structure --
+
+type Snapshots = Map<string, FormulaSnapshot>;
+
+/** Every sheet's formulas, so a structural change can be undone exactly. */
+function snapshotFormulas(ctx: SheetCtx): Snapshots {
+  const out: Snapshots = new Map();
+  for (const sheet of ctx.workbook.sheets) out.set(sheet.id, sheet.source.formulaSnapshot());
+  return out;
+}
+
+function restoreFormulas(ctx: SheetCtx, snaps: Snapshots): void {
+  for (const sheet of ctx.workbook.sheets) {
+    const snap = snaps.get(sheet.id);
+    if (snap) sheet.source.restoreFormulas(snap);
+  }
+}
+
+/**
+ * Rewrite formulas on every sheet for a row change on sheet `id`, before the
+ * rows themselves move. Returns the snapshot to undo with; if any sheet
+ * can't be adjusted, everything is put back and the error is rethrown.
+ */
+function adjustEverywhere(ctx: SheetCtx, id: string, change: RowChange): Snapshots {
+  const snaps = snapshotFormulas(ctx);
+  const name = ctx.workbook.get(id).name;
+  try {
+    for (const sheet of ctx.workbook.sheets) sheet.source.adjustForRows(change, sheet.id === id, name);
+  } catch (e) {
+    restoreFormulas(ctx, snaps);
+    throw e;
+  }
+  return snaps;
+}
