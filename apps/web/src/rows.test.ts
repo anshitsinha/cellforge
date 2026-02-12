@@ -1,0 +1,162 @@
+import { describe, expect, it } from "vitest";
+import { ActionHistory, BlobStore } from "@cellforge/actions";
+import { mapRow } from "@cellforge/core";
+import { setCells, sheetActions, type SheetCtx } from "./actions";
+import { BlankSource, EditableSource } from "./editable";
+import { Workbook } from "./workbook";
+
+async function sortRows(sheet: EditableSource, col: number, descending: boolean) {
+  const rows = Array.from({ length: sheet.rowCount }, (_, i) => i);
+  const key = (r: number) => sheet.getCell(r, col);
+  rows.sort((a, b) => {
+    const x = key(a);
+    const y = key(b);
+    if (x === y) return a - b;
+    if (x === null) return 1;
+    if (y === null) return -1;
+    return (x < y ? -1 : 1) * (descending ? -1 : 1);
+  });
+  return Uint32Array.from(rows);
+}
+
+function setup(rows = 12, cols = 5) {
+  const workbook = new Workbook({ name: "Sheet1", source: new EditableSource(new BlankSource(rows, cols)) });
+  const ctx: SheetCtx = { workbook, activeSheet: workbook.sheets[0].id, blobs: new BlobStore(), sortRows };
+  const history = new ActionHistory(sheetActions(), () => ctx);
+  const type = (cells: [string, string][], sheet?: string) =>
+    history.run(
+      setCells(
+        cells.map(([ref, input]) => ({ row: Number(ref.slice(1)) - 1, col: ref.charCodeAt(0) - 65, input })),
+        undefined,
+        sheet,
+      ),
+    );
+  return { ctx, history, workbook, sheet: workbook.sheets[0].source, type };
+}
+
+const text = (s: EditableSource, ref: string) => s.getEditText(Number(ref.slice(1)) - 1, ref.charCodeAt(0) - 65);
+const val = (s: EditableSource, ref: string) => s.getCell(Number(ref.slice(1)) - 1, ref.charCodeAt(0) - 65);
+
+describe("inserting rows", () => {
+  it("moves data down and adjusts formulas like Excel", async () => {
+    const { history, sheet, type } = setup();
+    await type([["A1", "1"], ["A2", "2"], ["A3", "3"], ["A4", "4"], ["B1", "=SUM(A1:A4)"], ["C3", "=A3*10"]]);
+    await history.run({ type: "rows.insert", params: { at: 1, count: 2 } });
+    expect([1, 2, 3, 4, 5, 6].map((r) => val(sheet, `A${r}`))).toEqual([1, null, null, 2, 3, 4]);
+    expect(text(sheet, "B1")).toBe("=SUM(A1:A6)");
+    expect(val(sheet, "B1")).toBe(10);
+    expect(text(sheet, "C5")).toBe("=A5*10");
+    expect(val(sheet, "C5")).toBe(30);
+    expect(sheet.rowCount).toBe(14);
+  });
+
+  it("filled blocks keep every row right, split where needed", async () => {
+    const { history, sheet, type } = setup(20, 4);
+    for (let r = 1; r <= 10; r++) await type([[`A${r}`, String(r)]]);
+    await type([["B2", "=A1+A2"]]); // reads the row above and its own row
+    await history.run({ type: "fill.down", params: { range: { top: 1, left: 1, bottom: 9, right: 1 } } });
+    const before = Array.from({ length: 10 }, (_, r) => sheet.getCell(r, 1));
+    await history.run({ type: "rows.insert", params: { at: 5, count: 3 } });
+    // every filled row shows what it showed before, wherever it moved
+    for (let r = 0; r < 10; r++) expect(sheet.getCell(mapRow({ at: 5, count: 3, insert: true }, r)!, 1)).toBe(before[r]);
+    // the row just below the insertion reads across it, so its formula changed
+    expect(text(sheet, "B9")).toBe("=A5+A9");
+  });
+
+  it("adjusts other sheets' references to the sheet", async () => {
+    const { history, workbook, type } = setup();
+    await type([["A5", "42"]]);
+    await history.run({ type: "sheet.add", params: { name: "Report" } });
+    const report = workbook.sheets[1];
+    await type([["A1", "=Sheet1!A5*2"]], report.id);
+    await history.run({ type: "rows.insert", params: { at: 0, count: 1, sheet: workbook.sheets[0].id } });
+    expect(text(report.source, "A1")).toBe("=Sheet1!A6*2");
+    expect(val(report.source, "A1")).toBe(84);
+  });
+});
+
+describe("deleting rows", () => {
+  it("references to deleted cells become #REF!; undo restores everything exactly", async () => {
+    const { history, sheet, type } = setup();
+    await type([["A1", "1"], ["A2", "2"], ["A3", "3"], ["B1", "=A2*2"], ["B5", "=SUM(A1:A3)"], ["C2", "kept?"]]);
+    await history.run({ type: "rows.delete", params: { at: 1, count: 1 } });
+    expect(text(sheet, "B1")).toBe("=#REF!*2");
+    expect(val(sheet, "B1")).toBe("#REF!");
+    expect(text(sheet, "B4")).toBe("=SUM(A1:A2)");
+    expect(val(sheet, "B4")).toBe(4);
+    await history.undo();
+    expect(text(sheet, "B1")).toBe("=A2*2");
+    expect(val(sheet, "B1")).toBe(4);
+    expect(val(sheet, "C2")).toBe("kept?");
+    expect(text(sheet, "B5")).toBe("=SUM(A1:A3)");
+    expect(sheet.rowCount).toBe(12);
+    expect(sheet.rowOrder).toBeNull(); // back to the original layout: fast paths return
+  });
+
+  it("works on a sorted sheet", async () => {
+    const { history, sheet, type } = setup(4, 2);
+    await type([["A1", "3"], ["A2", "1"], ["A3", "2"], ["B1", "=A1*2"]]);
+    await history.run({ type: "rows.sort", params: { col: 0 } });
+    // sorted: 1, 2, 3(with B=6), blank
+    await history.run({ type: "rows.delete", params: { at: 0, count: 1 } });
+    expect(val(sheet, "A2")).toBe(3);
+    expect(val(sheet, "B2")).toBe(6);
+  });
+});
+
+describe("randomised: insert keeps every value; insert/delete + undo is exact", () => {
+  function rng(seed: number) {
+    return () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  }
+  const ROWS = 10;
+  const COLS = 4;
+  const L = (c: number) => String.fromCharCode(65 + c);
+
+  for (const seed of Array.from({ length: 16 }, (_, i) => i + 1)) {
+    it(`seed ${seed}`, async () => {
+      const rand = rng(seed);
+      const { history, sheet } = setup(ROWS, COLS);
+      const cells = [];
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const p = rand();
+          const ref = () => `${rand() < 0.2 ? "$" : ""}${L(Math.floor(rand() * c))}${rand() < 0.2 ? "$" : ""}${1 + Math.floor(rand() * ROWS)}`;
+          if (c > 0 && p < 0.35) cells.push({ row: r, col: c, input: rand() < 0.5 ? `=${ref()}*2` : `=SUM(${L(Math.floor(rand() * c))}1:${L(Math.floor(rand() * c))}${ROWS})` });
+          else if (p < 0.8) cells.push({ row: r, col: c, input: String(Math.floor(rand() * 9)) });
+        }
+      }
+      await history.run(setCells(cells));
+      if (rand() < 0.5) {
+        const r = Math.floor(rand() * (ROWS - 4));
+        await history.run({ type: "fill.down", params: { range: { top: r, left: 3, bottom: r + 3, right: 3 } } });
+      }
+      const snap = () => {
+        const out: unknown[] = [];
+        for (let r = 0; r < sheet.rowCount; r++) for (let c = 0; c < COLS; c++) out.push([sheet.getCell(r, c), sheet.getEditText(r, c)]);
+        return out;
+      };
+      const original = snap();
+      const values = Array.from({ length: ROWS }, (_, r) => Array.from({ length: COLS }, (_, c) => sheet.getCell(r, c)));
+
+      const at = Math.floor(rand() * ROWS);
+      const count = 1 + Math.floor(rand() * 3);
+      await history.run({ type: "rows.insert", params: { at, count } });
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const moved = mapRow({ at, count, insert: true }, r)!;
+          expect(sheet.getCell(moved, c), `seed ${seed}: ${L(c)}${r + 1} -> row ${moved + 1}`).toEqual(values[r][c]);
+        }
+      }
+      await history.undo();
+      expect(snap()).toEqual(original);
+
+      const dAt = Math.floor(rand() * (ROWS - 3));
+      await history.run({ type: "rows.delete", params: { at: dAt, count: 1 + Math.floor(rand() * 2) } });
+      await history.undo();
+      expect(snap()).toEqual(original);
+      await history.redo();
+      await history.undo();
+      expect(snap()).toEqual(original);
+    });
+  }
+});
