@@ -136,6 +136,8 @@ describe("sheet actions", () => {
       "cells.set",
       "fill.down",
       "rows.sort",
+      "rows.insert",
+      "rows.delete",
       "sheet.add",
       "sheet.delete",
       "sheet.duplicate",
