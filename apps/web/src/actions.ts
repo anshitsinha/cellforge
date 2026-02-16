@@ -9,8 +9,8 @@
  */
 import { type Action, ActionRegistry, type BlobStore, type JsonSchema, s } from "@cellforge/actions";
 import { columnLetter } from "@cellforge/grid";
-import { formatFormula, parseFormula, type Node, type RowChange } from "@cellforge/core";
-import { type EditableSource, effectiveShift, type Fill, type FormulaSnapshot, isFormula, parseInput, type Stored } from "./editable";
+import { type ColChange, formatFormula, parseFormula, type Node, type RowChange } from "@cellforge/core";
+import { type ColumnRemoval, type EditableSource, effectiveShift, type Fill, type FormulaSnapshot, isFormula, parseInput, type Stored } from "./editable";
 import { BlankSource, EditableSource as Source } from "./editable";
 import type { Sheet, Workbook } from "./workbook";
 
@@ -337,6 +337,71 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       },
     });
 
+  registry
+    .register<{ at: number; count?: number; sheet?: string }>({
+      type: "cols.insert",
+      title: "Insert empty columns; formulas everywhere adjust like Excel",
+      schema: withSheet({ at: s.int("insert before this column, 0-based (A = 0)", 0), count: s.int("how many columns", 1, 16_384) }, ["at"]),
+      describe: (p) => `insert ${p.count ?? 1} column${(p.count ?? 1) > 1 ? "s" : ""}`,
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const count = p.count ?? 1;
+        if (p.at > data.colCount) throw new Error(`Column ${columnLetter(p.at)} is past the end of the sheet.`);
+        if (data.colCount + count > 16_384) throw new Error("A sheet can have at most 16,384 columns (XFD), like Excel.");
+        const formulas = adjustColumnsEverywhere(ctx, id, { at: p.at, count, insert: true });
+        data.insertColumns(p.at, count);
+        return { type: "cols.splice", params: { sheet: id, at: p.at, remove: count, insert: null, formulas: ctx.blobs.put(formulas) } };
+      },
+    })
+    .register<{ at: number; count?: number; sheet?: string }>({
+      type: "cols.delete",
+      title: "Delete columns; references to them become #REF! like Excel",
+      schema: withSheet({ at: s.int("first column to delete, 0-based (A = 0)", 0), count: s.int("how many columns", 1, 16_384) }, ["at"]),
+      describe: (p) => `delete ${p.count ?? 1} column${(p.count ?? 1) > 1 ? "s" : ""}`,
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const count = p.count ?? 1;
+        if (p.at + count > data.colCount) throw new Error("Those columns are past the end of the sheet.");
+        if (count >= data.colCount) throw new Error("A sheet needs at least one column.");
+        const formulas = adjustColumnsEverywhere(ctx, id, { at: p.at, count, insert: false });
+        const removed = data.deleteColumns(p.at, count);
+        return { type: "cols.splice", params: { sheet: id, at: p.at, remove: 0, insert: ctx.blobs.put(removed), formulas: ctx.blobs.put(formulas) } };
+      },
+    })
+    .register<{ sheet: string; at: number; remove: number; insert: string | null; formulas: string }>({
+      type: "cols.splice",
+      title: "Undo or redo a column insert or delete",
+      internal: true,
+      schema: s.object({
+        sheet: s.string(),
+        at: s.int(undefined, 0),
+        remove: s.int(undefined, 0),
+        insert: s.anyOf(s.string(), s.null()),
+        formulas: s.string(),
+      }),
+      describe: () => "insert or delete columns",
+      apply(ctx, p) {
+        const data = ctx.workbook.get(p.sheet).source;
+        const before = snapshotFormulas(ctx);
+        const removed = p.remove ? data.deleteColumns(p.at, p.remove) : null;
+        const restore = p.insert ? ctx.blobs.get<ColumnRemoval>(p.insert) : null;
+        if (restore) data.restoreColumns(p.at, restore);
+        restoreFormulas(ctx, ctx.blobs.get(p.formulas));
+        return {
+          type: "cols.splice",
+          params: {
+            sheet: p.sheet,
+            at: p.at,
+            remove: restore ? restore.map.length : 0,
+            insert: removed ? ctx.blobs.put(removed) : null,
+            formulas: ctx.blobs.put(before),
+          },
+        };
+      },
+    });
+
   // ----------------------------------------------------------- sheets --
 
   registry
@@ -502,5 +567,13 @@ function adjustEverywhere(ctx: SheetCtx, id: string, change: RowChange): Snapsho
     restoreFormulas(ctx, snaps);
     throw e;
   }
+  return snaps;
+}
+
+/** Like adjustEverywhere, for a column change on sheet `id`. */
+function adjustColumnsEverywhere(ctx: SheetCtx, id: string, change: ColChange): Snapshots {
+  const snaps = snapshotFormulas(ctx);
+  const name = ctx.workbook.get(id).name;
+  for (const sheet of ctx.workbook.sheets) sheet.source.adjustForColumns(change, sheet.id === id, name);
   return snaps;
 }
