@@ -487,6 +487,82 @@ document.addEventListener(
   true,
 );
 
+// --- inserting and deleting rows -----------------------------------------------
+
+function selectedRows() {
+  const r = grid.range;
+  return { top: r.top, count: r.bottom - r.top + 1 };
+}
+
+async function insertRows(below: boolean) {
+  const { top, count } = selectedRows();
+  const at = below ? top + count : top;
+  if (await run({ type: "rows.insert", params: { at, count } })) {
+    grid.selectRange({ top: at, left: grid.range.left, bottom: at + count - 1, right: grid.range.right });
+  }
+}
+
+async function deleteRows() {
+  const { top, count } = selectedRows();
+  if (await run({ type: "rows.delete", params: { at: top, count } })) {
+    const row = Math.min(top, source.rowCount - 1);
+    grid.selectRange({ top: row, left: grid.range.left, bottom: row, right: grid.range.left });
+  }
+}
+
+// Excel's Ctrl++ / Ctrl+- insert rows above the selection and delete them.
+// Browsers may keep Ctrl+- for page zoom, so Google Sheets' Ctrl+Alt+= /
+// Ctrl+Alt+- work too.
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || !gridHasFocus()) return;
+  if (e.key === "+" || (e.key === "=" && (e.shiftKey || e.altKey))) {
+    e.preventDefault();
+    void insertRows(false);
+  } else if (e.key === "-" || e.key === "_") {
+    e.preventDefault();
+    void deleteRows();
+  }
+});
+
+let cellMenu: HTMLElement | null = null;
+function closeCellMenu() {
+  cellMenu?.remove();
+  cellMenu = null;
+}
+document.addEventListener("pointerdown", (e) => {
+  if (cellMenu && !cellMenu.contains(e.target as Node)) closeCellMenu();
+});
+sheet.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  closeCellMenu();
+  const { count } = selectedRows();
+  const rows = count === 1 ? "row" : `${count.toLocaleString()} rows`;
+  const menu = document.createElement("div");
+  menu.className = "tab-menu";
+  menu.setAttribute("role", "menu");
+  const item = (label: string, keys: string, act: () => void) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "menu-item";
+    b.setAttribute("role", "menuitem");
+    b.innerHTML = `<span>${label}</span><kbd>${keys}</kbd>`;
+    b.addEventListener("click", () => {
+      closeCellMenu();
+      act();
+      grid.focus();
+    });
+    menu.append(b);
+  };
+  item(`Insert ${rows} above`, "Ctrl Alt =", () => void insertRows(false));
+  item(`Insert ${rows} below`, "", () => void insertRows(true));
+  item(`Delete ${rows}`, "Ctrl Alt −", () => void deleteRows());
+  document.body.append(menu);
+  const r = menu.getBoundingClientRect();
+  menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
+  menu.style.top = `${Math.min(e.clientY, innerHeight - r.height - 8)}px`;
+  cellMenu = menu;
+});
+
 fileName.textContent = currentName;
 statusRight.textContent = infoText;
 syncFormulaBar();

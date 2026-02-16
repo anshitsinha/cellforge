@@ -418,3 +418,10 @@ button:disabled {
   color: var(--muted);
   font-size: 13px;
 }
+
+.menu-item kbd {
+  float: right;
+  margin-left: 24px;
+  color: var(--muted);
+  font: 12px ui-monospace, Consolas, monospace;
+}
