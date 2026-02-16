@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adjustForRowChange, breakpoints, formatFormula, mapRow, parseFormula, type RowChange } from "../src/formula";
+import { adjustForColChange, adjustForRowChange, breakpoints, formatFormula, mapRow, parseFormula, type RowChange } from "../src/formula";
 
 const all = () => true;
 /** Adjust a formula sitting on (0-based) row `at`, as Excel would when rows change. */
@@ -69,5 +69,22 @@ describe("breakpoints for filled blocks", () => {
     expect(breakpoints(parseFormula("=A1"), insert(10), 3, true, all)).toEqual([10, 13]);
     // absolute references never split a block
     expect(breakpoints(parseFormula("=$A$1"), insert(10), 0, false, all)).toEqual([]);
+  });
+});
+
+describe("columns (Excel's behaviour)", () => {
+  const cols = (f: string, change: { at: number; count: number; insert: boolean }) =>
+    formatFormula(adjustForColChange(parseFormula(f), change, () => true));
+
+  it("inserting moves references right and grows ranges, whole columns too", () => {
+    expect(cols("=A1+C1+$D$2", { at: 1, count: 2, insert: true })).toBe("=A1+E1+$F$2");
+    expect(cols("=SUM(A1:C1)", { at: 1, count: 1, insert: true })).toBe("=SUM(A1:D1)");
+    expect(cols("=SUM(B:D)", { at: 0, count: 1, insert: true })).toBe("=SUM(C:E)");
+  });
+
+  it("deleting makes #REF! of deleted references and shrinks ranges", () => {
+    expect(cols("=A1+B1+D1", { at: 1, count: 1, insert: false })).toBe("=A1+#REF!+C1");
+    expect(cols("=SUM(A:D)", { at: 1, count: 2, insert: false })).toBe("=SUM(A:B)");
+    expect(cols("=SUM(B1:C1)", { at: 1, count: 2, insert: false })).toBe("=SUM(#REF!)");
   });
 });

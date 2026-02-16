@@ -143,3 +143,46 @@ export function breakpoints(node: Node, c: RowChange, origin: number, ownRowMove
   visit(node);
   return [...out].sort((a, b) => a - b);
 }
+
+export interface ColChange {
+  /** first column affected (0-based) */
+  at: number;
+  count: number;
+  insert: boolean;
+}
+
+/** Where column `c` is after the change; null if it was deleted. */
+export function mapCol(ch: ColChange, c: number): number | null {
+  return mapRow(ch, c);
+}
+
+/**
+ * A copy of `node` with column references adjusted for inserted or deleted
+ * columns, by the same rules as rows. Whole-column ranges (A:C) adjust too,
+ * since they name columns. Columns don't depend on which row a formula is
+ * evaluated at, so one adjustment is right for every row of a filled block.
+ */
+export function adjustForColChange(node: Node, ch: ColChange, applies: (sheet: string | undefined) => boolean): Node {
+  switch (node.type) {
+    case "ref": {
+      if (!applies(node.sheet)) return node;
+      const moved = mapCol(ch, node.col);
+      return moved === null ? REF_ERROR : { ...node, col: moved };
+    }
+    case "range": {
+      if (!applies(node.sheet)) return node;
+      const l = mapTop(ch, node.range.left);
+      const r = mapBottom(ch, node.range.right);
+      if (r < l) return REF_ERROR;
+      return { ...node, range: { ...node.range, left: l, right: r } };
+    }
+    case "unary":
+      return { ...node, arg: adjustForColChange(node.arg, ch, applies) };
+    case "binary":
+      return { ...node, left: adjustForColChange(node.left, ch, applies), right: adjustForColChange(node.right, ch, applies) };
+    case "call":
+      return { ...node, args: node.args.map((a) => adjustForColChange(a, ch, applies)) };
+    default:
+      return node;
+  }
+}
