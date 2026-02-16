@@ -282,6 +282,10 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         const { id, data } = target(ctx, p.sheet);
         const count = p.count ?? 1;
         if (p.at > data.rowCount) throw new Error(`Row ${p.at + 1} is past the end of the sheet.`);
+        if (!data.rowOrder && data.rowCount > MAX_RESTRUCTURE_ROWS) {
+          throw new Error(`Inserting or deleting rows on sheets over ${MAX_RESTRUCTURE_ROWS.toLocaleString()} rows isn't supported yet.`);
+        }
+
         const formulas = adjustEverywhere(ctx, id, { at: p.at, count, insert: true });
         data.insertRows(p.at, count);
         return { type: "rows.splice", params: { sheet: id, at: p.at, remove: count, insert: null, formulas: ctx.blobs.put(formulas) } };
@@ -298,6 +302,10 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         const count = p.count ?? 1;
         if (p.at + count > data.rowCount) throw new Error("Those rows are past the end of the sheet.");
         if (count >= data.rowCount) throw new Error("A sheet needs at least one row.");
+        if (!data.rowOrder && data.rowCount > MAX_RESTRUCTURE_ROWS) {
+          throw new Error(`Inserting or deleting rows on sheets over ${MAX_RESTRUCTURE_ROWS.toLocaleString()} rows isn't supported yet.`);
+        }
+
         const formulas = adjustEverywhere(ctx, id, { at: p.at, count, insert: false });
         const removed = data.deleteRows(p.at, count);
         return { type: "rows.splice", params: { sheet: id, at: p.at, remove: 0, insert: ctx.blobs.put(removed), formulas: ctx.blobs.put(formulas) } };
@@ -457,6 +465,12 @@ export function setCells(cells: { row: number; col: number; input: string | null
 
 
 // ------------------------------------------------------------ structure --
+
+/**
+ * Inserting or deleting rows builds a full row map for now; above this size
+ * that's too much memory. A segment map (instant at any size) is planned.
+ */
+const MAX_RESTRUCTURE_ROWS = 20_000_000;
 
 type Snapshots = Map<string, FormulaSnapshot>;
 
