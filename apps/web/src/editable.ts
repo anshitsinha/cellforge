@@ -1,4 +1,6 @@
 import {
+  adjustForColChange,
+  type ColChange,
   adjustForRowChange,
   breakpoints,
   CellError,
@@ -154,6 +156,12 @@ export class EditableSource implements DataSource {
   private order: Uint32Array | null = null;
   private nextRowId: number;
 
+  // view column -> column of the imported data, or -1 for a column that isn't
+  // in it (spare or inserted). null means identity. Edits and fills are keyed
+  // by view column and simply re-keyed when columns are inserted or deleted
+  // (they're sparse); only lookups into the imported data go through this.
+  private colMap: Int32Array | null = null;
+
   private cache = new Map<number, Scalar>();
 
   // Dependency index: which formulas read which rectangles, so an edit only
@@ -199,6 +207,7 @@ export class EditableSource implements DataSource {
     copy.fills = this.fills.map((f) => ({ ...f, chunks: new Map(), computing: false }));
     copy.order = this.order ? this.order.slice() : null;
     copy.nextRowId = this.nextRowId;
+    copy.colMap = this.colMap ? this.colMap.slice() : null;
     copy.rebuildDeps();
     return copy;
   }
@@ -209,11 +218,26 @@ export class EditableSource implements DataSource {
 
   /** A value from the original data; rows inserted since have none. */
   private baseValue(id: number, col: number): CellValue {
-    return id < this.base.rowCount && col < this.base.colCount ? this.base.getCell(id, col) : null;
+    const bc = this.baseColOf(col);
+    return id < this.base.rowCount && bc >= 0 ? this.base.getCell(id, bc) : null;
   }
 
   get colCount(): number {
-    return this.base.colCount + this.extraColumns;
+    return this.colMap ? this.colMap.length : this.base.colCount + this.extraColumns;
+  }
+
+  /** The imported data's column behind view column `col`, or -1. */
+  private baseColOf(col: number): number {
+    if (this.colMap) return col < this.colMap.length ? this.colMap[col] : -1;
+    return col < this.base.colCount ? col : -1;
+  }
+
+  /**
+   * True once rows were inserted or deleted: row ids no longer line up with
+   * the imported arrays, so whole-array fast paths must not be used.
+   */
+  private get restructured(): boolean {
+    return this.nextRowId > this.base.rowCount || (this.order !== null && this.order.length !== this.base.rowCount);
   }
 
   get editCount(): number {
@@ -226,7 +250,8 @@ export class EditableSource implements DataSource {
 
   getColumnName(col: number): string | undefined {
     // spare columns past the data fall back to letters in the grid
-    return col < this.base.colCount ? this.base.getColumnName?.(col) : undefined;
+    const bc = this.baseColOf(col);
+    return bc >= 0 ? this.base.getColumnName?.(bc) : undefined;
   }
 
   /** Display value, i.e. formulas evaluated and errors turned into "#DIV/0!" etc. */
@@ -435,8 +460,9 @@ export class EditableSource implements DataSource {
     if (col >= this.colCount) return new Float64Array(hi - lo + 1).fill(NaN);
     // zero-copy when the column is untouched imported data. Blanks there are
     // NaN rather than 0, which just sends those rows to the interpreter.
-    if (!this.order && !this.columnTouched(col) && hasNumericColumns(this.base)) {
-      const values = this.base.numberColumn(col);
+    const bc = this.baseColOf(col);
+    if (!this.order && bc >= 0 && !this.columnTouched(col) && hasNumericColumns(this.base)) {
+      const values = this.base.numberColumn(bc);
       if (values) return values.subarray(lo, hi + 1);
     }
     const out = new Float64Array(hi - lo + 1);
@@ -455,8 +481,9 @@ export class EditableSource implements DataSource {
    */
   baseColumn(col: number): ColumnData | null {
     // after inserting rows, ids can point past the imported arrays
-    if (!(this.base instanceof Table) || this.columnTouched(col) || this.nextRowId > this.base.rowCount) return null;
-    return this.base.columns[col] ?? null;
+    const bc = this.baseColOf(col);
+    if (!(this.base instanceof Table) || bc < 0 || this.columnTouched(col) || this.restructured) return null;
+    return this.base.columns[bc] ?? null;
   }
 
   // ---------------------------------------------------------------------------
@@ -680,6 +707,112 @@ export class EditableSource implements DataSource {
     const n = this.editsPerColumn.get(col)! - 1;
     if (n === 0) this.editsPerColumn.delete(col);
     else this.editsPerColumn.set(col, n);
+  }
+
+  // ---------------------------------------------------------------------------
+  // inserting and deleting columns
+
+  /** Insert `count` empty columns before view column `at`. */
+  insertColumns(at: number, count: number): void {
+    if (at < 0 || at > this.colCount) throw new Error("column out of range");
+    this.shiftColumns(at, count);
+    this.spliceColMap(at, 0, new Array(count).fill(-1));
+    this.columnsChanged();
+  }
+
+  /** Remove view columns at..at+count-1; returns what's needed to put them back. */
+  deleteColumns(at: number, count: number): ColumnRemoval {
+    if (at < 0 || at + count > this.colCount) throw new Error("columns out of range");
+    const edits: ColumnRemoval["edits"] = [];
+    for (const [id, cols] of this.edits) {
+      for (const [col, value] of cols) if (col >= at && col < at + count) edits.push({ id, col, value });
+    }
+    for (const e of edits) this.dropEdit(e.id, e.col);
+    const fills = this.fills.filter((f) => f.col >= at && f.col < at + count);
+    this.fills = this.fills.filter((f) => !fills.includes(f));
+    this.shiftColumns(at + count, -count);
+    const map = this.spliceColMap(at, count, []);
+    this.columnsChanged();
+    return { map, edits, fills };
+  }
+
+  /** Undo of deleteColumns. */
+  restoreColumns(at: number, removed: ColumnRemoval): void {
+    this.shiftColumns(at, removed.map.length);
+    this.spliceColMap(at, 0, removed.map);
+    for (const e of removed.edits) this.putEdit(e.id, e.col, e.value);
+    this.fills.push(...removed.fills);
+    this.columnsChanged();
+  }
+
+  /** Move every edit and fill at or right of `from` by `delta` columns. */
+  private shiftColumns(from: number, delta: number): void {
+    const moves: { id: number; col: number; value: Stored }[] = [];
+    for (const [id, cols] of this.edits) {
+      for (const [col, value] of cols) if (col >= from) moves.push({ id, col, value });
+    }
+    for (const m of moves) this.dropEdit(m.id, m.col);
+    for (const m of moves) this.putEdit(m.id, m.col + delta, m.value);
+    for (const f of this.fills) if (f.col >= from) f.col += delta;
+  }
+
+  private spliceColMap(at: number, remove: number, insert: number[]): number[] {
+    const n = this.colCount;
+    const current = this.colMap ?? Int32Array.from({ length: n }, (_, c) => (c < this.base.colCount ? c : -1));
+    const next = new Int32Array(n - remove + insert.length);
+    next.set(current.subarray(0, at));
+    next.set(insert, at);
+    next.set(current.subarray(at + remove), at + insert.length);
+    const removed = Array.from(current.subarray(at, at + remove));
+    this.colMap = next;
+    return removed;
+  }
+
+  private columnsChanged(): void {
+    // kernels were compiled against the old column positions
+    for (const f of this.fills) f.kernel = isFormula(f.template) && f.template.ast ? compileOwn(f.template.ast, f.origin, f.col) : null;
+    this.rebuildDeps();
+    this.invalidate();
+  }
+
+  /**
+   * Rewrite formulas for columns inserted or deleted on sheet `sheetName`
+   * (this sheet when `self`). Call before the columns move.
+   */
+  adjustForColumns(change: ColChange, self: boolean, sheetName: string): number {
+    const lower = sheetName.toLowerCase();
+    const applies = self
+      ? (sh: string | undefined) => sh === undefined || sh.toLowerCase() === lower
+      : (sh: string | undefined) => sh !== undefined && sh.toLowerCase() === lower;
+    let rewritten = 0;
+    const fix = (f: Formula): Formula | null => {
+      if (!f.ast) return null;
+      const ast = adjustForColChange(f.ast, change, applies);
+      return formatFormula(ast, 0) === formatFormula(f.ast, 0) ? null : { ...f, ast, text: formatFormula(ast, 0) };
+    };
+    for (const cols of this.edits.values()) {
+      for (const [col, v] of cols) {
+        if (!isFormula(v)) continue;
+        const next = fix(v);
+        if (next) {
+          cols.set(col, next);
+          rewritten++;
+        }
+      }
+    }
+    for (const fill of this.fills) {
+      if (!isFormula(fill.template)) continue;
+      const next = fix(fill.template);
+      if (next) {
+        fill.template = next;
+        rewritten++;
+      }
+    }
+    if (rewritten) {
+      this.rebuildDeps();
+      this.clearCaches();
+    }
+    return rewritten;
   }
 
   get rowOrder(): Uint32Array | null {
@@ -979,15 +1112,18 @@ export class EditableSource implements DataSource {
     // every row. It visits in base order, so when sorted it's only valid if
     // the range covers whole columns (then order doesn't matter).
     const fast = hasNumericColumns(this.base) ? this.base : null;
-    const orderOk = !this.order || (range.top === 0 && bottom === this.rowCount - 1);
+    // a permutation (sort) of the original rows is fine for whole columns;
+    // inserted or deleted rows aren't
+    const orderOk = !this.order || (!this.restructured && range.top === 0 && bottom === this.rowCount - 1);
     let allFast = fast !== null && orderOk;
     for (let c = range.left; allFast && c <= right; c++) {
-      allFast = !this.columnTouched(c) && fast!.numberColumn(c) !== null;
+      const bc = this.baseColOf(c);
+      allFast = bc >= 0 && !this.columnTouched(c) && fast!.numberColumn(bc) !== null;
     }
 
     if (allFast) {
       for (let c = range.left; c <= right; c++) {
-        const values = fast!.numberColumn(c)!;
+        const values = fast!.numberColumn(this.baseColOf(c))!;
         for (let r = range.top; r <= bottom; r++) {
           const v = values[r];
           visit(Number.isNaN(v) ? null : v);
@@ -1132,4 +1268,17 @@ function isIdentity(order: Uint32Array, baseRows: number): boolean {
 
 function cloneAst(node: Node): Node {
   return structuredClone(node);
+}
+
+export interface ColumnRemoval {
+  /** the deleted columns' entries in the column map */
+  map: number[];
+  edits: { id: number; col: number; value: Stored }[];
+  fills: Fill[];
+}
+
+/** A fill's kernel, unless it reads its own column (then it must interpret). */
+function compileOwn(ast: Node, origin: number, col: number): CompiledFill | null {
+  const kernel = compileFill(ast, origin);
+  return kernel?.columns.some((c) => c.col === col) ? null : kernel;
 }
