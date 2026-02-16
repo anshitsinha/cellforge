@@ -69,10 +69,10 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Insert / delete / hide rows and columns
-- [ ] `#REF!` as a formula value (parsed, printed, evaluated) for references to deleted cells
-- [ ] Reference adjustment for a row change: points shift, deleted points become `#REF!`, ranges grow and shrink like Excel
-- [ ] Insert and delete rows: stable row ids, so undoing a delete restores the exact data
-- [ ] Formulas on every sheet adjusted, including filled blocks (split where needed)
+- [x] `#REF!` as a formula value (parsed, printed, evaluated) for references to deleted cells
+- [x] Reference adjustment for a row change: points shift, deleted points become `#REF!`, ranges grow and shrink like Excel
+- [x] Insert and delete rows: stable row ids, so undoing a delete restores the exact data
+- [x] Formulas on every sheet adjusted, including filled blocks (split where needed)
 - [ ] Insert and delete columns, same rules
 - [ ] Hide / unhide rows and columns
 - [ ] Header right-click menu and shortcuts (Ctrl+Shift+= insert, Ctrl+- delete)
@@ -89,6 +89,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Cross-sheet references (`Sheet2!A1`, `'My Sheet'!A1:B9`)
 - ✅ Dependency graph + incremental recalc
 - 🔨 Insert / delete / hide rows and columns with reference adjustment, instant at any size
+- ⬜ Instant insert/delete on 100M-row sheets (segment row map; today capped at 20M rows)
 - ⬜ Range-run styles: font, size, bold/italic/underline/strike, colours, fill,
   borders, alignment, wrap; format painter
 - ⬜ Number formats incl. custom codes and accounting styles (K/M, red parentheses)

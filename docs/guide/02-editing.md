@@ -40,6 +40,22 @@ Formulas move with their rows: if `B3` doubles the value in `A3` and sorting
 moves that row to row 9, it still doubles its own row's value, now `A9`.
 This matches Excel.
 
+## Insert and delete rows
+
+Right-click a cell and choose **Insert row above**, **Insert row below** or
+**Delete row**. With several rows selected, that many rows are inserted or
+deleted. Shortcuts: **Ctrl+Alt+=** inserts above, **Ctrl+Alt+−** deletes
+(**Ctrl++** and **Ctrl+−** work too where the browser doesn't use them for zoom).
+
+Formulas everywhere adjust the way Excel's do:
+
+- references to rows that moved follow them, on every sheet;
+- a range grows when you insert rows inside it, and shrinks when you delete some of its rows;
+- a reference to a deleted cell becomes `#REF!`.
+
+Undo puts the rows back with their data, and every formula exactly as it was.
+For now, inserting and deleting rows works on sheets of up to 20 million rows.
+
 ## Copy, cut and paste
 
 **Ctrl+C**, **Ctrl+X** and **Ctrl+V** work with Excel and Google Sheets, in
