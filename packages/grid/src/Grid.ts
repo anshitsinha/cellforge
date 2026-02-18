@@ -160,6 +160,35 @@ export class Grid {
     this.onSelectionChange?.(this.active);
   }
 
+  /**
+   * Columns were inserted or removed in the data: keep the other columns'
+   * widths with them. (setSource would reset scroll and selection.)
+   */
+  spliceColumns(at: number, remove: number, insert: number): void {
+    this.columns = this.columns.splice(at, remove, insert, this.defaultColumnWidth);
+    this.clampSelection();
+    this.invalidate();
+  }
+
+  /**
+   * Bring the layout in line with the data's column and row counts after a
+   * change the grid didn't hear about (undo, redo, another sheet's action).
+   */
+  syncShape(): void {
+    if (this.columns.count !== this.source.colCount) {
+      this.columns = this.columns.resized(this.source.colCount, this.defaultColumnWidth);
+    }
+    this.clampSelection();
+  }
+
+  private clampSelection(): void {
+    const maxRow = Math.max(0, this.source.rowCount - 1);
+    const maxCol = Math.max(0, this.source.colCount - 1);
+    const clamp = (c: CellRef) => ({ row: Math.min(c.row, maxRow), col: Math.min(c.col, maxCol) });
+    this.active = clamp(this.active);
+    this.extent = clamp(this.extent);
+  }
+
   /** The active cell. */
   get selection(): CellRef {
     return { ...this.active };

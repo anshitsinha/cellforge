@@ -51,6 +51,26 @@ export class ColumnLayout {
     return lo;
   }
 
+  /**
+   * A layout with columns inserted or removed: widths of the columns that
+   * stay move with them, new columns get `defaultWidth`.
+   */
+  splice(at: number, remove: number, insert: number, defaultWidth: number): ColumnLayout {
+    const next = new ColumnLayout(this.count - remove + insert, defaultWidth);
+    next.widths.set(this.widths.subarray(0, at));
+    next.widths.set(this.widths.subarray(at + remove), at + insert);
+    next.recompute(0);
+    return next;
+  }
+
+  /** A layout of a different size keeping the widths it shares with this one. */
+  resized(count: number, defaultWidth: number): ColumnLayout {
+    const next = new ColumnLayout(count, defaultWidth);
+    next.widths.set(this.widths.subarray(0, Math.min(count, this.count)));
+    next.recompute(0);
+    return next;
+  }
+
   private recompute(from: number): void {
     for (let i = from; i < this.count; i++) {
       this.offsets[i + 1] = this.offsets[i] + this.widths[i];
