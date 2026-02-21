@@ -206,6 +206,7 @@ function settleActiveSheet() {
 function refresh() {
   settleActiveSheet();
   tabs.render();
+  grid.syncShape();
   grid.invalidate();
   syncFormulaBar();
   updateStatus();
@@ -489,6 +490,34 @@ document.addEventListener(
 
 // --- inserting and deleting rows -----------------------------------------------
 
+function selectedCols() {
+  const r = grid.range;
+  return { left: r.left, count: r.right - r.left + 1 };
+}
+
+async function insertCols(right: boolean) {
+  const { left, count } = selectedCols();
+  const at = right ? left + count : left;
+  grid.spliceColumns(at, 0, count); // move widths before the data moves
+  if (await run({ type: "cols.insert", params: { at, count } })) {
+    grid.selectRange({ top: grid.range.top, left: at, bottom: grid.range.bottom, right: at + count - 1 });
+  } else {
+    grid.spliceColumns(at, count, 0);
+  }
+}
+
+async function deleteCols() {
+  const { left, count } = selectedCols();
+  const top = grid.range.top;
+  grid.spliceColumns(left, count, 0); // move widths with the data
+  if (await run({ type: "cols.delete", params: { at: left, count } })) {
+    const col = Math.min(left, source.colCount - 1);
+    grid.selectRange({ top, left: col, bottom: top, right: col });
+  } else {
+    grid.spliceColumns(left, 0, count);
+  }
+}
+
 function selectedRows() {
   const r = grid.range;
   return { top: r.top, count: r.bottom - r.top + 1 };
@@ -537,6 +566,8 @@ sheet.addEventListener("contextmenu", (e) => {
   closeCellMenu();
   const { count } = selectedRows();
   const rows = count === 1 ? "row" : `${count.toLocaleString()} rows`;
+  const nCols = selectedCols().count;
+  const cols = nCols === 1 ? "column" : `${nCols} columns`;
   const menu = document.createElement("div");
   menu.className = "tab-menu";
   menu.setAttribute("role", "menu");
@@ -556,6 +587,12 @@ sheet.addEventListener("contextmenu", (e) => {
   item(`Insert ${rows} above`, "Ctrl Alt =", () => void insertRows(false));
   item(`Insert ${rows} below`, "", () => void insertRows(true));
   item(`Delete ${rows}`, "Ctrl Alt −", () => void deleteRows());
+  const sep = document.createElement("div");
+  sep.className = "menu-sep";
+  menu.append(sep);
+  item(`Insert ${cols} left`, "", () => void insertCols(false));
+  item(`Insert ${cols} right`, "", () => void insertCols(true));
+  item(`Delete ${cols}`, "", () => void deleteCols());
   document.body.append(menu);
   const r = menu.getBoundingClientRect();
   menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
