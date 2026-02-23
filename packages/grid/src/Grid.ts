@@ -1,4 +1,5 @@
 import { CellEditor, type EditorRect } from "./CellEditor";
+import { RowVisibility } from "./rows";
 import { ColumnLayout, columnLetter } from "./columns";
 import { formatCell } from "./format";
 import { readTheme } from "./theme";
@@ -56,6 +57,10 @@ export class Grid {
   private theme: Theme;
 
   private readonly rowHeight: number;
+  /** hidden rows; drawing works in display positions, rows keep real numbers */
+  private readonly hidden = new RowVisibility();
+  /** hidden columns, with the width each had, to restore on unhide */
+  private hiddenCols = new Map<number, number>();
   private readonly headerHeight: number;
   private readonly defaultColumnWidth: number;
   private readonly touchEnabled: boolean;
@@ -189,6 +194,59 @@ export class Grid {
     this.extent = clamp(this.extent);
   }
 
+  /** Hide exactly these rows (inclusive intervals of real row numbers). */
+  setHiddenRows(intervals: readonly [number, number][]): void {
+    this.hidden.set(intervals);
+    this.snapActiveToVisible();
+    this.clampScroll();
+    this.invalidate();
+  }
+
+  /** Hide exactly these columns. */
+  setHiddenColumns(cols: Iterable<number>): void {
+    const next = new Set(cols);
+    for (const [c, w] of this.hiddenCols) {
+      if (!next.has(c) && c < this.columns.count) this.columns.setWidth(c, w);
+    }
+    const kept = new Map<number, number>();
+    for (const c of next) {
+      if (c >= this.columns.count) continue;
+      kept.set(c, this.hiddenCols.get(c) ?? this.columns.width(c));
+      this.columns.setWidth(c, 0);
+    }
+    this.hiddenCols = kept;
+    this.snapActiveToVisible();
+    this.clampScroll();
+    this.invalidate();
+  }
+
+  isRowHidden(row: number): boolean {
+    return this.hidden.isHidden(row);
+  }
+
+  isColumnHidden(col: number): boolean {
+    return this.hiddenCols.has(col);
+  }
+
+  private get displayRows(): number {
+    return Math.max(0, this.source.rowCount - this.hidden.hiddenCount);
+  }
+
+  /** Move the active cell off a row or column that just got hidden. */
+  private snapActiveToVisible(): void {
+    const row = this.hidden.nearest(this.active.row, 1, this.source.rowCount) ?? this.hidden.nearest(this.active.row, -1, this.source.rowCount);
+    const col = this.visibleCol(this.active.col, 1) ?? this.visibleCol(this.active.col, -1);
+    if (row !== null && col !== null && (row !== this.active.row || col !== this.active.col)) {
+      this.active = { row, col };
+      this.extent = { row, col };
+    }
+  }
+
+  private visibleCol(col: number, dir: 1 | -1): number | null {
+    for (let c = col; c >= 0 && c < this.columns.count; c += dir) if (!this.hiddenCols.has(c)) return c;
+    return null;
+  }
+
   /** The active cell. */
   get selection(): CellRef {
     return { ...this.active };
@@ -271,14 +329,14 @@ export class Grid {
     const rowShift = this.scrollY - firstRow * this.rowHeight;
     return {
       x: this.rowHeaderWidth + this.columns.left(col) - this.scrollX,
-      y: this.headerHeight + (row - firstRow) * this.rowHeight - rowShift,
+      y: this.headerHeight + (this.hidden.toDisplay(row) - firstRow) * this.rowHeight - rowShift,
       width: this.columns.width(col) + 1,
       height: this.rowHeight + 1,
     };
   }
 
   scrollIntoView(row: number, col: number): void {
-    const top = row * this.rowHeight;
+    const top = this.hidden.toDisplay(row) * this.rowHeight;
     const bottom = top + this.rowHeight;
     if (top < this.scrollY) this.scrollY = top;
     else if (bottom > this.scrollY + this.bodyHeight) this.scrollY = bottom - this.bodyHeight;
@@ -333,7 +391,7 @@ export class Grid {
   }
 
   private get maxScrollY(): number {
-    return Math.max(0, this.source.rowCount * this.rowHeight - this.bodyHeight);
+    return Math.max(0, this.displayRows * this.rowHeight - this.bodyHeight);
   }
 
   private updateRowHeaderWidth(): void {
@@ -572,8 +630,9 @@ export class Grid {
       else this.setSelection({ row: 0, col }, { row: lastRow, col });
       return;
     }
-    const row = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight);
-    if (row > lastRow) return;
+    const d = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight);
+    if (d >= this.displayRows) return;
+    const row = this.hidden.toRow(d);
     if (extend) this.setSelection({ row: active.row, col: 0 }, { row, col: lastCol });
     else this.setSelection({ row, col: 0 }, { row, col: lastCol });
   }
@@ -639,10 +698,10 @@ export class Grid {
         next = { row: e.shiftKey ? row - 1 : row + 1, col };
         break;
       case "PageUp":
-        next = { row: r - pageRows, col: c };
+        next = { row: this.hidden.toRow(Math.max(0, this.hidden.toDisplay(r) - pageRows)), col: c };
         break;
       case "PageDown":
-        next = { row: r + pageRows, col: c };
+        next = { row: this.hidden.toRow(Math.min(this.displayRows - 1, this.hidden.toDisplay(r) + pageRows)), col: c };
         break;
       case "Home":
         next = jump ? { row: 0, col: 0 } : { row: r, col: 0 };
@@ -653,7 +712,16 @@ export class Grid {
     }
     if (!next) return;
     e.preventDefault();
-    this.select(next.row, next.col, extend);
+    // skip hidden rows and columns in the direction of travel
+    const from = extend ? this.extent : this.active;
+    const rows = this.source.rowCount;
+    const nr = clamp(next.row, 0, rows - 1);
+    const rowDir: 1 | -1 = nr >= from.row ? 1 : -1;
+    const toRow = this.hidden.nearest(nr, rowDir, rows) ?? this.hidden.nearest(nr, rowDir === 1 ? -1 : 1, rows) ?? from.row;
+    const nc = clamp(next.col, 0, this.columns.count - 1);
+    const colDir: 1 | -1 = nc >= from.col ? 1 : -1;
+    const toCol = this.visibleCol(nc, colDir) ?? this.visibleCol(nc, colDir === 1 ? -1 : 1) ?? from.col;
+    this.select(toRow, toCol, extend);
   };
 
   private onScrollbarDown(kind: "vscroll" | "hscroll", pos: number, clientPos: number): void {
@@ -771,10 +839,10 @@ export class Grid {
   private hitTest(x: number, y: number): CellRef | null {
     if (x < this.rowHeaderWidth || y < this.headerHeight) return null;
     if (x > this.rowHeaderWidth + this.bodyWidth || y > this.headerHeight + this.bodyHeight) return null;
-    const row = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight);
+    const d = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight);
     const col = this.columns.indexAt(x - this.rowHeaderWidth + this.scrollX);
-    if (row >= this.source.rowCount) return null;
-    return { row, col };
+    if (d >= this.displayRows) return null;
+    return { row: this.hidden.toRow(d), col };
   }
 
   /** Like hitTest, but snaps points outside the body to the nearest cell. */
@@ -782,10 +850,8 @@ export class Grid {
     const cx = clamp(x, this.rowHeaderWidth, this.rowHeaderWidth + this.bodyWidth - 1);
     const cy = clamp(y, this.headerHeight, this.headerHeight + this.bodyHeight - 1);
     return {
-      row: clamp(
-        Math.floor((cy - this.headerHeight + this.scrollY) / this.rowHeight),
-        0,
-        this.source.rowCount - 1,
+      row: this.hidden.toRow(
+        clamp(Math.floor((cy - this.headerHeight + this.scrollY) / this.rowHeight), 0, Math.max(0, this.displayRows - 1)),
       ),
       col: this.columns.indexAt(cx - this.rowHeaderWidth + this.scrollX),
     };
@@ -812,9 +878,14 @@ export class Grid {
     const bodyH = this.bodyHeight;
 
     // visible window
+    // display positions (hidden rows take no space); rows keep real numbers
+    const hidden = this.hidden;
     const firstRow = Math.floor(this.scrollY / rowHeight);
     const rowShift = this.scrollY - firstRow * rowHeight; // partial row at the top
-    const lastRow = Math.min(rowCount - 1, firstRow + Math.ceil(bodyH / rowHeight));
+    const lastRow = Math.min(rowCount - hidden.hiddenCount - 1, firstRow + Math.ceil(bodyH / rowHeight));
+    const realRow = (d: number) => hidden.toRow(d);
+    const dispTop = (r: number) => hidden.toDisplay(r);
+    const dispBottom = (r: number) => hidden.toDisplay(r + 1) - 1;
     const firstCol = columns.indexAt(this.scrollX);
     let lastCol = firstCol;
     while (lastCol < columns.count - 1 && columns.left(lastCol + 1) < this.scrollX + bodyW) {
@@ -843,11 +914,11 @@ export class Grid {
       ctx.beginPath();
       ctx.rect(x, headerHeight, w, bodyH);
       ctx.clip();
-      for (let r = firstRow; r <= lastRow; r++) {
-        const value = this.source.getCell(r, c);
+      for (let d = firstRow; d <= lastRow; d++) {
+        const value = this.source.getCell(realRow(d), c);
         if (value === null) continue;
         const text = formatCell(value);
-        const y = rowY(r) + rowHeight / 2;
+        const y = rowY(d) + rowHeight / 2;
         if (typeof value === "number") {
           ctx.textAlign = "right";
           ctx.fillText(text, x + w - CELL_PADDING, y);
@@ -878,13 +949,15 @@ export class Grid {
     // selected range: light fill + border. A range can be 100M rows tall, so
     // edges that are off-screen get pinned just outside the viewport instead
     // of computing pixel coords in the billions.
-    const sel = this.range;
+    const range = this.range;
+    // the selection in display positions
+    const sel = { top: dispTop(range.top), bottom: dispBottom(range.bottom), left: range.left, right: range.right };
     const visTop = Math.max(sel.top, firstRow);
     const visBottom = Math.min(sel.bottom, lastRow);
     const visLeft = Math.max(sel.left, firstCol);
     const visRight = Math.min(sel.right, lastCol);
     const rangeVisible = visTop <= visBottom && visLeft <= visRight;
-    const multi = sel.top !== sel.bottom || sel.left !== sel.right;
+    const multi = range.top !== range.bottom || range.left !== range.right;
     if (rangeVisible && multi) {
       const x0 = sel.left < firstCol ? rowHeaderWidth - 4 : colX(sel.left);
       const x1 = sel.right > lastCol ? rowHeaderWidth + bodyW + 4 : colX(sel.right) + columns.width(sel.right);
@@ -901,8 +974,9 @@ export class Grid {
     }
 
     // active cell outline (drawn even if partly off-screen; the clip handles it)
-    const { row: ar, col: ac } = this.active;
-    if (ar >= firstRow && ar <= lastRow && ac >= firstCol && ac <= lastCol) {
+    const { row: activeRow, col: ac } = this.active;
+    const ar = hidden.isHidden(activeRow) ? -1 : dispTop(activeRow);
+    if (ar >= firstRow && ar <= lastRow && ac >= firstCol && ac <= lastCol && !this.hiddenCols.has(ac)) {
       if (multi) {
         // inside a range the active cell shows as unfilled, like Excel
         ctx.fillStyle = theme.background;
@@ -910,7 +984,7 @@ export class Grid {
         ctx.fillRect(colX(ac) + 1, rowY(ar) + 1, columns.width(ac) - 1, rowHeight - 1);
         ctx.globalAlpha = 1;
         // the fill covered the text, so redraw it
-        const v = this.source.getCell(ar, ac);
+        const v = this.source.getCell(activeRow, ac);
         if (v !== null) {
           ctx.font = FONT;
           ctx.fillStyle = theme.text;
@@ -979,8 +1053,11 @@ export class Grid {
     ctx.rect(0, headerHeight, rowHeaderWidth, bodyH);
     ctx.clip();
     ctx.fillStyle = theme.mutedText;
-    for (let r = firstRow; r <= lastRow; r++) {
-      ctx.fillText(String(r + 1), rowHeaderWidth / 2, rowY(r) + rowHeight / 2);
+    for (let d = firstRow; d <= lastRow; d++) {
+      const r = realRow(d);
+      ctx.fillText(String(r + 1), rowHeaderWidth / 2, rowY(d) + rowHeight / 2);
+      // a hidden block just above: a thicker line, like Excel
+      if (r > 0 && hidden.isHidden(r - 1)) ctx.fillRect(0, rowY(d) - 1, rowHeaderWidth, 2);
     }
     ctx.restore();
 
@@ -997,7 +1074,7 @@ export class Grid {
 
     // keep the floating editor glued to its cell if we scrolled mid-edit
     if (this.editor.isEditing) {
-      this.editor.place(this.cellRect(ar, ac));
+      this.editor.place(this.cellRect(activeRow, ac));
     }
   }
 
@@ -1020,7 +1097,7 @@ export class Grid {
 
   private verticalThumb(): Thumb | null {
     return thumbFor(
-      this.source.rowCount * this.rowHeight,
+      this.displayRows * this.rowHeight,
       this.bodyHeight,
       this.scrollY,
       this.maxScrollY,
