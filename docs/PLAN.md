@@ -73,7 +73,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - [x] Reference adjustment for a row change: points shift, deleted points become `#REF!`, ranges grow and shrink like Excel
 - [x] Insert and delete rows: stable row ids, so undoing a delete restores the exact data
 - [x] Formulas on every sheet adjusted, including filled blocks (split where needed)
-- [ ] Insert and delete columns, same rules
+- [x] Insert and delete columns, same rules
 - [ ] Hide / unhide rows and columns
 - [ ] Header right-click menu and shortcuts (Ctrl+Shift+= insert, Ctrl+- delete)
 - [ ] Tests against Excel's behaviour, randomised round-trips, user guide
