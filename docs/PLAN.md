@@ -75,7 +75,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - [x] Formulas on every sheet adjusted, including filled blocks (split where needed)
 - [x] Insert and delete columns, same rules
 - [x] Hide / unhide rows and columns
-- [ ] Header right-click menu and shortcuts (Ctrl+Shift+= insert, Ctrl+- delete)
+- [x] Header right-click menu and shortcuts (Ctrl+Shift+= insert, Ctrl+- delete)
 - [ ] Tests against Excel's behaviour, randomised round-trips, user guide
 
 ## Milestones

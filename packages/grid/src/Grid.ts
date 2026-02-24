@@ -843,6 +843,33 @@ export class Grid {
   };
 
   /** Map a point (css px, relative to the canvas) to a body cell, or null. */
+  /**
+   * For a right-click at viewport point (clientX, clientY): select what's
+   * under it unless it's already inside the selection, as Excel does, and
+   * say whether it was a row header, a column header or a cell.
+   */
+  selectForMenu(clientX: number, clientY: number): "rows" | "cols" | "cell" | null {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    if (y < this.headerHeight && x < this.rowHeaderWidth) return null;
+    const r = this.range;
+    if (y < this.headerHeight) {
+      const col = this.columns.indexAt(x - this.rowHeaderWidth + this.scrollX);
+      if (col < r.left || col > r.right || r.top !== 0 || r.bottom !== this.source.rowCount - 1) this.onHeaderDown(x, y, false);
+      return "cols";
+    }
+    if (x < this.rowHeaderWidth) {
+      const cell = this.cellAtClamped(this.rowHeaderWidth, y);
+      if (cell.row < r.top || cell.row > r.bottom || r.left !== 0 || r.right !== this.columns.count - 1) this.onHeaderDown(x, y, false);
+      return "rows";
+    }
+    const cell = this.hitTest(x, y);
+    if (!cell) return null;
+    if (cell.row < r.top || cell.row > r.bottom || cell.col < r.left || cell.col > r.right) this.select(cell.row, cell.col);
+    return "cell";
+  }
+
   private hitTest(x: number, y: number): CellRef | null {
     if (x < this.rowHeaderWidth || y < this.headerHeight) return null;
     if (x > this.rowHeaderWidth + this.bodyWidth || y > this.headerHeight + this.bodyHeight) return null;

@@ -43,7 +43,9 @@ This matches Excel.
 ## Insert and delete rows and columns
 
 Right-click a cell and choose **Insert row above / below**, **Delete row**,
-**Insert column left / right** or **Delete column**. With several rows or
+**Insert column left / right** or **Delete column**. Right-click a row
+number or a column letter for just that row's or column's commands; if it
+isn't selected yet, it gets selected first. With several rows or
 columns selected, that many are inserted or deleted. Shortcuts: **Ctrl+Alt+=** inserts above, **Ctrl+Alt+−** deletes
 (**Ctrl++** and **Ctrl+−** work too where the browser doesn't use them for zoom).
 

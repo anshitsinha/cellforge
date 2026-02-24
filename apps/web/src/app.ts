@@ -594,6 +594,8 @@ document.addEventListener("pointerdown", (e) => {
 sheet.addEventListener("contextmenu", (e) => {
   e.preventDefault();
   closeCellMenu();
+  const kind = grid.selectForMenu(e.clientX, e.clientY);
+  if (!kind) return;
   const { count } = selectedRows();
   const rows = count === 1 ? "row" : `${count.toLocaleString()} rows`;
   const nCols = selectedCols().count;
@@ -614,22 +616,26 @@ sheet.addEventListener("contextmenu", (e) => {
     });
     menu.append(b);
   };
-  item(`Insert ${rows} above`, "Ctrl Alt =", () => void insertRows(false));
-  item(`Insert ${rows} below`, "", () => void insertRows(true));
-  item(`Delete ${rows}`, "Ctrl Alt −", () => void deleteRows());
-  item(`Hide ${rows}`, "Ctrl 9", () => void hideRows(true));
-  item("Unhide rows", "Ctrl Shift 9", () => void hideRows(false));
-  const sep = () => {
+  // a row header shows only row actions, a column header only column ones
+  if (kind !== "cols") {
+    item(`Insert ${rows} above`, "Ctrl Alt =", () => void insertRows(false));
+    item(`Insert ${rows} below`, "", () => void insertRows(true));
+    item(`Delete ${rows}`, "Ctrl Alt −", () => void deleteRows());
+    item(`Hide ${rows}`, "Ctrl 9", () => void hideRows(true));
+    item("Unhide rows", "Ctrl Shift 9", () => void hideRows(false));
+  }
+  if (kind === "cell") {
     const d = document.createElement("div");
     d.className = "menu-sep";
     menu.append(d);
-  };
-  sep();
-  item(`Insert ${cols} left`, "", () => void insertCols(false));
-  item(`Insert ${cols} right`, "", () => void insertCols(true));
-  item(`Delete ${cols}`, "", () => void deleteCols());
-  item(`Hide ${cols}`, "Ctrl 0", () => void hideCols(true));
-  item("Unhide columns", "Ctrl Shift 0", () => void hideCols(false));
+  }
+  if (kind !== "rows") {
+    item(`Insert ${cols} left`, "", () => void insertCols(false));
+    item(`Insert ${cols} right`, "", () => void insertCols(true));
+    item(`Delete ${cols}`, "", () => void deleteCols());
+    item(`Hide ${cols}`, "Ctrl 0", () => void hideCols(true));
+    item("Unhide columns", "Ctrl Shift 0", () => void hideCols(false));
+  }
   document.body.append(menu);
   const r = menu.getBoundingClientRect();
   menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;
