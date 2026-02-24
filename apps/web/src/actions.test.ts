@@ -140,6 +140,8 @@ describe("sheet actions", () => {
       "rows.delete",
       "cols.insert",
       "cols.delete",
+      "rows.hide",
+      "cols.hide",
       "sheet.add",
       "sheet.delete",
       "sheet.duplicate",

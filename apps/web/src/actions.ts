@@ -402,6 +402,67 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       },
     });
 
+  registry
+    .register<{ at: number; count?: number; hidden: boolean; sheet?: string }>({
+      type: "rows.hide",
+      title: "Hide or unhide rows (unhiding a range shows any hidden rows inside it)",
+      schema: withSheet(
+        { at: s.int("first row, 0-based", 0), count: s.int("how many rows", 1, 100_000_000), hidden: s.bool("true to hide, false to show") },
+        ["at", "hidden"],
+      ),
+      describe: (p) => (p.hidden ? "hide rows" : "unhide rows"),
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const changed = data.setRowsHidden(p.at, p.count ?? 1, p.hidden);
+        if (!changed.length) return null;
+        return { type: "rows.hideIds", params: { sheet: id, ids: ctx.blobs.put(changed), hidden: !p.hidden } };
+      },
+    })
+    .register<{ sheet: string; ids: string; hidden: boolean }>({
+      type: "rows.hideIds",
+      title: "Undo hiding rows",
+      internal: true,
+      schema: s.object({ sheet: s.string(), ids: s.string(), hidden: s.bool() }),
+      describe: () => "hide rows",
+      apply(ctx, p) {
+        ctx.workbook.get(p.sheet).source.toggleRowIds(ctx.blobs.get<number[]>(p.ids), p.hidden);
+        return { type: "rows.hideIds", params: { ...p, hidden: !p.hidden } };
+      },
+    })
+    .register<{ at: number; count?: number; hidden: boolean; sheet?: string }>({
+      type: "cols.hide",
+      title: "Hide or unhide columns (unhiding a range shows any hidden columns inside it)",
+      schema: withSheet(
+        { at: s.int("first column, 0-based (A = 0)", 0), count: s.int("how many columns", 1, 16_384), hidden: s.bool("true to hide, false to show") },
+        ["at", "hidden"],
+      ),
+      describe: (p) => (p.hidden ? "hide columns" : "unhide columns"),
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const cols = Array.from({ length: p.count ?? 1 }, (_, i) => p.at + i);
+        const changed = data.setColsHidden(cols, p.hidden);
+        if (!changed.length) return null;
+        if (p.hidden && data.hiddenColumns.size >= data.colCount) {
+          data.setColsHidden(changed, false);
+          throw new Error("At least one column has to stay visible.");
+        }
+        return { type: "cols.hideList", params: { sheet: id, cols: changed, hidden: !p.hidden } };
+      },
+    })
+    .register<{ sheet: string; cols: number[]; hidden: boolean }>({
+      type: "cols.hideList",
+      title: "Undo hiding columns",
+      internal: true,
+      schema: s.object({ sheet: s.string(), cols: s.array(s.int(undefined, 0)), hidden: s.bool() }),
+      describe: () => "hide columns",
+      apply(ctx, p) {
+        ctx.workbook.get(p.sheet).source.setColsHidden(p.cols, p.hidden);
+        return { type: "cols.hideList", params: { ...p, hidden: !p.hidden } };
+      },
+    });
+
   // ----------------------------------------------------------- sheets --
 
   registry

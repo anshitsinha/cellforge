@@ -162,6 +162,12 @@ export class EditableSource implements DataSource {
   // (they're sparse); only lookups into the imported data go through this.
   private colMap: Int32Array | null = null;
 
+  // hidden rows by row id (so they stay hidden through sorts and inserts) and
+  // hidden columns by view column (re-keyed with edits when columns move)
+  private hiddenRowIds = new Set<number>();
+  private hiddenCols = new Set<number>();
+  private hiddenIntervalsCache: [number, number][] | null = null;
+
   private cache = new Map<number, Scalar>();
 
   // Dependency index: which formulas read which rectangles, so an edit only
@@ -208,6 +214,8 @@ export class EditableSource implements DataSource {
     copy.order = this.order ? this.order.slice() : null;
     copy.nextRowId = this.nextRowId;
     copy.colMap = this.colMap ? this.colMap.slice() : null;
+    copy.hiddenRowIds = new Set(this.hiddenRowIds);
+    copy.hiddenCols = new Set(this.hiddenCols);
     copy.rebuildDeps();
     return copy;
   }
@@ -517,6 +525,7 @@ export class EditableSource implements DataSource {
     const removed = Array.from(current.subarray(at, at + remove));
     // back to the identity (e.g. an insert was undone): fast paths come back
     this.order = isIdentity(next, this.base.rowCount) ? null : next;
+    this.hiddenIntervalsCache = null;
     this.rebuildDeps();
     this.invalidate();
     return removed;
@@ -730,10 +739,12 @@ export class EditableSource implements DataSource {
     for (const e of edits) this.dropEdit(e.id, e.col);
     const fills = this.fills.filter((f) => f.col >= at && f.col < at + count);
     this.fills = this.fills.filter((f) => !fills.includes(f));
+    const hidden = [...this.hiddenCols].filter((c) => c >= at && c < at + count);
+    for (const c of hidden) this.hiddenCols.delete(c);
     this.shiftColumns(at + count, -count);
     const map = this.spliceColMap(at, count, []);
     this.columnsChanged();
-    return { map, edits, fills };
+    return { map, edits, fills, hidden };
   }
 
   /** Undo of deleteColumns. */
@@ -742,6 +753,7 @@ export class EditableSource implements DataSource {
     this.spliceColMap(at, 0, removed.map);
     for (const e of removed.edits) this.putEdit(e.id, e.col, e.value);
     this.fills.push(...removed.fills);
+    for (const c of removed.hidden ?? []) this.hiddenCols.add(c);
     this.columnsChanged();
   }
 
@@ -754,6 +766,7 @@ export class EditableSource implements DataSource {
     for (const m of moves) this.dropEdit(m.id, m.col);
     for (const m of moves) this.putEdit(m.id, m.col + delta, m.value);
     for (const f of this.fills) if (f.col >= from) f.col += delta;
+    this.hiddenCols = new Set([...this.hiddenCols].map((c) => (c >= from ? c + delta : c)));
   }
 
   private spliceColMap(at: number, remove: number, insert: number[]): number[] {
@@ -815,6 +828,68 @@ export class EditableSource implements DataSource {
     return rewritten;
   }
 
+  // ---------------------------------------------------------------------------
+  // hidden rows and columns (view state the workbook saves, not data)
+
+  /**
+   * Hide or show view rows at..at+count-1. Returns the rows whose state
+   * changed, by id, for undo.
+   */
+  setRowsHidden(at: number, count: number, hidden: boolean): number[] {
+    const changed: number[] = [];
+    for (let v = at; v < at + count && v < this.rowCount; v++) {
+      const id = this.toBase(v);
+      if (this.hiddenRowIds.has(id) === hidden) continue;
+      if (hidden) this.hiddenRowIds.add(id);
+      else this.hiddenRowIds.delete(id);
+      changed.push(id);
+    }
+    if (changed.length) this.hiddenIntervalsCache = null;
+    return changed;
+  }
+
+  /** Flip these row ids back (undo of setRowsHidden). */
+  toggleRowIds(ids: number[], hidden: boolean): void {
+    for (const id of ids) {
+      if (hidden) this.hiddenRowIds.add(id);
+      else this.hiddenRowIds.delete(id);
+    }
+    this.hiddenIntervalsCache = null;
+  }
+
+  setColsHidden(cols: number[], hidden: boolean): number[] {
+    const changed = cols.filter((c) => c < this.colCount && this.hiddenCols.has(c) !== hidden);
+    for (const c of changed) {
+      if (hidden) this.hiddenCols.add(c);
+      else this.hiddenCols.delete(c);
+    }
+    return changed;
+  }
+
+  /** Hidden rows as sorted view-row intervals, for the grid. */
+  hiddenRowIntervals(): [number, number][] {
+    if (this.hiddenIntervalsCache) return this.hiddenIntervalsCache;
+    let rows: number[];
+    if (!this.order) rows = [...this.hiddenRowIds].filter((id) => id < this.rowCount);
+    else {
+      const viewOf = this.viewLookup();
+      rows = [...this.hiddenRowIds].map(viewOf).filter((v) => v >= 0);
+    }
+    rows.sort((a, b) => a - b);
+    const out: [number, number][] = [];
+    for (const r of rows) {
+      const last = out[out.length - 1];
+      if (last && r === last[1] + 1) last[1] = r;
+      else out.push([r, r]);
+    }
+    this.hiddenIntervalsCache = out;
+    return out;
+  }
+
+  get hiddenColumns(): ReadonlySet<number> {
+    return this.hiddenCols;
+  }
+
   get rowOrder(): Uint32Array | null {
     return this.order;
   }
@@ -823,6 +898,7 @@ export class EditableSource implements DataSource {
   setRowOrder(order: Uint32Array | null): void {
     if (order && order.length !== this.rowCount) throw new Error("row order has the wrong length");
     this.order = order;
+    this.hiddenIntervalsCache = null;
     this.rebuildDeps();
     this.invalidate();
   }
@@ -1275,6 +1351,8 @@ export interface ColumnRemoval {
   map: number[];
   edits: { id: number; col: number; value: Stored }[];
   fills: Fill[];
+  /** which of the deleted columns were hidden */
+  hidden?: number[];
 }
 
 /** A fill's kernel, unless it reads its own column (then it must interpret). */
