@@ -332,3 +332,71 @@ describe("hiding rows and columns", () => {
     expect(sheet.hiddenColumns.size).toBe(0);
   });
 });
+
+describe("randomised: hidden rows and columns follow their data", () => {
+  function rng(seed: number) {
+    return () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
+  }
+  for (const seed of Array.from({ length: 12 }, (_, i) => i + 1)) {
+    it(`seed ${seed}`, async () => {
+      const rand = rng(seed);
+      const pick = (n: number) => Math.floor(rand() * n);
+      const { history, sheet, type } = setup(14, 6);
+      // every row tagged in A, every column tagged in row 1
+      for (let r = 2; r <= 14; r++) await type([[`A${r}`, `r${r}`]]);
+      await type([["A1", "hdr"]]);
+      for (let c = 1; c < 6; c++) await type([[`${String.fromCharCode(65 + c)}1`, `c${c}`]]);
+      // sorting moves the tag row too, so find it each time
+      const hdr = () => { for (let r = 0; r < sheet.rowCount; r++) if (sheet.getCell(r, 0) === "hdr") return r; return -1; };
+      const shot = () => ({
+        rows: sheet.hiddenRowIntervals().flatMap(([a, b]) => Array.from({ length: b - a + 1 }, (_, i) => String(sheet.getCell(a + i, 0)))),
+        cols: [...sheet.hiddenColumns].map((c) => String(sheet.getCell(hdr(), c))).sort(),
+      });
+      const start = shot();
+      let hiddenRows = new Set<string>();
+      let hiddenCols = new Set<string>();
+      for (let step = 0; step < 25; step++) {
+        const k = pick(7);
+        const n = sheet.rowCount;
+        if (k === 0 || k === 1) {
+          const at = 1 + pick(n - 1);
+          const count = 1 + pick(3);
+          const hidden = k === 0;
+          await history.run({ type: "rows.hide", params: { at, count, hidden } });
+          for (let r = at; r < Math.min(n, at + count); r++) {
+            const tag = String(sheet.getCell(r, 0));
+            if (hidden) hiddenRows.add(tag);
+            else hiddenRows.delete(tag);
+          }
+        } else if (k === 2 && sheet.colCount > 3) {
+          const at = 1 + pick(sheet.colCount - 2);
+          await history.run({ type: "cols.hide", params: { at, count: 1, hidden: rand() < 0.6 } });
+          hiddenCols = new Set([...sheet.hiddenColumns].map((c) => String(sheet.getCell(hdr(), c))));
+        } else if (k === 3) {
+          await history.run({ type: "rows.insert", params: { at: 1 + pick(n - 1), count: 1 + pick(2) } });
+        } else if (k === 4 && n > 6) {
+          const at = 1 + pick(n - 2);
+          if (at === hdr()) continue; // keep the column tags
+          for (let r = at; r < at + 1; r++) hiddenRows.delete(String(sheet.getCell(r, 0)));
+          await history.run({ type: "rows.delete", params: { at, count: 1 } });
+        } else if (k === 5) {
+          await history.run({ type: "cols.insert", params: { at: 1 + pick(sheet.colCount - 1), count: 1 } });
+        } else {
+          await history.run({ type: "rows.sort", params: { col: 0, descending: rand() < 0.5 } });
+        }
+        const now = shot();
+        expect(new Set(now.rows.filter((t) => t !== "null" && t !== "hdr")), `seed ${seed} step ${step} rows`).toEqual(
+          new Set([...hiddenRows].filter((t) => t !== "null" && t !== "hdr")),
+        );
+        expect(new Set(now.cols.filter((t) => t !== "null")), `seed ${seed} step ${step} cols`).toEqual(
+          new Set([...hiddenCols].filter((t) => t !== "null")),
+        );
+        hiddenRows = new Set(now.rows);
+        hiddenCols = new Set(now.cols);
+      }
+      while (history.canUndo) await history.undo();
+      expect(shot()).toEqual({ rows: [], cols: [] });
+      expect(start).toEqual({ rows: [], cols: [] });
+    });
+  }
+});

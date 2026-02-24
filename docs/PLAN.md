@@ -68,15 +68,13 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Insert / delete / hide rows and columns
-- [x] `#REF!` as a formula value (parsed, printed, evaluated) for references to deleted cells
-- [x] Reference adjustment for a row change: points shift, deleted points become `#REF!`, ranges grow and shrink like Excel
-- [x] Insert and delete rows: stable row ids, so undoing a delete restores the exact data
-- [x] Formulas on every sheet adjusted, including filled blocks (split where needed)
-- [x] Insert and delete columns, same rules
-- [x] Hide / unhide rows and columns
-- [x] Header right-click menu and shortcuts (Ctrl+Shift+= insert, Ctrl+- delete)
-- [ ] Tests against Excel's behaviour, randomised round-trips, user guide
+### Range-run styles
+- [ ] Style model: interned style records, stored as runs per column so styling a million rows is one entry
+- [ ] `format.set` action (any subset of properties over a range) with exact undo; styles move with insert/delete/sort
+- [ ] Grid draws font weight/style, underline/strike, text and fill colours, alignment, wrap and borders
+- [ ] Toolbar: bold/italic/underline, colours, fill, borders, alignment; Ctrl+B / I / U
+- [ ] Format painter
+- [ ] Tests, user guide
 
 ## Milestones
 
@@ -88,9 +86,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Workbook with multiple sheets (add, rename, delete, duplicate, reorder, colour, hide) and sheet search
 - ✅ Cross-sheet references (`Sheet2!A1`, `'My Sheet'!A1:B9`)
 - ✅ Dependency graph + incremental recalc
-- 🔨 Insert / delete / hide rows and columns with reference adjustment, instant at any size
-- ⬜ Instant insert/delete on 100M-row sheets (segment row map; today capped at 20M rows)
-- ⬜ Range-run styles: font, size, bold/italic/underline/strike, colours, fill,
+- ✅ Insert / delete / hide rows and columns with reference adjustment
+- 🔨 Range-run styles: font, size, bold/italic/underline/strike, colours, fill,
   borders, alignment, wrap; format painter
 - ⬜ Number formats incl. custom codes and accounting styles (K/M, red parentheses)
 - ⬜ Merge cells and Center Across Selection; row heights, auto-fit, freeze panes
@@ -98,6 +95,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ⬜ Command palette (Ctrl+K) listing every public action
 - ⬜ Crash-proof saving: action journal in OPFS, autosave, open/save via File System Access
 - ⬜ History panel: timeline, named versions, compare any two points, per-cell history
+- ⬜ Instant insert/delete on 100M-row sheets (segment row map; today capped at 20M rows)
 
 ### M2: Formula engine
 - ⬜ Function registry + generated reference and autocomplete with argument hints
