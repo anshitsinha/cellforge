@@ -207,6 +207,8 @@ function refresh() {
   settleActiveSheet();
   tabs.render();
   grid.syncShape();
+  grid.setHiddenRows(source.hiddenRowIntervals());
+  grid.setHiddenColumns(source.hiddenColumns);
   grid.invalidate();
   syncFormulaBar();
   updateStatus();
@@ -539,6 +541,34 @@ async function deleteRows() {
   }
 }
 
+/** Hide the selected rows or columns, or show the hidden ones inside the selection. */
+async function hideRows(hidden: boolean) {
+  const { top, count } = selectedRows();
+  if (hidden && count >= source.rowCount) {
+    statusLeft.textContent = "At least one row has to stay visible.";
+    return;
+  }
+  await run({ type: "rows.hide", params: { at: top, count, hidden } });
+}
+
+async function hideCols(hidden: boolean) {
+  const { left, count } = selectedCols();
+  await run({ type: "cols.hide", params: { at: left, count, hidden } });
+}
+
+// Excel: Ctrl+9 hides rows, Ctrl+Shift+9 shows them, Ctrl+0 hides columns,
+// Ctrl+Shift+0 shows them (by code, so Shift doesn't turn 9 into "(").
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || !gridHasFocus()) return;
+  if (e.code === "Digit9") {
+    e.preventDefault();
+    void hideRows(!e.shiftKey);
+  } else if (e.code === "Digit0") {
+    e.preventDefault();
+    void hideCols(!e.shiftKey);
+  }
+});
+
 // Excel's Ctrl++ / Ctrl+- insert rows above the selection and delete them.
 // Browsers may keep Ctrl+- for page zoom, so Google Sheets' Ctrl+Alt+= /
 // Ctrl+Alt+- work too.
@@ -587,12 +617,19 @@ sheet.addEventListener("contextmenu", (e) => {
   item(`Insert ${rows} above`, "Ctrl Alt =", () => void insertRows(false));
   item(`Insert ${rows} below`, "", () => void insertRows(true));
   item(`Delete ${rows}`, "Ctrl Alt −", () => void deleteRows());
-  const sep = document.createElement("div");
-  sep.className = "menu-sep";
-  menu.append(sep);
+  item(`Hide ${rows}`, "Ctrl 9", () => void hideRows(true));
+  item("Unhide rows", "Ctrl Shift 9", () => void hideRows(false));
+  const sep = () => {
+    const d = document.createElement("div");
+    d.className = "menu-sep";
+    menu.append(d);
+  };
+  sep();
   item(`Insert ${cols} left`, "", () => void insertCols(false));
   item(`Insert ${cols} right`, "", () => void insertCols(true));
   item(`Delete ${cols}`, "", () => void deleteCols());
+  item(`Hide ${cols}`, "Ctrl 0", () => void hideCols(true));
+  item("Unhide columns", "Ctrl Shift 0", () => void hideCols(false));
   document.body.append(menu);
   const r = menu.getBoundingClientRect();
   menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;

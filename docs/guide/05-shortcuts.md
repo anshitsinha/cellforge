@@ -12,6 +12,8 @@
 | Ctrl + D | Fill down |
 | Ctrl + Alt + = (or Ctrl + +) | Insert rows above the selection |
 | Ctrl + Alt + − (or Ctrl + −) | Delete the selected rows |
+| Ctrl + 9 / Ctrl + Shift + 9 | Hide / unhide rows |
+| Ctrl + 0 / Ctrl + Shift + 0 | Hide / unhide columns |
 | Ctrl + PgUp / PgDn | Previous / next sheet |
 | Ctrl + C / X / V | Copy / cut / paste |
 | Ctrl + Z / Ctrl + Y | Undo / redo |

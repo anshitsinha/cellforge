@@ -273,3 +273,62 @@ describe("randomised: column insert keeps every value; insert/delete + undo is e
     });
   }
 });
+
+describe("hiding rows and columns", () => {
+  it("hidden rows follow their data through sorts, inserts and undo", async () => {
+    const { history, sheet, type } = setup(6, 2);
+    await type([["A1", "5"], ["A2", "3"], ["A3", "9"], ["A4", "1"]]);
+    await history.run({ type: "rows.hide", params: { at: 1, count: 2, hidden: true } }); // 3 and 9
+    expect(sheet.hiddenRowIntervals()).toEqual([[1, 2]]);
+    await history.run({ type: "rows.sort", params: { col: 0 } }); // 1 3 5 9
+    expect(sheet.hiddenRowIntervals()).toEqual([[1, 1], [3, 3]]);
+    await history.run({ type: "rows.insert", params: { at: 0, count: 1 } });
+    expect(sheet.hiddenRowIntervals()).toEqual([[2, 2], [4, 4]]);
+    await history.undo();
+    await history.undo();
+    expect(sheet.hiddenRowIntervals()).toEqual([[1, 2]]);
+    await history.undo();
+    expect(sheet.hiddenRowIntervals()).toEqual([]);
+    await history.redo();
+    expect(sheet.hiddenRowIntervals()).toEqual([[1, 2]]);
+  });
+
+  it("unhiding a range shows only the hidden rows inside it", async () => {
+    const { history, sheet } = setup(10, 2);
+    await history.run({ type: "rows.hide", params: { at: 2, count: 1, hidden: true } });
+    await history.run({ type: "rows.hide", params: { at: 6, count: 2, hidden: true } });
+    await history.run({ type: "rows.hide", params: { at: 0, count: 5, hidden: false } });
+    expect(sheet.hiddenRowIntervals()).toEqual([[6, 7]]);
+    await history.undo();
+    expect(sheet.hiddenRowIntervals()).toEqual([[2, 2], [6, 7]]);
+  });
+
+  it("deleted rows stop being hidden; undoing the delete hides them again", async () => {
+    const { history, sheet } = setup(8, 2);
+    await history.run({ type: "rows.hide", params: { at: 3, count: 2, hidden: true } });
+    await history.run({ type: "rows.delete", params: { at: 2, count: 2 } });
+    expect(sheet.hiddenRowIntervals()).toEqual([[2, 2]]);
+    await history.undo();
+    expect(sheet.hiddenRowIntervals()).toEqual([[3, 4]]);
+  });
+
+  it("hidden columns move with inserts and deletes", async () => {
+    const { history, sheet } = setup(4, 6);
+    await history.run({ type: "cols.hide", params: { at: 2, count: 2, hidden: true } }); // C, D
+    await history.run({ type: "cols.insert", params: { at: 0, count: 1 } });
+    expect([...sheet.hiddenColumns].sort()).toEqual([3, 4]);
+    await history.run({ type: "cols.delete", params: { at: 3, count: 1 } });
+    expect([...sheet.hiddenColumns]).toEqual([3]);
+    await history.undo();
+    expect([...sheet.hiddenColumns].sort()).toEqual([3, 4]);
+    await history.undo();
+    await history.undo();
+    expect([...sheet.hiddenColumns]).toEqual([]);
+  });
+
+  it("refuses to hide every column", async () => {
+    const { history, sheet } = setup(2, 3);
+    await expect(history.run({ type: "cols.hide", params: { at: 0, count: 3, hidden: true } })).rejects.toThrow(/visible/);
+    expect(sheet.hiddenColumns.size).toBe(0);
+  });
+});

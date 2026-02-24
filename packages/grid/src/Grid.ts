@@ -171,6 +171,13 @@ export class Grid {
    */
   spliceColumns(at: number, remove: number, insert: number): void {
     this.columns = this.columns.splice(at, remove, insert, this.defaultColumnWidth);
+    // hidden columns move with their neighbours
+    const moved = new Map<number, number>();
+    for (const [c, w] of this.hiddenCols) {
+      if (c < at) moved.set(c, w);
+      else if (c >= at + remove) moved.set(c - remove + insert, w);
+    }
+    this.hiddenCols = moved;
     this.clampSelection();
     this.invalidate();
   }
@@ -1042,6 +1049,11 @@ export class Grid {
     ctx.clip();
     ctx.fillStyle = theme.mutedText;
     for (let c = firstCol; c <= lastCol; c++) {
+      if (this.hiddenCols.has(c)) {
+        // a hidden column: a thicker line where it sits, like Excel
+        ctx.fillRect(colX(c) - 1, 0, 2, headerHeight);
+        continue;
+      }
       const label = this.source.getColumnName?.(c) ?? columnLetter(c);
       ctx.fillText(label, colX(c) + columns.width(c) / 2, headerHeight / 2);
     }

@@ -58,6 +58,18 @@ as it was. Column widths move with their columns. A sheet can have up to
 16,384 columns, like Excel.
 For now, inserting and deleting rows works on sheets of up to 20 million rows.
 
+## Hide and unhide rows and columns
+
+Select the rows or columns, right-click and choose **Hide**, or press
+**Ctrl+9** (rows) / **Ctrl+0** (columns). To bring them back, select across
+the hidden ones (say rows 3 to 8 when 4 to 7 are hidden) and choose
+**Unhide**, or press **Ctrl+Shift+9** / **Ctrl+Shift+0**.
+
+Hidden rows keep their numbers, so a thicker line in the row header shows
+where some are tucked away. Formulas still see hidden cells: `=SUM(A1:A10)`
+adds them up whether you can see them or not. Hidden rows stay hidden when
+you sort, and hiding is undoable like everything else.
+
 ## Copy, cut and paste
 
 **Ctrl+C**, **Ctrl+X** and **Ctrl+V** work with Excel and Google Sheets, in
