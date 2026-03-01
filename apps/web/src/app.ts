@@ -8,6 +8,7 @@ import { setCells, sheetActions, type SheetCtx } from "./actions";
 import { BlankSource, EditableSource, isFormula, type Fill } from "./editable";
 import { download, exportCsv } from "./exporter";
 import { SheetTabs } from "./tabs";
+import { setupFormatBar } from "./formatbar";
 import { sheetNameProblem, Workbook } from "./workbook";
 import { extractKeys, sortInWorker } from "./sort";
 import { formatBytes, importCsv } from "./importer";
@@ -110,7 +111,18 @@ async function updateSelectionStats() {
 grid.onSelectionChange = () => {
   syncFormulaBar();
   updateSelectionStats();
+  formatBar.sync();
 };
+
+const formatBar = setupFormatBar({
+  root: document.getElementById("format-bar")!,
+  grid,
+  source: () => source,
+  run: (a) => run(a),
+  status: (m) => (statusLeft.textContent = m),
+  gridHasFocus: () => gridHasFocus(),
+  sheetElement: sheet,
+});
 
 // --- edits + undo/redo -------------------------------------------------------------
 
@@ -211,6 +223,7 @@ function refresh() {
   grid.setHiddenColumns(source.hiddenColumns);
   grid.invalidate();
   syncFormulaBar();
+  formatBar.sync();
   updateStatus();
   updateSelectionStats();
   undoButton.disabled = !history.canUndo;

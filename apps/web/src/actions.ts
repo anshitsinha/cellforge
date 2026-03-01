@@ -87,7 +87,7 @@ const storedSchema = s.anyOf(
 const color = s.string("CSS colour, e.g. #c00000");
 const nullable = (x: JsonSchema) => s.anyOf(x, s.null());
 const borderLine = s.object(
-  { style: s.string("line style", { enum: ["thin", "medium", "thick", "dashed", "dotted", "double"] }), color },
+  { style: s.string("line style", { enum: ["thin", "medium", "thick", "dashed", "dotted", "double"] }), color: s.string("CSS colour, or auto for the theme text colour") },
   ["style", "color"],
 );
 const styleSchema = s.object(
@@ -582,7 +582,7 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       recordable: true,
       apply(ctx, p) {
         const { id, data } = target(ctx, p.sheet);
-        const line = (p.line ?? { style: "thin", color: "#000000" }) as StylePatch["borderTop"];
+        const line = (p.line ?? { style: "thin", color: "auto" }) as StylePatch["borderTop"];
         return applyFormats(ctx, id, data, borderItems(p.range, p.which, line));
       },
     })
