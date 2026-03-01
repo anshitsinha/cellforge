@@ -19,8 +19,9 @@ import {
   type RangeRef,
   type Scalar,
 } from "@cellforge/core";
-import { formatCell, type CellValue, type DataSource } from "@cellforge/grid";
+import { formatCell, type CellStyle, type CellValue, type DataSource } from "@cellforge/grid";
 import { DepIndex, type Rect } from "./deps";
+import { SheetStyles, type ColumnStyles } from "./styles";
 
 /** Something whose cached result depends on other cells. */
 type Dep = { kind: "cell"; row: number; col: number } | { kind: "fill"; fill: Fill };
@@ -168,6 +169,9 @@ export class EditableSource implements DataSource {
   private hiddenCols = new Set<number>();
   private hiddenIntervalsCache: [number, number][] | null = null;
 
+  /** formatting, by view column and row id (so it moves with its row) */
+  styles = new SheetStyles();
+
   private cache = new Map<number, Scalar>();
 
   // Dependency index: which formulas read which rectangles, so an edit only
@@ -216,6 +220,7 @@ export class EditableSource implements DataSource {
     copy.colMap = this.colMap ? this.colMap.slice() : null;
     copy.hiddenRowIds = new Set(this.hiddenRowIds);
     copy.hiddenCols = new Set(this.hiddenCols);
+    copy.styles = this.styles.clone();
     copy.rebuildDeps();
     return copy;
   }
@@ -741,10 +746,11 @@ export class EditableSource implements DataSource {
     this.fills = this.fills.filter((f) => !fills.includes(f));
     const hidden = [...this.hiddenCols].filter((c) => c >= at && c < at + count);
     for (const c of hidden) this.hiddenCols.delete(c);
+    const styles = this.styles.remove(at, count);
     this.shiftColumns(at + count, -count);
     const map = this.spliceColMap(at, count, []);
     this.columnsChanged();
-    return { map, edits, fills, hidden };
+    return { map, edits, fills, hidden, styles };
   }
 
   /** Undo of deleteColumns. */
@@ -754,6 +760,7 @@ export class EditableSource implements DataSource {
     for (const e of removed.edits) this.putEdit(e.id, e.col, e.value);
     this.fills.push(...removed.fills);
     for (const c of removed.hidden ?? []) this.hiddenCols.add(c);
+    this.styles.putBack(removed.styles ?? []);
     this.columnsChanged();
   }
 
@@ -767,6 +774,7 @@ export class EditableSource implements DataSource {
     for (const m of moves) this.putEdit(m.id, m.col + delta, m.value);
     for (const f of this.fills) if (f.col >= from) f.col += delta;
     this.hiddenCols = new Set([...this.hiddenCols].map((c) => (c >= from ? c + delta : c)));
+    this.styles.shift(from, delta);
   }
 
   private spliceColMap(at: number, remove: number, insert: number[]): number[] {
@@ -901,6 +909,29 @@ export class EditableSource implements DataSource {
     this.hiddenIntervalsCache = null;
     this.rebuildDeps();
     this.invalidate();
+  }
+
+  getStyle(row: number, col: number): CellStyle | null {
+    if (this.styles.isEmpty) return null;
+    return this.styles.get(this.toBase(row), col);
+  }
+
+  /**
+   * Row ids of view rows top..bottom as sorted, merged intervals: one
+   * interval when the sheet is in its original order, scattered after a sort.
+   */
+  rowIdIntervals(top: number, bottom: number): [number, number][] {
+    if (!this.order) return [[top, bottom]];
+    const ids: number[] = [];
+    for (let v = top; v <= bottom; v++) ids.push(this.order[v]);
+    ids.sort((a, b) => a - b);
+    const out: [number, number][] = [];
+    for (const id of ids) {
+      const last = out[out.length - 1];
+      if (last && id === last[1] + 1) last[1] = id;
+      else out.push([id, id]);
+    }
+    return out;
   }
 
   toBase(row: number): number {
@@ -1353,6 +1384,7 @@ export interface ColumnRemoval {
   fills: Fill[];
   /** which of the deleted columns were hidden */
   hidden?: number[];
+  styles?: [number, ColumnStyles][];
 }
 
 /** A fill's kernel, unless it reads its own column (then it must interpret). */

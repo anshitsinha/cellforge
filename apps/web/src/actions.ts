@@ -12,6 +12,7 @@ import { columnLetter } from "@cellforge/grid";
 import { type ColChange, formatFormula, parseFormula, type Node, type RowChange } from "@cellforge/core";
 import { type ColumnRemoval, type EditableSource, effectiveShift, type Fill, type FormulaSnapshot, isFormula, parseInput, type Stored } from "./editable";
 import { BlankSource, EditableSource as Source } from "./editable";
+import { CLEAR_ALL, type ColumnStyles, type StylePatch } from "./styles";
 import type { Sheet, Workbook } from "./workbook";
 
 export interface SheetCtx {
@@ -82,6 +83,96 @@ const storedSchema = s.anyOf(
   s.string(),
   s.object({ formula: s.string(), shift: s.int() }, ["formula"]),
 );
+
+const color = s.string("CSS colour, e.g. #c00000");
+const nullable = (x: JsonSchema) => s.anyOf(x, s.null());
+const borderLine = s.object(
+  { style: s.string("line style", { enum: ["thin", "medium", "thick", "dashed", "dotted", "double"] }), color },
+  ["style", "color"],
+);
+const styleSchema = s.object(
+  {
+    bold: nullable(s.bool()),
+    italic: nullable(s.bool()),
+    underline: nullable(s.bool()),
+    strike: nullable(s.bool()),
+    size: nullable(s.int("font size in points", 6, 96)),
+    font: nullable(s.string("font family")),
+    color: nullable(color),
+    fill: nullable(color),
+    align: nullable(s.string("horizontal alignment", { enum: ["left", "center", "right"] })),
+    valign: nullable(s.string("vertical alignment", { enum: ["top", "middle", "bottom"] })),
+    wrap: nullable(s.bool()),
+    borderTop: nullable(borderLine),
+    borderRight: nullable(borderLine),
+    borderBottom: nullable(borderLine),
+    borderLeft: nullable(borderLine),
+  },
+  [],
+  "properties to set; null clears one, missing ones are left alone",
+);
+
+/** Most rows a format can touch on a sorted sheet (where a range is scattered). */
+const MAX_SCATTERED_FORMAT_ROWS = 5_000_000;
+
+/**
+ * Apply several (range, patch) pairs as one change. Returns the inverse,
+ * which puts every touched column's formatting back exactly.
+ */
+function applyFormats(ctx: SheetCtx, id: string, data: EditableSource, items: { range: Range; patch: StylePatch }[]): Action | null {
+  const live = items.filter(({ range: r, patch }) => r.bottom >= r.top && r.right >= r.left && Object.keys(patch).length);
+  if (!live.length) return null;
+  const before = new Map<number, ColumnStyles | undefined>();
+  for (const { range: r } of live) {
+    checkBounds(data, [{ row: r.bottom, col: r.right }]);
+    const whole = r.top === 0 && r.bottom >= data.rowCount - 1;
+    if (data.rowOrder && !whole && r.bottom - r.top + 1 > MAX_SCATTERED_FORMAT_ROWS) {
+      throw new Error(
+        "Formatting more than " + MAX_SCATTERED_FORMAT_ROWS.toLocaleString() + " rows of a sorted sheet is not supported yet; format whole columns instead.",
+      );
+    }
+    for (let c = r.left; c <= r.right; c++) if (!before.has(c)) before.set(c, data.styles.snapshot(c));
+  }
+  for (const { range: r, patch } of live) {
+    const rows = r.top === 0 && r.bottom >= data.rowCount - 1 ? "all" : data.rowIdIntervals(r.top, r.bottom);
+    for (let c = r.left; c <= r.right; c++) data.styles.apply(c, rows, patch);
+  }
+  return { type: "format.restore", params: { sheet: id, cols: ctx.blobs.put([...before]) } };
+}
+
+type BorderWhich = "all" | "outline" | "inner" | "top" | "bottom" | "left" | "right" | "none";
+
+function borderItems(r: Range, which: BorderWhich, line: StylePatch["borderTop"]): { range: Range; patch: StylePatch }[] {
+  const row = (at: number): Range => ({ ...r, top: at, bottom: at });
+  const col = (at: number): Range => ({ ...r, left: at, right: at });
+  switch (which) {
+    case "none":
+      return [{ range: r, patch: { borderTop: null, borderRight: null, borderBottom: null, borderLeft: null } }];
+    case "all":
+      return [{ range: r, patch: { borderTop: line, borderRight: line, borderBottom: line, borderLeft: line } }];
+    case "top":
+      return [{ range: row(r.top), patch: { borderTop: line } }];
+    case "bottom":
+      return [{ range: row(r.bottom), patch: { borderBottom: line } }];
+    case "left":
+      return [{ range: col(r.left), patch: { borderLeft: line } }];
+    case "right":
+      return [{ range: col(r.right), patch: { borderRight: line } }];
+    case "outline":
+      return [
+        ...borderItems(r, "top", line),
+        ...borderItems(r, "bottom", line),
+        ...borderItems(r, "left", line),
+        ...borderItems(r, "right", line),
+      ];
+    case "inner": {
+      const out: { range: Range; patch: StylePatch }[] = [];
+      if (r.bottom > r.top) out.push({ range: { ...r, bottom: r.bottom - 1 }, patch: { borderBottom: line } });
+      if (r.right > r.left) out.push({ range: { ...r, right: r.right - 1 }, patch: { borderRight: line } });
+      return out;
+    }
+  }
+}
 
 /** The sheet a cell action targets, and its id for the inverse. */
 function target(ctx: SheetCtx, sheet: string | undefined): { id: string; data: EditableSource } {
@@ -460,6 +551,64 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       apply(ctx, p) {
         ctx.workbook.get(p.sheet).source.setColsHidden(p.cols, p.hidden);
         return { type: "cols.hideList", params: { ...p, hidden: !p.hidden } };
+      },
+    });
+
+  // ----------------------------------------------------------- format --
+  registry
+    .register<{ range: Range; style: StylePatch; sheet?: string }>({
+      type: "format.set",
+      title: "Format a range: bold, italic, underline, strikethrough, font, size, text colour, fill, alignment, wrap, borders",
+      schema: withSheet({ range: rangeSchema, style: styleSchema }, ["range", "style"]),
+      describe: (p) => "format " + Object.keys(p.style).join(", "),
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        return applyFormats(ctx, id, data, [{ range: p.range, patch: p.style }]);
+      },
+    })
+    .register<{ range: Range; which: BorderWhich; line?: { style: string; color: string }; sheet?: string }>({
+      type: "format.borders",
+      title: "Draw or clear borders around, inside or on one side of a range",
+      schema: withSheet(
+        {
+          range: rangeSchema,
+          which: s.string("which borders", { enum: ["all", "outline", "inner", "top", "bottom", "left", "right", "none"] }),
+          line: borderLine,
+        },
+        ["range", "which"],
+      ),
+      describe: (p) => (p.which === "none" ? "clear borders" : p.which + " borders"),
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const line = (p.line ?? { style: "thin", color: "#000000" }) as StylePatch["borderTop"];
+        return applyFormats(ctx, id, data, borderItems(p.range, p.which, line));
+      },
+    })
+    .register<{ range: Range; sheet?: string }>({
+      type: "format.clear",
+      title: "Remove all formatting from a range (values stay)",
+      schema: withSheet({ range: rangeSchema }, ["range"]),
+      describe: () => "clear formatting",
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        return applyFormats(ctx, id, data, [{ range: p.range, patch: CLEAR_ALL }]);
+      },
+    })
+    .register<{ sheet: string; cols: string }>({
+      type: "format.restore",
+      title: "Put columns' formatting back",
+      internal: true,
+      schema: s.object({ sheet: s.string(), cols: s.string() }),
+      describe: () => "format",
+      apply(ctx, p) {
+        const data = ctx.workbook.get(p.sheet).source;
+        const saved = ctx.blobs.get<[number, ColumnStyles | undefined][]>(p.cols);
+        const now = saved.map(([c]) => [c, data.styles.snapshot(c)] as [number, ColumnStyles | undefined]);
+        for (const [c, e] of saved) data.styles.restore(c, e && { base: e.base, runs: e.runs.clone() });
+        return { type: "format.restore", params: { sheet: p.sheet, cols: ctx.blobs.put(now) } };
       },
     });
 

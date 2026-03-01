@@ -266,3 +266,6 @@ export class SheetStyles {
     for (const [c, e] of entries) this.cols.set(c, e);
   }
 }
+
+/** A patch that clears every property (for "clear formatting"). */
+export const CLEAR_ALL: StylePatch = Object.fromEntries(KEYS.map((k) => [k, null]));

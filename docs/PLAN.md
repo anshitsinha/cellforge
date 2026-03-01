@@ -70,7 +70,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 
 ### Range-run styles
 - [x] Style model: interned style records, stored as runs per column so styling a million rows is one entry
-- [ ] `format.set` action (any subset of properties over a range) with exact undo; styles move with insert/delete/sort
+- [x] `format.set` action (any subset of properties over a range) with exact undo; styles move with insert/delete/sort
 - [ ] Grid draws font weight/style, underline/strike, text and fill colours, alignment, wrap and borders
 - [ ] Toolbar: bold/italic/underline, colours, fill, borders, alignment; Ctrl+B / I / U
 - [ ] Format painter
