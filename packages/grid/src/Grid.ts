@@ -1,5 +1,6 @@
 import { CellEditor, type EditorRect } from "./CellEditor";
 import { RowVisibility } from "./rows";
+import type { BorderLine, BorderStyle, CellStyle } from "./types";
 import { ColumnLayout, columnLetter } from "./columns";
 import { formatCell } from "./format";
 import { readTheme } from "./theme";
@@ -15,6 +16,36 @@ const MIN_COLUMN_WIDTH = 30;
 const TOUCH_SCROLLBAR_ZONE = 28; // px from the right edge that grabs the scrollbar
 const TAP_SLOP = 8; // px a finger can move and still count as a tap
 const DOUBLE_TAP_MS = 350;
+const FONT_FAMILY = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const DEFAULT_PX = 13;
+
+/** Canvas font string for a style (sizes are in points, as in Excel). */
+function fontFor(style: CellStyle | null): string {
+  if (!style || (!style.bold && !style.italic && !style.size && !style.font)) return FONT;
+  const px = style.size ? Math.round((style.size * 4) / 3) : DEFAULT_PX;
+  const family = style.font ? `"${style.font}", ${FONT_FAMILY}` : FONT_FAMILY;
+  return `${style.italic ? "italic " : ""}${style.bold ? "bold " : ""}${px}px ${family}`;
+}
+
+/** Break text into lines that fit `width`, at spaces where possible. */
+function wrapLines(ctx: CanvasRenderingContext2D, text: string, width: number): string[] {
+  const out: string[] = [];
+  for (const para of text.split("\n")) {
+    let line = "";
+    for (const word of para.split(" ")) {
+      const next = line ? line + " " + word : word;
+      if (!line || ctx.measureText(next).width <= width) line = next;
+      else {
+        out.push(line);
+        line = word;
+      }
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+const BORDER_WIDTH: Record<BorderStyle, number> = { thin: 1, medium: 2, thick: 3, dashed: 1, dotted: 1, double: 1 };
 
 interface TouchState {
   id: number;
@@ -899,6 +930,81 @@ export class Grid {
   // ---------------------------------------------------------------------------
   // painting
 
+  /**
+   * One cell's fill (optional) and text, in its style. The caller has
+   * clipped to the column (or the cell).
+   */
+  private paintCell(row: number, col: number, x: number, y: number, w: number, h: number, fill: boolean): void {
+    const { ctx } = this;
+    const style = this.source.getStyle?.(row, col) ?? null;
+    if (fill && style?.fill) {
+      ctx.fillStyle = style.fill;
+      ctx.fillRect(x, y, w, h);
+    }
+    const value = this.source.getCell(row, col);
+    if (value === null) return;
+    const text = formatCell(value);
+    ctx.font = fontFor(style);
+    ctx.fillStyle = style?.color ?? this.theme.text;
+    const align = style?.align ?? (typeof value === "number" ? "right" : "left");
+    ctx.textAlign = align;
+    const tx = align === "left" ? x + CELL_PADDING : align === "right" ? x + w - CELL_PADDING : x + w / 2;
+    const px = style?.size ? Math.round((style.size * 4) / 3) : DEFAULT_PX;
+    const lineH = Math.round(px * 1.3);
+    const lines = style?.wrap ? wrapLines(ctx, text, w - 2 * CELL_PADDING) : [text];
+    if (lines.length > 1) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, w, h);
+      ctx.clip();
+    }
+    const block = lines.length * lineH;
+    // too tall for the row (row heights come later): show the first lines
+    const valign = block > h ? "top" : (style?.valign ?? "middle");
+    let ty =
+      valign === "top" ? y + lineH / 2 + 2 : valign === "bottom" ? y + h - block + lineH / 2 - 2 : y + h / 2 - block / 2 + lineH / 2;
+    for (const line of lines) {
+      ctx.fillText(line, tx, ty);
+      if (style?.underline || style?.strike) {
+        const tw = ctx.measureText(line).width;
+        const lx = align === "left" ? tx : align === "right" ? tx - tw : tx - tw / 2;
+        ctx.fillRect(lx, Math.round(ty + (style.underline ? px * 0.45 : 0)), tw, Math.max(1, Math.round(px / 14)));
+        if (style.underline && style.strike) ctx.fillRect(lx, Math.round(ty), tw, Math.max(1, Math.round(px / 14)));
+      }
+      ty += lineH;
+    }
+    if (lines.length > 1) ctx.restore();
+  }
+
+  private strokeBorder(line: BorderLine, x0: number, y0: number, x1: number, y1: number): void {
+    const { ctx } = this;
+    const width = BORDER_WIDTH[line.style] ?? 1;
+    // "auto" follows the theme, so default borders show in light and dark
+    ctx.strokeStyle = line.color === "auto" ? this.theme.text : line.color;
+    ctx.lineWidth = width;
+    ctx.setLineDash(line.style === "dashed" ? [4, 2] : line.style === "dotted" ? [1, 2] : []);
+    // crisp lines: odd widths sit on half pixels
+    const off = width % 2 ? 0.5 : 0;
+    const vertical = x0 === x1;
+    const draw = (shift: number) => {
+      ctx.beginPath();
+      if (vertical) {
+        const x = Math.round(x0 + shift) + off;
+        ctx.moveTo(x, y0);
+        ctx.lineTo(x, y1);
+      } else {
+        const y = Math.round(y0 + shift) + off;
+        ctx.moveTo(x0, y);
+        ctx.lineTo(x1, y);
+      }
+      ctx.stroke();
+    };
+    if (line.style === "double") {
+      draw(-1);
+      draw(1);
+    } else draw(0);
+  }
+
   private draw(): void {
     const { ctx, theme, columns, rowHeight, headerHeight, rowHeaderWidth } = this;
     const { rowCount } = this.source;
@@ -948,19 +1054,7 @@ export class Grid {
       ctx.beginPath();
       ctx.rect(x, headerHeight, w, bodyH);
       ctx.clip();
-      for (let d = firstRow; d <= lastRow; d++) {
-        const value = this.source.getCell(realRow(d), c);
-        if (value === null) continue;
-        const text = formatCell(value);
-        const y = rowY(d) + rowHeight / 2;
-        if (typeof value === "number") {
-          ctx.textAlign = "right";
-          ctx.fillText(text, x + w - CELL_PADDING, y);
-        } else {
-          ctx.textAlign = "left";
-          ctx.fillText(text, x + CELL_PADDING, y);
-        }
-      }
+      for (let d = firstRow; d <= lastRow; d++) this.paintCell(realRow(d), c, x, rowY(d), w, rowHeight, true);
       ctx.restore();
     }
 
@@ -979,6 +1073,25 @@ export class Grid {
     ctx.strokeStyle = theme.gridLine;
     ctx.lineWidth = 1;
     ctx.stroke();
+
+    // cell borders, over the grid lines
+    if (this.source.getStyle) {
+      for (let c = firstCol; c <= lastCol; c++) {
+        const w = columns.width(c);
+        if (w === 0) continue;
+        const x = colX(c);
+        for (let d = firstRow; d <= lastRow; d++) {
+          const st = this.source.getStyle(realRow(d), c);
+          if (!st || !(st.borderTop || st.borderRight || st.borderBottom || st.borderLeft)) continue;
+          const y = rowY(d);
+          if (st.borderTop) this.strokeBorder(st.borderTop, x, y, x + w, y);
+          if (st.borderBottom) this.strokeBorder(st.borderBottom, x, y + rowHeight, x + w, y + rowHeight);
+          if (st.borderLeft) this.strokeBorder(st.borderLeft, x, y, x, y + rowHeight);
+          if (st.borderRight) this.strokeBorder(st.borderRight, x + w, y, x + w, y + rowHeight);
+        }
+      }
+      ctx.setLineDash([]);
+    }
 
     // selected range: light fill + border. A range can be 100M rows tall, so
     // edges that are off-screen get pinned just outside the viewport instead
@@ -1018,19 +1131,12 @@ export class Grid {
         ctx.fillRect(colX(ac) + 1, rowY(ar) + 1, columns.width(ac) - 1, rowHeight - 1);
         ctx.globalAlpha = 1;
         // the fill covered the text, so redraw it
-        const v = this.source.getCell(activeRow, ac);
-        if (v !== null) {
-          ctx.font = FONT;
-          ctx.fillStyle = theme.text;
-          ctx.textAlign = typeof v === "number" ? "right" : "left";
-          const tx = typeof v === "number" ? colX(ac) + columns.width(ac) - CELL_PADDING : colX(ac) + CELL_PADDING;
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(colX(ac), rowY(ar), columns.width(ac), rowHeight);
-          ctx.clip();
-          ctx.fillText(formatCell(v), tx, rowY(ar) + rowHeight / 2);
-          ctx.restore();
-        }
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(colX(ac), rowY(ar), columns.width(ac), rowHeight);
+        ctx.clip();
+        this.paintCell(activeRow, ac, colX(ac), rowY(ar), columns.width(ac), rowHeight, false);
+        ctx.restore();
       }
       ctx.strokeStyle = theme.accent;
       ctx.lineWidth = 2;
