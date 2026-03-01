@@ -19,6 +19,8 @@ export interface DataSource {
    * show "=SUM(A1:A9)" for editing while getCell returns the result.
    */
   getEditText?(row: number, col: number): string;
+  /** Optional cell formatting; null or undefined means the default look. */
+  getStyle?(row: number, col: number): CellStyle | null | undefined;
 }
 
 export interface CellRef {
@@ -58,4 +60,34 @@ export interface Theme {
   text: string;
   mutedText: string;
   accent: string;
+}
+
+export type BorderStyle = "thin" | "medium" | "thick" | "dashed" | "dotted" | "double";
+
+export interface BorderLine {
+  style: BorderStyle;
+  color: string;
+}
+
+/**
+ * How a cell looks. Every property is optional; a missing one means the
+ * default (the theme's text colour, no fill, numbers right / text left, ...).
+ */
+export interface CellStyle {
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strike?: boolean;
+  /** font size in points */
+  size?: number;
+  font?: string;
+  color?: string;
+  fill?: string;
+  align?: "left" | "center" | "right";
+  valign?: "top" | "middle" | "bottom";
+  wrap?: boolean;
+  borderTop?: BorderLine;
+  borderRight?: BorderLine;
+  borderBottom?: BorderLine;
+  borderLeft?: BorderLine;
 }
