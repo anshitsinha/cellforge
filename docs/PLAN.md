@@ -68,13 +68,13 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Range-run styles
-- [x] Style model: interned style records, stored as runs per column so styling a million rows is one entry
-- [x] `format.set` action (any subset of properties over a range) with exact undo; styles move with insert/delete/sort
-- [x] Grid draws font weight/style, underline/strike, text and fill colours, alignment, wrap and borders
-- [x] Toolbar: bold/italic/underline, colours, fill, borders, alignment; Ctrl+B / I / U
-- [x] Format painter
-- [ ] Tests, user guide
+### Number formats
+- [ ] Format code parser: Excel's sections (positive;negative;zero;text), 0 # ? , . % E+, literals, colours
+- [ ] Dates and times as serial numbers with d/m/y/h/m/s codes; typed dates become dates
+- [ ] Built-in formats: number, currency, accounting, percent, date, time, scientific, text; K/M scaling
+- [ ] `format.set` carries the number format; grid and formula bar show formatted values
+- [ ] Toolbar: format menu, more/fewer decimals, %, thousands separator; custom code box
+- [ ] Tests against Excel's output, user guide
 
 ## Milestones
 
@@ -87,9 +87,9 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Cross-sheet references (`Sheet2!A1`, `'My Sheet'!A1:B9`)
 - ✅ Dependency graph + incremental recalc
 - ✅ Insert / delete / hide rows and columns with reference adjustment
-- 🔨 Range-run styles: font, size, bold/italic/underline/strike, colours, fill,
+- ✅ Range-run styles: font, size, bold/italic/underline/strike, colours, fill,
   borders, alignment, wrap; format painter
-- ⬜ Number formats incl. custom codes and accounting styles (K/M, red parentheses)
+- 🔨 Number formats incl. custom codes and accounting styles (K/M, red parentheses)
 - ⬜ Merge cells and Center Across Selection; row heights, auto-fit, freeze panes
 - ⬜ Fill handle with series detection; default paste mode setting
 - ⬜ Command palette (Ctrl+K) listing every public action
