@@ -3,3 +3,4 @@ export { CsvParser, detectDelimiter } from "./csv";
 export { Table, type Value } from "./table";
 export { radixSortIndices } from "./radix";
 export * from "./formula";
+export { formatValue, formatGeneral, isDateFormat, serialToParts, dateToSerial, type Formatted } from "./numfmt";

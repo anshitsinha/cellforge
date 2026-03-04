@@ -69,7 +69,7 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Number formats
-- [ ] Format code parser: Excel's sections (positive;negative;zero;text), 0 # ? , . % E+, literals, colours
+- [x] Format code parser: Excel's sections (positive;negative;zero;text), 0 # ? , . % E+, literals, colours
 - [ ] Dates and times as serial numbers with d/m/y/h/m/s codes; typed dates become dates
 - [ ] Built-in formats: number, currency, accounting, percent, date, time, scientific, text; K/M scaling
 - [ ] `format.set` carries the number format; grid and formula bar show formatted values
