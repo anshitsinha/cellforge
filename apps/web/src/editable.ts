@@ -20,6 +20,7 @@ import {
   type Scalar,
 } from "@cellforge/core";
 import { formatCell, type CellStyle, type CellValue, type DataSource } from "@cellforge/grid";
+import { formatGeneral, formatValue as formatWithCode, isDateFormat } from "@cellforge/core";
 import { DepIndex, type Rect } from "./deps";
 import { SheetStyles, type ColumnStyles } from "./styles";
 
@@ -281,7 +282,26 @@ export class EditableSource implements DataSource {
       const fill = this.fillAt(b, col);
       if (fill && isFormula(fill.template)) return formulaText(fill.template, row - fill.origin);
     }
-    return formatCell(this.getCell(row, col));
+    const value = this.getCell(row, col);
+    const code = this.getStyle(row, col)?.numFmt;
+    if (typeof value === "number" && code) {
+      // edit dates as dates and percentages as percentages, as Excel does
+      if (isDateFormat(code)) {
+        const hasDate = /[dy]|m{3,}/i.test(code.replace(/"[^"]*"/g, ""));
+        const hasTime = /[hs]/i.test(code.replace(/"[^"]*"/g, ""));
+        const dateCode = /^d\/m/.test(code) ? "d/m/yyyy" : "yyyy-mm-dd";
+        const fmt = [hasDate || value >= 1 ? dateCode : "", hasTime || value % 1 ? "h:mm:ss" : ""].filter(Boolean).join(" ");
+        return formatWithCode(value, fmt).text;
+      }
+      if (/%/.test(code.replace(/"[^"]*"/g, ""))) return formatGeneral(value * 100) + "%";
+    }
+    return value === null ? "" : typeof value === "number" ? formatGeneral(value) : formatCell(value);
+  }
+
+  /** Display text for a value in a cell's number format (the grid calls this). */
+  formatValue(value: CellValue, style: CellStyle | null): { text: string; color?: string } {
+    if (typeof value !== "number") return { text: formatCell(value) };
+    return formatWithCode(value, style?.numFmt);
   }
 
   /** The stored edit for a cell, or undefined if it's untouched. Used by undo. */

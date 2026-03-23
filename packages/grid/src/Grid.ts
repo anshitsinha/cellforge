@@ -943,9 +943,10 @@ export class Grid {
     }
     const value = this.source.getCell(row, col);
     if (value === null) return;
-    const text = formatCell(value);
+    const shown = this.source.formatValue ? this.source.formatValue(value, style) : { text: formatCell(value) };
+    const text = shown.text;
     ctx.font = fontFor(style);
-    ctx.fillStyle = style?.color ?? this.theme.text;
+    ctx.fillStyle = shown.color ?? style?.color ?? this.theme.text;
     const align = style?.align ?? (typeof value === "number" ? "right" : "left");
     ctx.textAlign = align;
     const tx = align === "left" ? x + CELL_PADDING : align === "right" ? x + w - CELL_PADDING : x + w / 2;

@@ -28,6 +28,7 @@ const KEYS: (keyof CellStyle)[] = [
   "align",
   "valign",
   "wrap",
+  "numFmt",
   "borderTop",
   "borderRight",
   "borderBottom",

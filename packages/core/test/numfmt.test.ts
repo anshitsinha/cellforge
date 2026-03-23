@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dateToSerial, formatGeneral, formatValue, isDateFormat } from "../src/numfmt";
+import { dateToSerial, formatGeneral, formatValue, isDateFormat, parseTyped } from "../src/numfmt";
 
 const f = (v: number | string, code: string) => formatValue(v, code).text;
 
@@ -105,5 +105,40 @@ describe("dates and times", () => {
     expect(isDateFormat("[h]:mm")).toBe(true);
     expect(isDateFormat("#,##0.00")).toBe(false);
     expect(isDateFormat('0.0 "days"')).toBe(false);
+  });
+});
+
+describe("typed input", () => {
+  it.each([
+    ["12%", 0.12, "0%"],
+    ["12.5%", 0.125, "0.0%"],
+    ["$1,234.50", 1234.5, "$#,##0.00"],
+    ["-$20", -20, "$#,##0"],
+    ["($20)", -20, "$#,##0;($#,##0)"],
+    ["€5", 5, '"€"#,##0'],
+    ["1,234,567", 1234567, "#,##0"],
+    ["2024-01-15", 45306, "yyyy-mm-dd"],
+    ["1/15/2024", 45306, "m/d/yyyy"],
+    ["15/1/2024", 45306, "d/m/yyyy"],
+    ["15-Jan-2024", 45306, "d-mmm-yy"],
+    ["Jan 15, 2024", 45306, "mmm d, yyyy"],
+    ["13:30", 13.5 / 24, "h:mm"],
+    ["1:30 PM", 13.5 / 24, "h:mm AM/PM"],
+    ["2024-01-15 06:00", 45306.25, "yyyy-mm-dd h:mm"],
+  ])("%s", (text, value, format) => {
+    const got = parseTyped(text);
+    expect(got?.format).toBe(format);
+    expect(got?.value).toBeCloseTo(value, 9);
+  });
+
+  it.each(["42", "hello", "2024-02-30", "13/13/2024", "1,23", "25:00", "$", "%", "1.2.3", "(5"])("%s is not a typed format", (text) => {
+    expect(parseTyped(text)).toBeNull();
+  });
+
+  it("round-trips through its own format", () => {
+    for (const t of ["12%", "$1,234.50", "2024-01-15", "1:30 PM", "1,234,567"]) {
+      const p = parseTyped(t)!;
+      expect(formatValue(p.value, p.format).text).toBe(t);
+    }
   });
 });

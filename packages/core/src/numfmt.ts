@@ -578,3 +578,112 @@ export function isDateFormat(code: string | undefined): boolean {
   if (!code) return false;
   return compile(code).sections.some((s) => s.isDate);
 }
+
+// ---------------------------------------------------------------------------
+// typed input: "12%", "$1,200.50", "2024-01-15", "3:30 PM" become numbers
+// with a matching format, the way Excel treats what you type
+
+const MONTH_INDEX: Record<string, number> = Object.fromEntries(
+  MONTHS.flatMap((m, i) => [
+    [m.toLowerCase(), i + 1],
+    [m.slice(0, 3).toLowerCase(), i + 1],
+  ]),
+);
+MONTH_INDEX.sept = 9;
+
+function validDate(y: number, m: number, d: number): boolean {
+  if (m < 1 || m > 12 || d < 1 || y < 1900 || y > 9999) return false;
+  return d <= new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+
+const fullYear = (y: string) => (y.length <= 2 ? (Number(y) < 30 ? 2000 : 1900) + Number(y) : Number(y));
+
+function parseTime(s: string): { value: number; format: string } | null {
+  const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm|a|p)?$/i.exec(s);
+  if (!m) return null;
+  let h = Number(m[1]);
+  const mi = Number(m[2]);
+  const sec = m[3] ? Number(m[3]) : 0;
+  if (mi > 59 || sec > 59) return null;
+  if (m[4]) {
+    if (h < 1 || h > 12) return null;
+    const pm = m[4][0].toLowerCase() === "p";
+    h = (h % 12) + (pm ? 12 : 0);
+  } else if (h > 23) return null;
+  const format = (m[3] ? "h:mm:ss" : "h:mm") + (m[4] ? " AM/PM" : "");
+  return { value: (h * 3600 + mi * 60 + sec) / 86_400, format };
+}
+
+function parseDate(s: string): { value: number; format: string } | null {
+  let m: RegExpExecArray | null;
+  let y: number, mo: number, d: number, format: string;
+  if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))) {
+    [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    format = "yyyy-mm-dd";
+  } else if ((m = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(s))) {
+    // month first, as in the US, unless the first number can't be a month
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    y = fullYear(m[3]);
+    if (a > 12 && b <= 12) {
+      [d, mo] = [a, b];
+      format = "d/m/yyyy";
+    } else {
+      [mo, d] = [a, b];
+      format = "m/d/yyyy";
+    }
+  } else if ((m = /^(\d{1,2})[- ]([a-z]{3,9})[- ,]+(\d{2}|\d{4})$/i.exec(s))) {
+    mo = MONTH_INDEX[m[2].toLowerCase()];
+    [d, y] = [Number(m[1]), fullYear(m[3])];
+    format = "d-mmm-yy";
+  } else if ((m = /^([a-z]{3,9})\.? (\d{1,2}),? (\d{4})$/i.exec(s))) {
+    mo = MONTH_INDEX[m[1].toLowerCase()];
+    [d, y] = [Number(m[2]), Number(m[3])];
+    format = "mmm d, yyyy";
+  } else return null;
+  if (!mo || !validDate(y, mo, d)) return null;
+  return { value: dateToSerial(y, mo, d), format };
+}
+
+const CURRENCY: Record<string, string> = { $: "$", "€": "€", "£": "£", "¥": "¥", "₹": "₹" };
+
+/**
+ * A number typed with formatting (percent, currency, thousands separators,
+ * a date or a time): its value and the format that shows it the same way.
+ * Plain numbers and anything else return null.
+ */
+export function parseTyped(text: string): { value: number; format: string } | null {
+  const s = text.trim();
+  if (!s || s.length > 40) return null;
+  // dates and times
+  const time = parseTime(s);
+  if (time) return time;
+  const date = parseDate(s);
+  if (date) return date;
+  const dt = /^(.+?)[ T](\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]m?)?)$/i.exec(s);
+  if (dt) {
+    const dd = parseDate(dt[1]);
+    const tt = parseTime(dt[2]);
+    if (dd && tt) return { value: dd.value + tt.value, format: `${dd.format} ${tt.format}` };
+  }
+  // numbers with decoration: sign, (negative), currency, separators, %
+  const m = /^([-+])?(\()?\s*([$€£¥₹])?\s*([-+])?(\d{1,3}(?:,\d{3})+|\d+)?(\.\d+)?\s*(%)?\)?$/.exec(s);
+  if (!m || (!m[5] && !m[6])) return null;
+  const paren = !!m[2];
+  if (paren !== s.endsWith(")")) return null;
+  const sym = m[3];
+  const pct = !!m[7];
+  const grouped = !!m[5]?.includes(",");
+  if (!sym && !pct && !grouped && !paren) return null; // a plain number
+  const negative = m[1] === "-" || m[4] === "-" || paren;
+  let value = Number((m[5] ?? "0").replace(/,/g, "") + (m[6] ?? ""));
+  if (pct) value /= 100;
+  if (negative) value = -value;
+  const decimals = m[6] ? "." + "0".repeat(Math.min(m[6].length - 1, 10)) : "";
+  let format: string;
+  if (pct) format = `0${decimals}%`;
+  else if (sym) format = `${sym === "$" ? "$" : `"${CURRENCY[sym]}"`}#,##0${decimals ? ".00" : ""}`;
+  else format = `#,##0${decimals ? ".00" : ""}`;
+  if (sym && paren) format = `${format};(${format})`;
+  return { value, format };
+}

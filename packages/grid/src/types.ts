@@ -21,6 +21,11 @@ export interface DataSource {
   getEditText?(row: number, col: number): string;
   /** Optional cell formatting; null or undefined means the default look. */
   getStyle?(row: number, col: number): CellStyle | null | undefined;
+  /**
+   * Optional display text for a value (number formats). A colour from the
+   * format (e.g. [Red]) wins over the cell's text colour.
+   */
+  formatValue?(value: CellValue, style: CellStyle | null): { text: string; color?: string };
 }
 
 export interface CellRef {
@@ -86,6 +91,8 @@ export interface CellStyle {
   align?: "left" | "center" | "right";
   valign?: "top" | "middle" | "bottom";
   wrap?: boolean;
+  /** Excel number format code, e.g. "#,##0.00" or "yyyy-mm-dd" */
+  numFmt?: string;
   borderTop?: BorderLine;
   borderRight?: BorderLine;
   borderBottom?: BorderLine;

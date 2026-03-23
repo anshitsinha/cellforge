@@ -9,7 +9,7 @@
  */
 import { type Action, ActionRegistry, type BlobStore, type JsonSchema, s } from "@cellforge/actions";
 import { columnLetter } from "@cellforge/grid";
-import { type ColChange, formatFormula, parseFormula, type Node, type RowChange } from "@cellforge/core";
+import { type ColChange, formatFormula, parseFormula, parseTyped, type Node, type RowChange } from "@cellforge/core";
 import { type ColumnRemoval, type EditableSource, effectiveShift, type Fill, type FormulaSnapshot, isFormula, parseInput, type Stored } from "./editable";
 import { BlankSource, EditableSource as Source } from "./editable";
 import { CLEAR_ALL, type ColumnStyles, type StylePatch } from "./styles";
@@ -103,6 +103,7 @@ const styleSchema = s.object(
     align: nullable(s.string("horizontal alignment", { enum: ["left", "center", "right"] })),
     valign: nullable(s.string("vertical alignment", { enum: ["top", "middle", "bottom"] })),
     wrap: nullable(s.bool()),
+    numFmt: nullable(s.string('Excel number format code, e.g. "#,##0.00", "0.0%", "yyyy-mm-dd", \'$#,##0;[Red]($#,##0)\'', { maxLength: 255 })),
     borderTop: nullable(borderLine),
     borderRight: nullable(borderLine),
     borderBottom: nullable(borderLine),
@@ -204,7 +205,20 @@ function describeCells(cells: { row: number; col: number }[], verb: string) {
   return `${verb} ${cells.length.toLocaleString()} cells`;
 }
 
-const restoreParams = (sheet: string, cells: RestoreCell[], label?: string) => (label ? { sheet, cells, label } : { sheet, cells });
+const restoreParams = (sheet: string, cells: RestoreCell[], label?: string, formats?: string) => ({
+  sheet,
+  cells,
+  ...(label ? { label } : {}),
+  ...(formats ? { formats } : {}),
+});
+
+/** Swap columns' formatting with a saved copy; returns the blob to swap back. */
+function swapFormats(ctx: SheetCtx, data: EditableSource, blob: string): string {
+  const saved = ctx.blobs.get<[number, ColumnStyles | undefined][]>(blob);
+  const now = saved.map(([c]) => [c, data.styles.snapshot(c)] as [number, ColumnStyles | undefined]);
+  for (const [c, e] of saved) data.styles.restore(c, e && { base: e.base, runs: e.runs.clone() });
+  return ctx.blobs.put(now);
+}
 
 export function sheetActions(): ActionRegistry<SheetCtx> {
   const registry = new ActionRegistry<SheetCtx>();
@@ -236,11 +250,27 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         const { id, data } = target(ctx, p.sheet);
         checkBounds(data, p.cells);
         const before = snapshot(data, p.cells);
-        for (const c of p.cells) data.setCell(c.row, c.col, c.input === null ? null : parseInput(c.input));
-        return { type: "cells.restore", params: restoreParams(id, before, p.label) };
+        // "12%", "$1,200", "2024-01-15": store the number, and give the cell
+        // a matching format unless it already has one (as Excel does)
+        const formatted: { row: number; col: number; format: string }[] = [];
+        for (const c of p.cells) {
+          const typed = c.input !== null && !c.input.trim().startsWith("=") ? parseTyped(c.input) : null;
+          if (typed) {
+            data.setCell(c.row, c.col, typed.value);
+            if (!data.getStyle(c.row, c.col)?.numFmt) formatted.push({ row: c.row, col: c.col, format: typed.format });
+          } else data.setCell(c.row, c.col, c.input === null ? null : parseInput(c.input));
+        }
+        let formats: string | undefined;
+        if (formatted.length) {
+          const cols = new Map<number, ColumnStyles | undefined>();
+          for (const f of formatted) if (!cols.has(f.col)) cols.set(f.col, data.styles.snapshot(f.col));
+          formats = ctx.blobs.put([...cols]);
+          for (const f of formatted) data.styles.apply(f.col, data.rowIdIntervals(f.row, f.row), { numFmt: f.format });
+        }
+        return { type: "cells.restore", params: restoreParams(id, before, p.label, formats) };
       },
     })
-    .register<{ cells: RestoreCell[]; label?: string; sheet?: string }>({
+    .register<{ cells: RestoreCell[]; label?: string; formats?: string; sheet?: string }>({
       type: "cells.restore",
       title: "Put cells back exactly as they were",
       internal: true,
@@ -250,6 +280,7 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
             s.object({ row: s.int(undefined, 0), col: s.int(undefined, 0), value: storedSchema, revert: s.bool() }, ["row", "col"]),
           ),
           label: s.string(),
+          formats: s.string("saved formatting to swap back"),
         },
         ["cells"],
       ),
@@ -261,7 +292,8 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
           if (c.revert) data.revertCell(c.row, c.col);
           else data.setCell(c.row, c.col, fromJson(c.value ?? null));
         }
-        return { type: "cells.restore", params: restoreParams(id, before, p.label) };
+        const formats = p.formats ? swapFormats(ctx, data, p.formats) : undefined;
+        return { type: "cells.restore", params: restoreParams(id, before, p.label, formats) };
       },
     })
     .register<{ range: Range; sheet?: string }>({
@@ -605,10 +637,7 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       describe: () => "format",
       apply(ctx, p) {
         const data = ctx.workbook.get(p.sheet).source;
-        const saved = ctx.blobs.get<[number, ColumnStyles | undefined][]>(p.cols);
-        const now = saved.map(([c]) => [c, data.styles.snapshot(c)] as [number, ColumnStyles | undefined]);
-        for (const [c, e] of saved) data.styles.restore(c, e && { base: e.base, runs: e.runs.clone() });
-        return { type: "format.restore", params: { sheet: p.sheet, cols: ctx.blobs.put(now) } };
+        return { type: "format.restore", params: { sheet: p.sheet, cols: swapFormats(ctx, data, p.cols) } };
       },
     });
 

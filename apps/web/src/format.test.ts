@@ -121,3 +121,37 @@ describe("format actions", () => {
     await expect(history.run({ type: "format.set", params: { range: R(0, 0), style: { glow: true } } })).rejects.toThrow();
   });
 });
+
+describe("number formats", () => {
+  it("typing 12%, $1,200 or a date stores a number and sets a matching format", async () => {
+    const { history, sheet, type } = setup();
+    await type([[0, 0, "12%"], [1, 0, "$1,200.50"], [2, 0, "2024-01-15"], [3, 0, "plain"]]);
+    expect(sheet.getCell(0, 0)).toBe(0.12);
+    expect(sheet.getStyle(0, 0)?.numFmt).toBe("0%");
+    expect(sheet.formatValue(sheet.getCell(1, 0), sheet.getStyle(1, 0)).text).toBe("$1,200.50");
+    expect(sheet.getCell(2, 0)).toBe(45306);
+    expect(sheet.getEditText(2, 0)).toBe("2024-01-15");
+    expect(sheet.getEditText(0, 0)).toBe("12%");
+    expect(sheet.getStyle(3, 0)).toBeNull();
+    await history.undo();
+    expect(sheet.getCell(0, 0)).toBeNull();
+    expect(sheet.getStyle(0, 0)).toBeNull();
+    await history.redo();
+    expect(sheet.getStyle(2, 0)?.numFmt).toBe("yyyy-mm-dd");
+  });
+
+  it("a cell's own format wins over the typed one", async () => {
+    const { history, sheet, type } = setup();
+    await history.run({ type: "format.set", params: { range: R(0, 0), style: { numFmt: "0.000" } } });
+    await type([[0, 0, "50%"]]);
+    expect(sheet.getCell(0, 0)).toBe(0.5);
+    expect(sheet.formatValue(0.5, sheet.getStyle(0, 0)).text).toBe("0.500");
+  });
+
+  it("format.set applies a code; colours from the code come through", async () => {
+    const { history, sheet, type } = setup();
+    await type([[0, 0, "-1234.5"]]);
+    await history.run({ type: "format.set", params: { range: R(0, 0), style: { numFmt: "#,##0.00;[Red](#,##0.00)" } } });
+    expect(sheet.formatValue(sheet.getCell(0, 0), sheet.getStyle(0, 0))).toEqual({ text: "(1,234.50)", color: "#ff0000" });
+  });
+});

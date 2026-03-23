@@ -70,9 +70,9 @@ tracker shows this expanded, with the first unticked step as the current one.
 
 ### Number formats
 - [x] Format code parser: Excel's sections (positive;negative;zero;text), 0 # ? , . % E+, literals, colours
-- [ ] Dates and times as serial numbers with d/m/y/h/m/s codes; typed dates become dates
+- [x] Dates and times as serial numbers with d/m/y/h/m/s codes; typed dates become dates
 - [ ] Built-in formats: number, currency, accounting, percent, date, time, scientific, text; K/M scaling
-- [ ] `format.set` carries the number format; grid and formula bar show formatted values
+- [x] `format.set` carries the number format; grid and formula bar show formatted values
 - [ ] Toolbar: format menu, more/fewer decimals, %, thousands separator; custom code box
 - [ ] Tests against Excel's output, user guide
 
