@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dateToSerial, formatGeneral, formatValue, isDateFormat, parseTyped } from "../src/numfmt";
+import { dateToSerial, formatGeneral, formatValue, isDateFormat, parseTyped, adjustDecimals } from "../src/numfmt";
 
 const f = (v: number | string, code: string) => formatValue(v, code).text;
 
@@ -140,5 +140,28 @@ describe("typed input", () => {
       const p = parseTyped(t)!;
       expect(formatValue(p.value, p.format).text).toBe(t);
     }
+  });
+});
+
+describe("adjustDecimals", () => {
+  it.each([
+    ["0", 1, "0.0"],
+    ["0.00", 1, "0.000"],
+    ["0.00", -1, "0.0"],
+    ["0.0", -1, "0"],
+    ["0", -1, "0"],
+    ["#,##0.00", -1, "#,##0.0"],
+    ["0%", 1, "0.0%"],
+    ['$#,##0.00;[Red]($#,##0.00)', 1, '$#,##0.000;[Red]($#,##0.000)'],
+    ['#,##0,"K"', 1, '#,##0.0,"K"'],
+    ["yyyy-mm-dd", 1, "yyyy-mm-dd"],
+  ] as const)("%s %s -> %s", (code, delta, want) => {
+    expect(adjustDecimals(code, delta)).toBe(want);
+  });
+
+  it("General starts from what's shown", () => {
+    expect(adjustDecimals(undefined, 1, 3.25)).toBe("0.000");
+    expect(adjustDecimals("General", -1, 3.25)).toBe("0.0");
+    expect(adjustDecimals(undefined, 1, 7)).toBe("0.0");
   });
 });

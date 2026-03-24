@@ -198,6 +198,47 @@ button:disabled {
   border-radius: 2px;
 }
 
+.numfmt-pop {
+  width: 300px;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.numfmt-pop label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.numfmt-pop input {
+  font: 13px ui-monospace, "Cascadia Mono", Consolas, monospace;
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.numfmt-preview {
+  padding: 6px 8px;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: pre;
+}
+
+.numfmt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.format-bar sup {
+  font-size: 9px;
+}
+
 .sheet.painting,
 .sheet.painting canvas {
   cursor: copy !important; /* the canvas sets its own cursor inline */

@@ -1,4 +1,5 @@
 import type { Action } from "@cellforge/actions";
+import { adjustDecimals } from "@cellforge/core";
 import type { CellStyle, Grid } from "@cellforge/grid";
 import type { EditableSource } from "./editable";
 import { CLEAR_ALL, type StylePatch } from "./styles";
@@ -20,6 +21,30 @@ export interface FormatBarDeps {
 }
 
 const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36];
+
+const ACCOUNTING = '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)';
+
+/** The number format menu: label, code, example. */
+export const NUMBER_FORMATS: [string, string, string][] = [
+  ["General", "", "1234.5"],
+  ["Number", "#,##0.00", "1,234.50"],
+  ["Currency", "$#,##0.00", "$1,234.50"],
+  ["Accounting", ACCOUNTING, "$ 1,234.50"],
+  ["Negatives in red", "#,##0.00;[Red](#,##0.00)", "(1,234.50)"],
+  ["Thousands", '#,##0,"K"', "1K"],
+  ["Millions", '#,##0.0,,"M"', "1.2M"],
+  ["Percent", "0.00%", "12.50%"],
+  ["Scientific", "0.00E+00", "1.23E+03"],
+  ["Short date", "m/d/yyyy", "1/15/2024"],
+  ["ISO date", "yyyy-mm-dd", "2024-01-15"],
+  ["Long date", "dddd, mmmm d, yyyy", "Monday, January 15, 2024"],
+  ["Time", "h:mm AM/PM", "6:30 PM"],
+  ["Date and time", "yyyy-mm-dd h:mm", "2024-01-15 18:30"],
+  ["Duration", "[h]:mm:ss", "36:15:00"],
+  ["Text", "@", "keeps what you type"],
+];
+
+const escapeAttr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
 const icon = (path: string) =>
   `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">${path}</svg>`;
@@ -43,6 +68,16 @@ export function setupFormatBar(d: FormatBarDeps): { sync: () => void } {
     <select id="fmt-size" title="Font size">
       ${SIZES.map((n) => `<option value="${n}"${n === 10 ? " selected" : ""}>${n}</option>`).join("")}
     </select>
+    <span class="toolbar-sep"></span>
+    <select id="fmt-number" title="Number format">
+      ${NUMBER_FORMATS.map(([name, code, ex]) => `<option value="${escapeAttr(code)}">${name}${code ? " · " + ex : ""}</option>`).join("")}
+      <option value="__custom" id="fmt-number-custom">Custom…</option>
+    </select>
+    <button type="button" id="fmt-currency" title="Currency (Ctrl+Shift+4)">$</button>
+    <button type="button" id="fmt-percent" title="Percent (Ctrl+Shift+5)">%</button>
+    <button type="button" id="fmt-comma" title="Thousands separator (Ctrl+Shift+1)">,</button>
+    <button type="button" id="fmt-dec-more" title="More decimal places">.0<sup>+</sup></button>
+    <button type="button" id="fmt-dec-less" title="Fewer decimal places">.0<sup>−</sup></button>
     <span class="toolbar-sep"></span>
     <label class="swatch" title="Text colour"><span class="swatch-a">A</span><i id="fmt-color-bar"></i><input type="color" id="fmt-color" value="#c00000" /></label>
     <label class="swatch" title="Fill colour"><span class="swatch-fill"></span><i id="fmt-fill-bar"></i><input type="color" id="fmt-fill" value="#fff2cc" /></label>
@@ -77,6 +112,8 @@ export function setupFormatBar(d: FormatBarDeps): { sync: () => void } {
   const fillBar = $<HTMLElement>("#fmt-fill-bar");
   const borders = $<HTMLSelectElement>("#fmt-borders");
   const painter = $<HTMLButtonElement>("#fmt-painter");
+  const numberSel = $<HTMLSelectElement>("#fmt-number");
+  const customOpt = $<HTMLOptionElement>("#fmt-number-custom");
 
   const current = (): CellStyle => {
     const { row, col } = grid.selection;
@@ -118,6 +155,73 @@ export function setupFormatBar(d: FormatBarDeps): { sync: () => void } {
     else action = { type: "format.borders", params: { range: grid.range, which: v, line } };
     void d.run(action).then(after);
   });
+
+  // --- number formats
+  const setCode = (code: string) => format({ numFmt: code || null });
+  numberSel.addEventListener("change", () => {
+    const v = numberSel.value;
+    if (v === "__custom") openCustom();
+    else void setCode(v).then(after);
+  });
+  $<HTMLButtonElement>("#fmt-currency").addEventListener("click", () => void setCode("$#,##0.00").then(after));
+  $<HTMLButtonElement>("#fmt-percent").addEventListener("click", () => void setCode("0%").then(after));
+  $<HTMLButtonElement>("#fmt-comma").addEventListener("click", () => void setCode("#,##0.00").then(after));
+  const decimals = (delta: 1 | -1) => {
+    const { row, col } = grid.selection;
+    const v = d.source().getCell(row, col);
+    void setCode(adjustDecimals(current().numFmt, delta, typeof v === "number" ? v : 0)).then(after);
+  };
+  $<HTMLButtonElement>("#fmt-dec-more").addEventListener("click", () => decimals(1));
+  $<HTMLButtonElement>("#fmt-dec-less").addEventListener("click", () => decimals(-1));
+
+  /** A small box to type any Excel format code, with a live preview. */
+  function openCustom() {
+    document.querySelector(".numfmt-pop")?.remove();
+    const pop = document.createElement("div");
+    pop.className = "tab-menu numfmt-pop";
+    const { row, col } = grid.selection;
+    const sample = d.source().getCell(row, col);
+    pop.innerHTML = `
+      <label>Format code<input type="text" spellcheck="false" placeholder="#,##0.00;[Red](#,##0.00)" /></label>
+      <div class="numfmt-preview"></div>
+      <div class="numfmt-actions"><button type="button" data-act="cancel">Cancel</button><button type="button" data-act="ok">Apply</button></div>`;
+    document.body.append(pop);
+    const r = numberSel.getBoundingClientRect();
+    pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - 320))}px`;
+    pop.style.top = `${r.bottom + 4}px`;
+    const input = pop.querySelector("input")!;
+    input.value = current().numFmt ?? "";
+    const preview = pop.querySelector<HTMLElement>(".numfmt-preview")!;
+    const show = () => {
+      const v = typeof sample === "number" ? sample : 1234.5;
+      const out = d.source().formatValue(v, { numFmt: input.value || undefined });
+      preview.textContent = out.text || " ";
+      preview.style.color = out.color ?? "";
+    };
+    const close = () => {
+      pop.remove();
+      sync();
+      grid.focus();
+    };
+    const ok = () => {
+      const code = input.value.trim();
+      pop.remove();
+      void setCode(code).then(after);
+    };
+    input.addEventListener("input", show);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") ok();
+      else if (e.key === "Escape") close();
+    });
+    pop.addEventListener("click", (e) => {
+      const act = (e.target as HTMLElement).closest("button")?.dataset.act;
+      if (act === "ok") ok();
+      else if (act === "cancel") close();
+    });
+    show();
+    input.focus();
+    input.select();
+  }
 
   $<HTMLButtonElement>("#fmt-clear").addEventListener("click", () => {
     void d.run({ type: "format.clear", params: { range: grid.range } }).then(after);
@@ -163,6 +267,10 @@ export function setupFormatBar(d: FormatBarDeps): { sync: () => void } {
     } else if (e.code === "Digit5" && !e.shiftKey) {
       e.preventDefault();
       void toggle("strike");
+    } else if (e.shiftKey && (e.code === "Digit5" || e.code === "Digit4" || e.code === "Digit1")) {
+      // Excel: Ctrl+Shift+% percent, Ctrl+Shift+$ currency, Ctrl+Shift+! number
+      e.preventDefault();
+      void setCode(e.code === "Digit5" ? "0%" : e.code === "Digit4" ? "$#,##0.00" : "#,##0.00");
     } else if (e.key === "\\") {
       e.preventDefault();
       void d.run({ type: "format.clear", params: { range: grid.range } });
@@ -179,6 +287,10 @@ export function setupFormatBar(d: FormatBarDeps): { sync: () => void } {
       b.setAttribute("aria-pressed", String(st.align === b.dataset.align));
     }
     size.value = String(st.size ?? 10);
+    const code = st.numFmt ?? "";
+    const known = NUMBER_FORMATS.some(([, c]) => c === code);
+    customOpt.textContent = known ? "Custom…" : `Custom · ${code}`;
+    numberSel.value = known ? code : "__custom";
   }
   return { sync };
 }

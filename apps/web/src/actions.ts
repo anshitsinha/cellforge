@@ -254,6 +254,11 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         // a matching format unless it already has one (as Excel does)
         const formatted: { row: number; col: number; format: string }[] = [];
         for (const c of p.cells) {
+          // a cell formatted as Text keeps exactly what was typed
+          if (c.input !== null && data.getStyle(c.row, c.col)?.numFmt === "@") {
+            data.setCell(c.row, c.col, c.input);
+            continue;
+          }
           const typed = c.input !== null && !c.input.trim().startsWith("=") ? parseTyped(c.input) : null;
           if (typed) {
             data.setCell(c.row, c.col, typed.value);

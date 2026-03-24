@@ -687,3 +687,42 @@ export function parseTyped(text: string): { value: number; format: string } | nu
   if (sym && paren) format = `${format};(${format})`;
   return { value, format };
 }
+
+/**
+ * One more (delta 1) or one fewer (delta -1) decimal place in every number
+ * section of a code, as Excel's Increase / Decrease Decimal buttons do.
+ * `sample` is the value shown, used when the code is General.
+ */
+export function adjustDecimals(code: string | undefined, delta: 1 | -1, sample = 0): string {
+  if (!code || code.toLowerCase() === "general") {
+    const shown = formatGeneral(sample);
+    const places = shown.includes(".") && !shown.includes("E") ? shown.split(".")[1].length : 0;
+    const n = Math.max(0, places + delta);
+    return n ? "0." + "0".repeat(n) : "0";
+  }
+  if (isDateFormat(code)) return code;
+  return splitSections(code)
+    .map((sec) => {
+      // work on the unquoted parts only
+      const parts = sec.split(/("[^"]*"|\\.|\[[^\]]*\])/);
+      // the last part that has a digit placeholder holds the number
+      let k = -1;
+      parts.forEach((p, i) => {
+        if (i % 2 === 0 && /[0#?]/.test(p)) k = i;
+      });
+      if (k < 0) return sec;
+      let p = parts[k];
+      let last = -1;
+      for (let i = p.length - 1; i >= 0; i--) if ('0#?'.includes(p[i])) { last = i; break; }
+      let start = last;
+      while (start > 0 && '0#?'.includes(p[start - 1])) start--;
+      const hasPoint = p[start - 1] === '.';
+      if (delta > 0) p = p.slice(0, last + 1) + (hasPoint ? '0' : '.0') + p.slice(last + 1);
+      else if (!hasPoint) return sec;
+      else if (last > start) p = p.slice(0, last) + p.slice(last + 1);
+      else p = p.slice(0, start - 1) + p.slice(last + 1);
+      parts[k] = p;
+      return parts.join("");
+    })
+    .join(";");
+}
