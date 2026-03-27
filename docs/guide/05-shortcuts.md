@@ -14,6 +14,7 @@
 | Ctrl + Alt + − (or Ctrl + −) | Delete the selected rows |
 | Ctrl + B / I / U | Bold / italic / underline |
 | Ctrl + 5 | Strikethrough |
+| Ctrl + Shift + 4 / 5 / 1 | Currency / percent / number format |
 | Ctrl + \ | Clear formatting |
 | Ctrl + 9 / Ctrl + Shift + 9 | Hide / unhide rows |
 | Ctrl + 0 / Ctrl + Shift + 0 | Hide / unhide columns |

@@ -165,3 +165,20 @@ describe("adjustDecimals", () => {
     expect(adjustDecimals(undefined, 1, 7)).toBe("0.0");
   });
 });
+
+describe("the examples in the user guide", () => {
+  it.each([
+    ["0.00", "1234.50"],
+    ["#,##0", "1,235"],
+    ["#,##0.00;[Red](#,##0.00)", "1,234.50"],
+    ['#,##0,"K"', "1K"],
+    ["0.0%", "123450.0%"],
+    ["0.00E+00", "1.23E+03"],
+    ['"Total: "#,##0', "Total: 1,235"],
+    ['[>=1000]#,##0,"K";0', "1K"],
+    ["yyyy-mm-dd", "1903-05-18"],
+    ["[h]:mm", "29628:00"],
+  ])("1234.5 with %s", (code, want) => {
+    expect(formatValue(1234.5, code).text).toBe(want);
+  });
+});

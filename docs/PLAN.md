@@ -68,13 +68,12 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Number formats
-- [x] Format code parser: Excel's sections (positive;negative;zero;text), 0 # ? , . % E+, literals, colours
-- [x] Dates and times as serial numbers with d/m/y/h/m/s codes; typed dates become dates
-- [x] Built-in formats: number, currency, accounting, percent, date, time, scientific, text; K/M scaling
-- [x] `format.set` carries the number format; grid and formula bar show formatted values
-- [x] Toolbar: format menu, more/fewer decimals, %, thousands separator; custom code box
-- [ ] Tests against Excel's output, user guide
+### Merge cells and Center Across Selection; row heights, auto-fit, freeze panes
+- [ ] Freeze rows and columns: the grid draws four panes; scroll, selection and hit-testing respect them
+- [ ] Row heights: variable heights stored sparsely, drag to resize, double-click to auto-fit; wrapped text auto-grows
+- [ ] Merge cells (merge, merge across, unmerge) and Centre Across Selection; selection snaps to merged blocks
+- [ ] Actions for all of it (view.freeze, rows.height, cells.merge) with undo; moves with insert/delete
+- [ ] Toolbar and menu entries, tests, user guide
 
 ## Milestones
 
@@ -89,8 +88,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Insert / delete / hide rows and columns with reference adjustment
 - ✅ Range-run styles: font, size, bold/italic/underline/strike, colours, fill,
   borders, alignment, wrap; format painter
-- 🔨 Number formats incl. custom codes and accounting styles (K/M, red parentheses)
-- ⬜ Merge cells and Center Across Selection; row heights, auto-fit, freeze panes
+- ✅ Number formats incl. custom codes and accounting styles (K/M, red parentheses)
+- 🔨 Merge cells and Center Across Selection; row heights, auto-fit, freeze panes
 - ⬜ Fill handle with series detection; default paste mode setting
 - ⬜ Command palette (Ctrl+K) listing every public action
 - ⬜ Crash-proof saving: action journal in OPFS, autosave, open/save via File System Access

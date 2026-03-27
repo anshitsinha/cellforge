@@ -28,6 +28,63 @@ the inside lines, a single side, a thick bottom, or a **double bottom** (the
 usual line under totals). **No borders** removes them. Default borders follow
 the theme colour, so they show in light and dark mode.
 
+## Number formats
+
+A number format changes how a number looks, never the number itself:
+`1234.5` can show as `$1,234.50`, `1.2K` or `123450%`, and formulas still
+see 1234.5.
+
+- The **format menu** has the common ones: Number, Currency, Accounting,
+  negatives in red, Thousands (`1K`), Millions (`1.2M`), Percent,
+  Scientific, dates, times, durations and Text.
+- **$**, **%** and **,** apply currency, percent and a thousands separator
+  (**Ctrl+Shift+4**, **Ctrl+Shift+5**, **Ctrl+Shift+1**).
+- **.0+** and **.0−** show one more or one fewer decimal place.
+- **Custom…** takes any Excel format code, with a live preview.
+
+### Typing formatted numbers
+
+Type a number the way you'd write it and cellforge stores the number and
+picks the matching format, as Excel does:
+
+| You type | Stored | Shown |
+| --- | --- | --- |
+| `12.5%` | 0.125 | 12.5% |
+| `$1,234.50` | 1234.5 | $1,234.50 |
+| `($20)` | −20 | ($20) |
+| `1,234,567` | 1234567 | 1,234,567 |
+| `2024-01-15` or `1/15/2024` | 45306 | the date |
+| `1:30 PM` | 0.5625 | 1:30 PM |
+
+A cell that already has a format keeps it. Dates are counted in days from
+1900, exactly like Excel, so date maths (`=B2-A2` for days between) works
+and files from Excel agree to the day. `1/2/2024` is read month first; if
+the first number can't be a month (`15/1/2024`), it's read day first.
+
+Cells formatted as **Text** keep exactly what you type: `00123` stays
+`00123` and `1-2` stays `1-2`.
+
+### Format codes
+
+Codes work as in Excel. Up to four parts separated by `;` style positive
+numbers, negatives, zero and text:
+
+| Code | 1234.5 shows | Notes |
+| --- | --- | --- |
+| `0.00` | 1234.50 | `0` always shows a digit |
+| `#,##0` | 1,235 | `#` only when needed; `,` groups thousands |
+| `#,##0.00;[Red](#,##0.00)` | 1,234.50 | negatives red, in parentheses |
+| `#,##0,"K"` | 1K | each trailing comma divides by 1,000 |
+| `0.0%` | 123450.0% | `%` multiplies by 100 |
+| `0.00E+00` | 1.23E+03 | scientific |
+| `"Total: "#,##0` | Total: 1,235 | text in quotes is shown as is |
+| `[>=1000]#,##0,"K";0` | 1K | conditions pick the part |
+| `yyyy-mm-dd` | 1903-05-18 | dates: `d dd ddd dddd`, `m mm mmm mmmm`, `yy yyyy` |
+| `[h]:mm` | 29628:00 | elapsed hours past 24 |
+
+Colours you can use: `[Black]`, `[White]`, `[Red]`, `[Green]`, `[Blue]`,
+`[Yellow]`, `[Magenta]`, `[Cyan]`.
+
 ## Format painter
 
 Select a cell that looks the way you want, click the brush, then select the
