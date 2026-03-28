@@ -8,7 +8,7 @@
  * tabs still changes the right sheet.
  */
 import { type Action, ActionRegistry, type BlobStore, type JsonSchema, s } from "@cellforge/actions";
-import { columnLetter } from "@cellforge/grid";
+import { columnLetter, expandToMerges, intersects } from "@cellforge/grid";
 import { type ColChange, formatFormula, parseFormula, parseTyped, type Node, type RowChange } from "@cellforge/core";
 import { type ColumnRemoval, type EditableSource, effectiveShift, type Fill, type FormulaSnapshot, isFormula, parseInput, type Stored } from "./editable";
 import { BlankSource, EditableSource as Source } from "./editable";
@@ -375,6 +375,7 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       async apply(ctx, p) {
         const { id, data } = target(ctx, p.sheet);
         checkBounds(data, [{ row: 0, col: p.col }]);
+        if (data.merges.length) throw new Error("Sorting needs merged cells to be unmerged first.");
         const before = data.rowOrder;
         const viewOrder = await ctx.sortRows(data, p.col, !!p.descending);
         if (!viewOrder) return null; // cancelled
@@ -588,6 +589,108 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       apply(ctx, p) {
         ctx.workbook.get(p.sheet).source.setColsHidden(p.cols, p.hidden);
         return { type: "cols.hideList", params: { ...p, hidden: !p.hidden } };
+      },
+    });
+
+  // ------------------------------------------------------------ merge --
+  registry
+    .register<{ range: Range; across?: boolean; center?: boolean; sheet?: string }>({
+      type: "cells.merge",
+      title: "Merge a range into one cell (across: one merge per row; center: centre the text). The first value is kept.",
+      schema: withSheet(
+        { range: rangeSchema, across: s.bool("merge each row separately"), center: s.bool("centre the text too") },
+        ["range"],
+      ),
+      describe: (p) => (p.across ? "merge across" : p.center ? "merge and centre" : "merge cells"),
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        checkBounds(data, [{ row: p.range.bottom, col: p.range.right }]);
+        // grow over merges it touches, then replace them
+        const r = expandToMerges(p.range, data.merges);
+        const blocks: Range[] = p.across
+          ? Array.from({ length: r.bottom - r.top + 1 }, (_, i) => ({ ...r, top: r.top + i, bottom: r.top + i }))
+          : [r];
+        const real = blocks.filter((b) => b.bottom > b.top || b.right > b.left);
+        if (!real.length) return null;
+        if (real.some((b) => (b.bottom - b.top + 1) * (b.right - b.left + 1) > 100_000)) {
+          throw new Error("Merged blocks are limited to 100,000 cells.");
+        }
+        const prevMerges = data.merges.map((m) => ({ ...m }));
+        // keep the first value of each block in its top-left cell, clear the rest
+        const writes: { row: number; col: number; value: Stored }[] = [];
+        for (const b of real) {
+          let first: Stored | undefined;
+          let firstAt: { row: number; col: number } | null = null;
+          for (let row = b.top; row <= b.bottom; row++) {
+            for (let col = b.left; col <= b.right; col++) {
+              if (data.getCell(row, col) === null) continue;
+              if (!firstAt) {
+                firstAt = { row, col };
+                first = data.getStored(row, col) ?? parseInput(data.getEditText(row, col));
+              }
+              if (row !== b.top || col !== b.left) writes.push({ row, col, value: null });
+            }
+          }
+          if (firstAt && (firstAt.row !== b.top || firstAt.col !== b.left)) writes.push({ row: b.top, col: b.left, value: first ?? null });
+        }
+        const before = snapshot(data, writes);
+        for (const w of writes) data.setCell(w.row, w.col, w.value);
+        data.merges = [...data.merges.filter((m) => !intersects(m, r)), ...real];
+        let formats: string | undefined;
+        if (p.center) {
+          const undoFormat = applyFormats(ctx, id, data, [{ range: r, patch: { align: "center" } }]);
+          formats = undoFormat ? (undoFormat.params as { cols: string }).cols : undefined;
+        }
+        return {
+          type: "cells.mergeRestore",
+          params: { sheet: id, merges: ctx.blobs.put(prevMerges), cells: before, ...(formats ? { formats } : {}) },
+        };
+      },
+    })
+    .register<{ range: Range; sheet?: string }>({
+      type: "cells.unmerge",
+      title: "Unmerge every merged block that touches a range",
+      schema: withSheet({ range: rangeSchema }, ["range"]),
+      describe: () => "unmerge cells",
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const keep = data.merges.filter((m) => !intersects(m, p.range));
+        if (keep.length === data.merges.length) return null;
+        const prev = data.merges.map((m) => ({ ...m }));
+        data.merges = keep;
+        return { type: "cells.mergeRestore", params: { sheet: id, merges: ctx.blobs.put(prev), cells: [] } };
+      },
+    })
+    .register<{ sheet: string; merges: string; cells: RestoreCell[]; formats?: string }>({
+      type: "cells.mergeRestore",
+      title: "Put merged cells back as they were",
+      internal: true,
+      schema: s.object(
+        {
+          sheet: s.string(),
+          merges: s.string(),
+          cells: s.array(s.object({ row: s.int(undefined, 0), col: s.int(undefined, 0), value: storedSchema, revert: s.bool() }, ["row", "col"])),
+          formats: s.string(),
+        },
+        ["sheet", "merges", "cells"],
+      ),
+      describe: () => "merge cells",
+      apply(ctx, p) {
+        const data = ctx.workbook.get(p.sheet).source;
+        const now = data.merges.map((m) => ({ ...m }));
+        const before = snapshot(data, p.cells);
+        for (const c of p.cells) {
+          if (c.revert) data.revertCell(c.row, c.col);
+          else data.setCell(c.row, c.col, fromJson(c.value ?? null));
+        }
+        data.merges = ctx.blobs.get<Range[]>(p.merges).map((m) => ({ ...m }));
+        const formats = p.formats ? swapFormats(ctx, data, p.formats) : undefined;
+        return {
+          type: "cells.mergeRestore",
+          params: { sheet: p.sheet, merges: ctx.blobs.put(now), cells: before, ...(formats ? { formats } : {}) },
+        };
       },
     });
 

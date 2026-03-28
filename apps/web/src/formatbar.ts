@@ -55,6 +55,7 @@ const ICONS = {
   right: icon(`<path d="M2 3h12M6 6.5h8M2 10h12M6 13.5h8"/>`),
   wrap: icon(`<path d="M2 3h12M2 7h9a2.5 2.5 0 0 1 0 5H8m1.5-1.8L8 12l1.5 1.8M2 12h3"/>`),
   painter: icon(`<rect x="2" y="2" width="10" height="4" rx="1"/><path d="M12 4h2v4H7.5v2.5M6.5 10.5h2V14h-2z"/>`),
+  merge: icon(`<path d="M2 3v10M14 3v10M5 8h6M9.5 6.5 11 8 9.5 9.5M6.5 6.5 5 8l1.5 1.5"/>`),
   clear: icon(`<path d="M3 13h6M5.5 3h7M9 3l-3 10M11 9l3 3m0-3-3 3"/>`),
 };
 
@@ -86,6 +87,7 @@ export function setupFormatBar(d: FormatBarDeps): { sync: () => void } {
     <button type="button" data-align="center" title="Centre" aria-pressed="false">${ICONS.center}</button>
     <button type="button" data-align="right" title="Align right" aria-pressed="false">${ICONS.right}</button>
     <button type="button" data-toggle="wrap" title="Wrap text" aria-pressed="false">${ICONS.wrap}</button>
+    <button type="button" id="fmt-merge" title="Merge and centre (click again to unmerge)" aria-pressed="false">${ICONS.merge}</button>
     <select id="fmt-borders" title="Borders">
       <option value="">Borders</option>
       <option value="all">All borders</option>
@@ -153,6 +155,20 @@ export function setupFormatBar(d: FormatBarDeps): { sync: () => void } {
     if (v === "thick-bottom") action = { type: "format.borders", params: { range: grid.range, which: "bottom", line: { ...line, style: "thick" } } };
     else if (v === "double-bottom") action = { type: "format.borders", params: { range: grid.range, which: "bottom", line: { ...line, style: "double" } } };
     else action = { type: "format.borders", params: { range: grid.range, which: v, line } };
+    void d.run(action).then(after);
+  });
+
+  // --- merge and centre: toggles like Excel's button
+  const mergeBtn = $<HTMLButtonElement>("#fmt-merge");
+  const mergedHere = () => {
+    const r = grid.range;
+    return d.source().getMerges().some((m) => m.top <= r.bottom && r.top <= m.bottom && m.left <= r.right && r.left <= m.right);
+  };
+  mergeBtn.addEventListener("click", () => {
+    const range = grid.range;
+    const action: Action = mergedHere()
+      ? { type: "cells.unmerge", params: { range } }
+      : { type: "cells.merge", params: { range, center: true } };
     void d.run(action).then(after);
   });
 
@@ -287,6 +303,7 @@ export function setupFormatBar(d: FormatBarDeps): { sync: () => void } {
       b.setAttribute("aria-pressed", String(st.align === b.dataset.align));
     }
     size.value = String(st.size ?? 10);
+    mergeBtn.setAttribute("aria-pressed", String(mergedHere()));
     const code = st.numFmt ?? "";
     const known = NUMBER_FORMATS.some(([, c]) => c === code);
     customOpt.textContent = known ? "Custom…" : `Custom · ${code}`;

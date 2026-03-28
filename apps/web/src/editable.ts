@@ -19,7 +19,7 @@ import {
   type RangeRef,
   type Scalar,
 } from "@cellforge/core";
-import { formatCell, type CellStyle, type CellValue, type DataSource } from "@cellforge/grid";
+import { formatCell, spliceMerges, type CellRange, type CellStyle, type CellValue, type DataSource } from "@cellforge/grid";
 import { formatGeneral, formatValue as formatWithCode, isDateFormat } from "@cellforge/core";
 import { DepIndex, type Rect } from "./deps";
 import { SheetStyles, type ColumnStyles } from "./styles";
@@ -180,6 +180,9 @@ export class EditableSource implements DataSource {
   /** frozen panes: rows above and columns left of this point stay put */
   frozen = { rows: 0, cols: 0 };
 
+  /** merged blocks, in view rows and columns */
+  merges: CellRange[] = [];
+
   private cache = new Map<number, Scalar>();
 
   // Dependency index: which formulas read which rectangles, so an edit only
@@ -231,6 +234,7 @@ export class EditableSource implements DataSource {
     copy.styles = this.styles.clone();
     copy.rowHeights = new Map(this.rowHeights);
     copy.frozen = { ...this.frozen };
+    copy.merges = this.merges.map((m) => ({ ...m }));
     copy.rebuildDeps();
     return copy;
   }
@@ -551,6 +555,7 @@ export class EditableSource implements DataSource {
   private spliceRows(at: number, remove: number, insert: number[]): number[] {
     const n = this.rowCount;
     if (at < 0 || at + remove > n) throw new Error("rows out of range");
+    if (this.merges.length) this.merges = spliceMerges(this.merges, "row", at, remove, insert.length);
     const current = this.order ?? identityOrder(n);
     const next = new Uint32Array(n - remove + insert.length);
     next.set(current.subarray(0, at));
@@ -577,6 +582,7 @@ export class EditableSource implements DataSource {
     }
     return {
       cells,
+      merges: this.merges.map((m) => ({ ...m })),
       fills: this.fills.map((f) => ({ ...f, template: isFormula(f.template) ? { ...f.template, ast: f.template.ast && cloneAst(f.template.ast) } : f.template, chunks: new Map(), computing: false })),
     };
   }
@@ -588,6 +594,7 @@ export class EditableSource implements DataSource {
     }
     for (const c of snap.cells) this.putEdit(c.id, c.col, { ...c.formula, ast: c.formula.ast && cloneAst(c.formula.ast) });
     this.fills = snap.fills.map((f) => ({ ...f, chunks: new Map(), computing: false }));
+    if (snap.merges) this.merges = snap.merges.map((m) => ({ ...m }));
     this.rebuildDeps();
     this.invalidate();
   }
@@ -760,6 +767,7 @@ export class EditableSource implements DataSource {
   insertColumns(at: number, count: number): void {
     if (at < 0 || at > this.colCount) throw new Error("column out of range");
     this.shiftColumns(at, count);
+    if (this.merges.length) this.merges = spliceMerges(this.merges, "col", at, 0, count);
     this.spliceColMap(at, 0, new Array(count).fill(-1));
     this.columnsChanged();
   }
@@ -777,6 +785,7 @@ export class EditableSource implements DataSource {
     const hidden = [...this.hiddenCols].filter((c) => c >= at && c < at + count);
     for (const c of hidden) this.hiddenCols.delete(c);
     const styles = this.styles.remove(at, count);
+    if (this.merges.length) this.merges = spliceMerges(this.merges, "col", at, count, 0);
     this.shiftColumns(at + count, -count);
     const map = this.spliceColMap(at, count, []);
     this.columnsChanged();
@@ -786,6 +795,7 @@ export class EditableSource implements DataSource {
   /** Undo of deleteColumns. */
   restoreColumns(at: number, removed: ColumnRemoval): void {
     this.shiftColumns(at, removed.map.length);
+    if (this.merges.length) this.merges = spliceMerges(this.merges, "col", at, 0, removed.map.length);
     this.spliceColMap(at, 0, removed.map);
     for (const e of removed.edits) this.putEdit(e.id, e.col, e.value);
     this.fills.push(...removed.fills);
@@ -982,6 +992,10 @@ export class EditableSource implements DataSource {
     this.heightsView = null;
     this.rebuildDeps();
     this.invalidate();
+  }
+
+  getMerges(): readonly CellRange[] {
+    return this.merges;
   }
 
   getStyle(row: number, col: number): CellStyle | null {
@@ -1432,6 +1446,8 @@ function sheetNames(node: Node): string[] {
 export interface FormulaSnapshot {
   cells: { id: number; col: number; formula: Formula }[];
   fills: Fill[];
+  /** merged blocks move with structural changes too */
+  merges?: CellRange[];
 }
 
 function identityOrder(n: number): Uint32Array {

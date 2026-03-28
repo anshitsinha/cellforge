@@ -232,6 +232,7 @@ function refresh() {
   grid.setHiddenColumns(source.hiddenColumns);
   grid.setRowHeights(source.rowHeightsByView());
   grid.setFrozen(source.frozen.rows, source.frozen.cols);
+  grid.setMerges(source.getMerges());
   grid.invalidate();
   syncFormulaBar();
   formatBar.sync();
@@ -673,6 +674,16 @@ sheet.addEventListener("contextmenu", (e) => {
     item(`Delete ${cols}`, "", () => void deleteCols());
     item(`Hide ${cols}`, "Ctrl 0", () => void hideCols(true));
     item("Unhide columns", "Ctrl Shift 0", () => void hideCols(false));
+  }
+  // merging, for a selection of more than one cell
+  const sel = grid.range;
+  const touchesMerge = source.getMerges().some((m) => m.top <= sel.bottom && sel.top <= m.bottom && m.left <= sel.right && sel.left <= m.right);
+  if (kind === "cell" && (sel.top !== sel.bottom || sel.left !== sel.right)) {
+    sep();
+    if (touchesMerge) item("Unmerge cells", "", () => void run({ type: "cells.unmerge", params: { range: sel } }));
+    item("Merge cells", "", () => void run({ type: "cells.merge", params: { range: sel } }));
+    item("Merge and centre", "", () => void run({ type: "cells.merge", params: { range: sel, center: true } }));
+    if (sel.bottom > sel.top) item("Merge across", "", () => void run({ type: "cells.merge", params: { range: sel, across: true } }));
   }
   // freeze panes, as in Excel: rows above and columns left of the active cell
   sep();

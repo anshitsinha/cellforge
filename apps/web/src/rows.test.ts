@@ -437,3 +437,57 @@ describe("row heights and freeze panes", () => {
     expect(sheet.frozen).toEqual({ rows: 0, cols: 0 });
   });
 });
+
+describe("merged cells", () => {
+  const R = (top: number, left: number, bottom: number, right: number) => ({ top, left, bottom, right });
+
+  it("keeps the first value in the top-left, clears the rest, and undoes exactly", async () => {
+    const { history, sheet, type } = setup(6, 4);
+    await type([["B1", "x"], ["C2", "=1+1"]]);
+    await history.run({ type: "cells.merge", params: { range: R(0, 0, 1, 2) } });
+    expect(sheet.merges).toEqual([R(0, 0, 1, 2)]);
+    expect(sheet.getCell(0, 0)).toBe("x");
+    expect(sheet.getCell(0, 1)).toBeNull();
+    expect(sheet.getCell(1, 2)).toBeNull();
+    await history.undo();
+    expect(sheet.merges).toEqual([]);
+    expect(sheet.getCell(0, 0)).toBeNull();
+    expect(sheet.getCell(0, 1)).toBe("x");
+    expect(sheet.getEditText(1, 2)).toBe("=1+1");
+  });
+
+  it("merge across makes one block per row; merge and centre centres", async () => {
+    const { history, sheet } = setup(6, 4);
+    await history.run({ type: "cells.merge", params: { range: R(0, 0, 2, 2), across: true, center: true } });
+    expect(sheet.merges).toEqual([R(0, 0, 0, 2), R(1, 0, 1, 2), R(2, 0, 2, 2)]);
+    expect(sheet.getStyle(1, 1)?.align).toBe("center");
+    await history.undo();
+    expect(sheet.merges).toEqual([]);
+    expect(sheet.getStyle(1, 1)).toBeNull();
+  });
+
+  it("merges move and shrink with inserts and deletes, and come back on undo", async () => {
+    const { history, sheet } = setup(10, 6);
+    await history.run({ type: "cells.merge", params: { range: R(2, 1, 4, 2) } });
+    await history.run({ type: "rows.insert", params: { at: 0, count: 1 } });
+    expect(sheet.merges).toEqual([R(3, 1, 5, 2)]);
+    await history.run({ type: "cols.delete", params: { at: 1, count: 1 } });
+    expect(sheet.merges).toEqual([R(3, 1, 5, 1)]);
+    await history.run({ type: "rows.delete", params: { at: 3, count: 3 } });
+    expect(sheet.merges).toEqual([]);
+    await history.undo();
+    expect(sheet.merges).toEqual([R(3, 1, 5, 1)]);
+    await history.undo();
+    expect(sheet.merges).toEqual([R(3, 1, 5, 2)]);
+  });
+
+  it("unmerge, and sorting refuses while merges exist", async () => {
+    const { history, sheet } = setup(6, 3);
+    await history.run({ type: "cells.merge", params: { range: R(0, 0, 0, 1) } });
+    await expect(history.run({ type: "rows.sort", params: { col: 0 } })).rejects.toThrow(/unmerged/);
+    await history.run({ type: "cells.unmerge", params: { range: R(0, 1, 0, 1) } });
+    expect(sheet.merges).toEqual([]);
+    await history.undo();
+    expect(sheet.merges).toEqual([R(0, 0, 0, 1)]);
+  });
+});
