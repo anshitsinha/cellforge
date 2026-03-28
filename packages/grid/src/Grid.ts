@@ -1,6 +1,7 @@
 import { CellEditor, type EditorRect } from "./CellEditor";
 import { RowVisibility } from "./rows";
 import { RowLayout } from "./rowlayout";
+import { expandToMerges, mergeAt } from "./merges";
 import type { BorderLine, BorderStyle, CellStyle } from "./types";
 import { ColumnLayout, columnLetter } from "./columns";
 import { formatCell } from "./format";
@@ -105,6 +106,8 @@ export class Grid {
   /** rows 0..frozenRows-1 and columns 0..frozenCols-1 stay put when scrolling */
   private frozenRows = 0;
   private frozenCols = 0;
+  /** merged blocks, in real row / column numbers */
+  private merges: CellRange[] = [];
   private readonly headerHeight: number;
   private readonly defaultColumnWidth: number;
   private readonly touchEnabled: boolean;
@@ -248,6 +251,19 @@ export class Grid {
     this.extent = clamp(this.extent);
   }
 
+  /** Show these blocks as merged cells (each draws as its top-left cell). */
+  setMerges(merges: readonly CellRange[]): void {
+    this.merges = merges.map((m) => ({ ...m }));
+    const m = mergeAt(this.merges, this.active.row, this.active.col);
+    if (m && (m.top !== this.active.row || m.left !== this.active.col)) {
+      this.active = { row: m.top, col: m.left };
+      if (this.extent.row >= m.top && this.extent.row <= m.bottom && this.extent.col >= m.left && this.extent.col <= m.right) {
+        this.extent = { ...this.active };
+      }
+    }
+    this.invalidate();
+  }
+
   /** Rows with their own height (px), by real row; every other row is the default. */
   setRowHeights(heights: ReadonlyMap<number, number>): void {
     this.customHeights = new Map(heights);
@@ -377,12 +393,14 @@ export class Grid {
 
   /** The full selected rectangle (just the active cell if nothing's extended). */
   get range(): CellRange {
-    return {
+    const r = {
       top: Math.min(this.active.row, this.extent.row),
       bottom: Math.max(this.active.row, this.extent.row),
       left: Math.min(this.active.col, this.extent.col),
       right: Math.max(this.active.col, this.extent.col),
     };
+    // a selection never cuts a merged block in half
+    return this.merges.length ? expandToMerges(r, this.merges) : r;
   }
 
   /**
@@ -413,6 +431,12 @@ export class Grid {
   }
 
   private setSelection(active: CellRef, extent: CellRef): void {
+    const am = this.merges.length ? mergeAt(this.merges, active.row, active.col) : null;
+    if (am) {
+      const single = extent.row === active.row && extent.col === active.col;
+      active = { row: am.top, col: am.left };
+      if (single || (extent.row >= am.top && extent.row <= am.bottom && extent.col >= am.left && extent.col <= am.right)) extent = active;
+    }
     const same =
       active.row === this.active.row &&
       active.col === this.active.col &&
@@ -449,6 +473,19 @@ export class Grid {
   /** Cell bounds in css px relative to the container. */
   private cellRect(row: number, col: number): EditorRect {
     const d = this.hidden.toDisplay(row);
+    const m = this.merges.length ? mergeAt(this.merges, row, col) : null;
+    if (m) {
+      const d0 = this.hidden.toDisplay(m.top);
+      const d1 = this.hidden.toDisplay(m.bottom + 1);
+      const x = this.colScreenX(m.left);
+      const y = this.rowScreenY(d0);
+      return {
+        x,
+        y,
+        width: this.colScreenX(m.right) + this.columns.width(m.right) - x + 1,
+        height: this.layout.top(d1) - this.layout.top(d0) + 1,
+      };
+    }
     return {
       x: this.colScreenX(col),
       y: this.rowScreenY(d),
@@ -815,6 +852,10 @@ export class Grid {
     // shift + navigation keys extend the range, moving its far corner
     const extend = e.shiftKey && e.key !== "Tab" && e.key !== "Enter";
     const { row: r, col: c } = extend ? this.extent : this.active;
+    // moving down or right out of a merged block starts from its far edge
+    const inMerge = this.merges.length ? mergeAt(this.merges, extend ? r : row, extend ? c : col) : null;
+    const downFrom = inMerge ? inMerge.bottom : r;
+    const rightFrom = inMerge ? inMerge.right : c;
 
     let next: CellRef | null = null;
     switch (e.key) {
@@ -822,19 +863,19 @@ export class Grid {
         next = { row: jump ? 0 : r - 1, col: c };
         break;
       case "ArrowDown":
-        next = { row: jump ? lastRow : r + 1, col: c };
+        next = { row: jump ? lastRow : downFrom + 1, col: c };
         break;
       case "ArrowLeft":
         next = { row: r, col: jump ? 0 : c - 1 };
         break;
       case "ArrowRight":
-        next = { row: r, col: jump ? lastCol : c + 1 };
+        next = { row: r, col: jump ? lastCol : rightFrom + 1 };
         break;
       case "Tab":
-        next = { row, col: e.shiftKey ? col - 1 : col + 1 };
+        next = { row, col: e.shiftKey ? col - 1 : (inMerge ? inMerge.right : col) + 1 };
         break;
       case "Enter":
-        next = { row: e.shiftKey ? row - 1 : row + 1, col };
+        next = { row: e.shiftKey ? row - 1 : (inMerge ? inMerge.bottom : row) + 1, col };
         break;
       case "PageUp":
         next = { row: this.hidden.toRow(Math.max(0, this.hidden.toDisplay(r) - pageRows)), col: c };
@@ -1233,9 +1274,21 @@ export class Grid {
 
     const range = this.range;
     const sel = { top: dispTop(range.top), bottom: dispBottom(range.bottom), left: range.left, right: range.right };
-    const multi = range.top !== range.bottom || range.left !== range.right;
     const { row: activeRow, col: ac } = this.active;
     const ar = hidden.isHidden(activeRow) ? -1 : dispTop(activeRow);
+    const am = this.merges.length ? mergeAt(this.merges, activeRow, ac) : null;
+    // "multi" = more than the active cell (or its merged block) is selected
+    const multi = am
+      ? range.top !== am.top || range.bottom !== am.bottom || range.left !== am.left || range.right !== am.right
+      : range.top !== range.bottom || range.left !== range.right;
+    /** screen rectangle of a block of real rows / columns */
+    const blockRect = (b: CellRange) => {
+      const d0 = dispTop(b.top);
+      const d1 = dispBottom(b.bottom);
+      const x = colX(b.left);
+      const y = rowY(d0);
+      return { x, y, w: colX(b.right) + columns.width(b.right) - x, h: rowY(d1) + rowH(d1) - y, d0, d1 };
+    };
 
     ctx.font = FONT;
     ctx.textBaseline = "middle";
@@ -1300,6 +1353,23 @@ export class Grid {
           ctx.setLineDash([]);
         }
 
+        // merged blocks: one cell's look over the whole block
+        for (const m of this.merges) {
+          const b = blockRect(m);
+          if (b.d1 < rs.from || b.d0 > rs.to || m.right < cs.from || m.left > cs.to || b.d1 < b.d0) continue;
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(b.x, b.y, b.w, b.h);
+          ctx.clip();
+          ctx.fillStyle = theme.background;
+          ctx.fillRect(b.x, b.y, b.w, b.h);
+          this.paintCell(m.top, m.left, b.x, b.y, b.w, b.h, true);
+          ctx.restore();
+          ctx.strokeStyle = theme.gridLine;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(Math.round(b.x) + 0.5, Math.round(b.y) + 0.5, Math.round(b.w), Math.round(b.h));
+        }
+
         // selection: a range can be 100M rows tall, so edges outside this
         // pane are pinned just outside it rather than computed in pixels
         const visTop = Math.max(sel.top, rs.from);
@@ -1323,10 +1393,11 @@ export class Grid {
 
         // active cell
         if (ar >= rs.from && ar <= rs.to && ac >= cs.from && ac <= cs.to && !this.hiddenCols.has(ac)) {
-          const x = colX(ac);
-          const y = rowY(ar);
-          const w = columns.width(ac);
-          const h = rowH(ar);
+          const block = am ? blockRect(am) : null;
+          const x = block ? block.x : colX(ac);
+          const y = block ? block.y : rowY(ar);
+          const w = block ? block.w : columns.width(ac);
+          const h = block ? block.h : rowH(ar);
           if (multi) {
             // inside a range the active cell shows as unfilled, like Excel
             ctx.fillStyle = theme.background;
