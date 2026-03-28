@@ -591,6 +591,61 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       },
     });
 
+  // ------------------------------------------------------------- view --
+  registry
+    .register<{ at: number; count?: number; height?: number | null; heights?: (number | null)[]; sheet?: string }>({
+      type: "rows.height",
+      title: "Set the height of rows in pixels (null for the default height)",
+      schema: withSheet(
+        {
+          at: s.int("first row, 0-based", 0),
+          count: s.int("how many rows", 1, 100_000_000),
+          height: s.anyOf(s.int("height in px", 8, 409), s.null()),
+          heights: s.array(s.anyOf(s.int(undefined, 8, 409), s.null()), "a height per row from at on, instead of one height"),
+        },
+        ["at"],
+      ),
+      describe: () => "row height",
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const changed = p.heights
+          ? p.heights.flatMap((h, i) => data.setRowHeights(p.at + i, 1, h))
+          : data.setRowHeights(p.at, p.count ?? 1, p.height ?? null);
+        if (!changed.length) return null;
+        return { type: "rows.heightIds", params: { sheet: id, entries: ctx.blobs.put(changed) } };
+      },
+    })
+    .register<{ sheet: string; entries: string }>({
+      type: "rows.heightIds",
+      title: "Put row heights back",
+      internal: true,
+      schema: s.object({ sheet: s.string(), entries: s.string() }),
+      describe: () => "row height",
+      apply(ctx, p) {
+        const data = ctx.workbook.get(p.sheet).source;
+        const before = data.restoreRowHeights(ctx.blobs.get<[number, number | null][]>(p.entries));
+        return { type: "rows.heightIds", params: { sheet: p.sheet, entries: ctx.blobs.put(before) } };
+      },
+    })
+    .register<{ rows: number; cols: number; sheet?: string }>({
+      type: "view.freeze",
+      title: "Freeze panes: keep the top rows and left columns on screen while scrolling (0, 0 unfreezes)",
+      schema: withSheet(
+        { rows: s.int("rows to freeze from the top", 0, 1000), cols: s.int("columns to freeze from the left", 0, 100) },
+        ["rows", "cols"],
+      ),
+      describe: (p) => (p.rows || p.cols ? "freeze panes" : "unfreeze panes"),
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const before = { ...data.frozen };
+        if (before.rows === p.rows && before.cols === p.cols) return null;
+        data.frozen = { rows: p.rows, cols: p.cols };
+        return { type: "view.freeze", params: { ...before, sheet: id } };
+      },
+    });
+
   // ----------------------------------------------------------- format --
   registry
     .register<{ range: Range; style: StylePatch; sheet?: string }>({

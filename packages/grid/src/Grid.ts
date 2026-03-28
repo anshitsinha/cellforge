@@ -14,6 +14,8 @@ const SCROLLBAR_SIZE = 10;
 const MIN_THUMB = 24;
 const RESIZE_HANDLE = 4; // px either side of a column border that counts as "grab"
 const MIN_COLUMN_WIDTH = 30;
+const MIN_ROW_HEIGHT = 8;
+const MAX_ROW_HEIGHT = 409; // Excel's limit, in px here
 const TOUCH_SCROLLBAR_ZONE = 28; // px from the right edge that grabs the scrollbar
 const TAP_SLOP = 8; // px a finger can move and still count as a tap
 const DOUBLE_TAP_MS = 350;
@@ -68,6 +70,7 @@ interface Thumb {
 type Drag =
   | { kind: "select" }
   | { kind: "resize"; col: number; startX: number; startWidth: number }
+  | { kind: "rowresize"; row: number; startY: number; startHeight: number; height: number }
   | { kind: "vscroll" | "hscroll"; startPos: number; startScroll: number };
 
 /**
@@ -129,6 +132,8 @@ export class Grid {
 
   /** Called whenever the selection changes (click, keyboard, or select()). */
   onSelectionChange: ((cell: CellRef) => void) | null = null;
+  /** A row was resized by dragging its border or auto-fitted (height in px). */
+  onRowResize: ((row: number, height: number) => void) | null = null;
 
   /** Called when the user asks to clear the selected range (Delete key). */
   onClearRange: ((range: CellRange) => void) | null = null;
@@ -697,6 +702,15 @@ export class Grid {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
+    // row border in the row header -> resize the row
+    const resizeRow = this.rowResizeHandleAt(x, y);
+    if (resizeRow !== null) {
+      e.preventDefault();
+      const h = this.rowHeightOf(resizeRow);
+      this.startDrag({ kind: "rowresize", row: resizeRow, startY: e.clientY, startHeight: h, height: h });
+      return;
+    }
+
     // column border in the header -> start resizing
     const resizeCol = this.resizeHandleAt(x, y);
     if (resizeCol !== null) {
@@ -905,6 +919,11 @@ export class Grid {
     } else if (drag.kind === "resize") {
       const width = Math.max(MIN_COLUMN_WIDTH, drag.startWidth + e.clientX - drag.startX);
       this.columns.setWidth(drag.col, width);
+    } else if (drag.kind === "rowresize") {
+      // preview locally; the owner records the final height on release
+      drag.height = Math.round(Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, drag.startHeight + e.clientY - drag.startY)));
+      this.customHeights.set(drag.row, drag.height);
+      this.heightsVersion++;
     } else {
       const vertical = drag.kind === "vscroll";
       const thumb = vertical ? this.verticalThumb() : this.horizontalThumb();
@@ -924,7 +943,9 @@ export class Grid {
   };
 
   private endDrag = (): void => {
+    const drag = this.drag;
     this.drag = null;
+    if (drag?.kind === "rowresize" && drag.height !== drag.startHeight) this.onRowResize?.(drag.row, drag.height);
     window.removeEventListener("pointermove", this.onDragMove);
     window.removeEventListener("pointerup", this.endDrag);
     window.removeEventListener("pointercancel", this.endDrag);
@@ -934,9 +955,69 @@ export class Grid {
   private onHover = (e: MouseEvent): void => {
     if (this.drag) return;
     const rect = this.canvas.getBoundingClientRect();
-    const onHandle = this.resizeHandleAt(e.clientX - rect.left, e.clientY - rect.top) !== null;
-    this.canvas.style.cursor = onHandle ? "col-resize" : "default";
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    this.canvas.style.cursor =
+      this.resizeHandleAt(x, y) !== null ? "col-resize" : this.rowResizeHandleAt(x, y) !== null ? "row-resize" : "default";
   };
+
+  /** If (x, y) is on a row's bottom border inside the row header, return that (real) row. */
+  private rowResizeHandleAt(x: number, y: number): number | null {
+    if (x > this.rowHeaderWidth || y < this.headerHeight) return null;
+    const cy = this.contentY(y - this.headerHeight);
+    const layout = this.layout;
+    if (layout.count === 0) return null;
+    const d = layout.indexAt(cy);
+    const top = layout.top(d);
+    const bottom = top + layout.height(d);
+    if (Math.abs(cy - bottom) <= RESIZE_HANDLE) return this.hidden.toRow(d);
+    if (d > 0 && Math.abs(cy - top) <= RESIZE_HANDLE) return this.hidden.toRow(d - 1);
+    return null;
+  }
+
+  /** The height a row needs to show all its text (wrapped cells grow it). */
+  fitRowHeight(row: number): number {
+    const { ctx } = this;
+    let need = this.rowHeight;
+    const cols = Math.min(this.columns.count, 4096);
+    for (let c = 0; c < cols; c++) {
+      const value = this.source.getCell(row, c);
+      if (value === null) continue;
+      const style = this.source.getStyle?.(row, c) ?? null;
+      const px = style?.size ? Math.round((style.size * 4) / 3) : DEFAULT_PX;
+      const lineH = Math.round(px * 1.3);
+      let lines = 1;
+      if (style?.wrap) {
+        ctx.font = fontFor(style);
+        const text = this.source.formatValue ? this.source.formatValue(value, style).text : formatCell(value);
+        lines = wrapLines(ctx, text, this.columns.width(c) - 2 * CELL_PADDING).length;
+      }
+      need = Math.max(need, lines * lineH + 8);
+    }
+    return Math.min(MAX_ROW_HEIGHT, need);
+  }
+
+  /** The width a column needs for the text in the rows on screen. */
+  fitColumnWidth(col: number): number {
+    const { ctx } = this;
+    const layout = this.layout;
+    const from = layout.indexAt(this.scrollY);
+    const to = Math.min(layout.count - 1, layout.indexAt(this.scrollY + this.bodyHeight));
+    let need = MIN_COLUMN_WIDTH;
+    ctx.font = HEADER_FONT;
+    need = Math.max(need, ctx.measureText(this.source.getColumnName?.(col) ?? columnLetter(col)).width + 2 * CELL_PADDING);
+    for (let d = Math.min(from, this.frozenRows); d <= to; d++) {
+      const row = this.hidden.toRow(d);
+      const value = this.source.getCell(row, col);
+      if (value === null) continue;
+      const style = this.source.getStyle?.(row, col) ?? null;
+      if (style?.wrap) continue;
+      ctx.font = fontFor(style);
+      const text = this.source.formatValue ? this.source.formatValue(value, style).text : formatCell(value);
+      need = Math.max(need, ctx.measureText(text).width + 2 * CELL_PADDING + 2);
+    }
+    return Math.min(1000, Math.ceil(need));
+  }
 
   /** If (x, y) is on a column border inside the header, return that column. */
   private resizeHandleAt(x: number, y: number): number | null {
@@ -955,6 +1036,22 @@ export class Grid {
     // dblclick for them, which would open the editor twice
     if (e.timeStamp - this.lastTouchEnd < 600) return;
     const rect = this.canvas.getBoundingClientRect();
+    // double-click a border: fit the row or column to its contents
+    const bx = e.clientX - rect.left;
+    const by = e.clientY - rect.top;
+    const fitRow = this.rowResizeHandleAt(bx, by);
+    if (fitRow !== null) {
+      const h = this.fitRowHeight(fitRow);
+      if (h !== this.rowHeightOf(fitRow)) this.onRowResize?.(fitRow, h);
+      return;
+    }
+    const fitCol = this.resizeHandleAt(bx, by);
+    if (fitCol !== null) {
+      this.columns.setWidth(fitCol, this.fitColumnWidth(fitCol));
+      this.clampScroll();
+      this.invalidate();
+      return;
+    }
     if (this.hitTest(e.clientX - rect.left, e.clientY - rect.top)) {
       this.startEditing();
     }

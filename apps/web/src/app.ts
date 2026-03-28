@@ -114,6 +114,15 @@ grid.onSelectionChange = () => {
   formatBar.sync();
 };
 
+// drag a row border (or double-click it to fit): resize that row, or every
+// selected row when the drag is on one of several selected whole rows
+grid.onRowResize = (row, height) => {
+  const r = grid.range;
+  const wholeRows = r.left === 0 && r.right === source.colCount - 1;
+  const inside = wholeRows && row >= r.top && row <= r.bottom;
+  void run({ type: "rows.height", params: { at: inside ? r.top : row, count: inside ? r.bottom - r.top + 1 : 1, height } });
+};
+
 const formatBar = setupFormatBar({
   root: document.getElementById("format-bar")!,
   grid,
@@ -221,6 +230,8 @@ function refresh() {
   grid.syncShape();
   grid.setHiddenRows(source.hiddenRowIntervals());
   grid.setHiddenColumns(source.hiddenColumns);
+  grid.setRowHeights(source.rowHeightsByView());
+  grid.setFrozen(source.frozen.rows, source.frozen.cols);
   grid.invalidate();
   syncFormulaBar();
   formatBar.sync();
@@ -596,6 +607,18 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+/** Fit the selected rows to their contents (one undo step). */
+async function fitRows() {
+  const { top, count } = selectedRows();
+  const rows = Math.min(count, 5000); // measuring is per row; keep it quick
+  const heights: (number | null)[] = [];
+  for (let r = top; r < top + rows; r++) {
+    const h = grid.fitRowHeight(r);
+    heights.push(h === grid.defaultRowHeight ? null : h);
+  }
+  await run({ type: "rows.height", params: { at: top, heights } });
+}
+
 let cellMenu: HTMLElement | null = null;
 function closeCellMenu() {
   cellMenu?.remove();
@@ -636,12 +659,14 @@ sheet.addEventListener("contextmenu", (e) => {
     item(`Delete ${rows}`, "Ctrl Alt −", () => void deleteRows());
     item(`Hide ${rows}`, "Ctrl 9", () => void hideRows(true));
     item("Unhide rows", "Ctrl Shift 9", () => void hideRows(false));
+    item(`Fit ${count === 1 ? "row height" : "row heights"}`, "", () => void fitRows());
   }
-  if (kind === "cell") {
+  const sep = () => {
     const d = document.createElement("div");
     d.className = "menu-sep";
     menu.append(d);
-  }
+  };
+  if (kind === "cell") sep();
   if (kind !== "rows") {
     item(`Insert ${cols} left`, "", () => void insertCols(false));
     item(`Insert ${cols} right`, "", () => void insertCols(true));
@@ -649,6 +674,16 @@ sheet.addEventListener("contextmenu", (e) => {
     item(`Hide ${cols}`, "Ctrl 0", () => void hideCols(true));
     item("Unhide columns", "Ctrl Shift 0", () => void hideCols(false));
   }
+  // freeze panes, as in Excel: rows above and columns left of the active cell
+  sep();
+  const { row: ar, col: acol } = grid.selection;
+  const frozen = source.frozen.rows > 0 || source.frozen.cols > 0;
+  if (frozen) item("Unfreeze panes", "", () => void run({ type: "view.freeze", params: { rows: 0, cols: 0 } }));
+  if (kind === "cell" && (ar > 0 || acol > 0)) {
+    item(`Freeze above row ${ar + 1}${acol > 0 ? ` and left of ${columnLetter(acol)}` : ""}`, "", () => void run({ type: "view.freeze", params: { rows: ar, cols: acol } }));
+  }
+  if (kind !== "cols") item("Freeze top row", "", () => void run({ type: "view.freeze", params: { rows: 1, cols: 0 } }));
+  if (kind !== "rows") item("Freeze first column", "", () => void run({ type: "view.freeze", params: { rows: 0, cols: 1 } }));
   document.body.append(menu);
   const r = menu.getBoundingClientRect();
   menu.style.left = `${Math.min(e.clientX, innerWidth - r.width - 8)}px`;

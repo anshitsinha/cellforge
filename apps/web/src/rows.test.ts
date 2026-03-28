@@ -400,3 +400,40 @@ describe("randomised: hidden rows and columns follow their data", () => {
     });
   }
 });
+
+describe("row heights and freeze panes", () => {
+  it("heights follow their rows through sort and insert, and undo exactly", async () => {
+    const { history, sheet, type } = setup(6, 1);
+    await type([["A1", "3"], ["A2", "1"], ["A3", "2"]]);
+    await history.run({ type: "rows.height", params: { at: 0, count: 1, height: 60 } }); // the 3
+    expect([...sheet.rowHeightsByView()]).toEqual([[0, 60]]);
+    await history.run({ type: "rows.sort", params: { col: 0 } });
+    expect([...sheet.rowHeightsByView()]).toEqual([[2, 60]]);
+    await history.run({ type: "rows.insert", params: { at: 0, count: 1 } });
+    expect([...sheet.rowHeightsByView()]).toEqual([[3, 60]]);
+    await history.undo();
+    await history.undo();
+    await history.undo();
+    expect(sheet.rowHeightsByView().size).toBe(0);
+  });
+
+  it("per-row heights are one undo step; null goes back to the default", async () => {
+    const { history, sheet } = setup(6, 1);
+    await history.run({ type: "rows.height", params: { at: 1, heights: [40, null, 50] } });
+    expect([...sheet.rowHeightsByView()].sort()).toEqual([[1, 40], [3, 50]]);
+    await history.run({ type: "rows.height", params: { at: 1, height: null } });
+    expect([...sheet.rowHeightsByView()]).toEqual([[3, 50]]);
+    await history.undo();
+    await history.undo();
+    expect(sheet.rowHeightsByView().size).toBe(0);
+  });
+
+  it("freeze panes is an action and undoes", async () => {
+    const { history, sheet } = setup();
+    await history.run({ type: "view.freeze", params: { rows: 1, cols: 2 } });
+    expect(sheet.frozen).toEqual({ rows: 1, cols: 2 });
+    expect(sheet.clone().frozen).toEqual({ rows: 1, cols: 2 });
+    await history.undo();
+    expect(sheet.frozen).toEqual({ rows: 0, cols: 0 });
+  });
+});

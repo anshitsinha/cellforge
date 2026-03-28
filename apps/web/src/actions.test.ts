@@ -142,6 +142,8 @@ describe("sheet actions", () => {
       "cols.delete",
       "rows.hide",
       "cols.hide",
+      "rows.height",
+      "view.freeze",
       "format.set",
       "format.borders",
       "format.clear",

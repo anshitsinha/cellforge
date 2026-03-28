@@ -173,6 +173,13 @@ export class EditableSource implements DataSource {
   /** formatting, by view column and row id (so it moves with its row) */
   styles = new SheetStyles();
 
+  /** row heights in px that differ from the default, by row id */
+  private rowHeights = new Map<number, number>();
+  private heightsView: Map<number, number> | null = null;
+
+  /** frozen panes: rows above and columns left of this point stay put */
+  frozen = { rows: 0, cols: 0 };
+
   private cache = new Map<number, Scalar>();
 
   // Dependency index: which formulas read which rectangles, so an edit only
@@ -222,6 +229,8 @@ export class EditableSource implements DataSource {
     copy.hiddenRowIds = new Set(this.hiddenRowIds);
     copy.hiddenCols = new Set(this.hiddenCols);
     copy.styles = this.styles.clone();
+    copy.rowHeights = new Map(this.rowHeights);
+    copy.frozen = { ...this.frozen };
     copy.rebuildDeps();
     return copy;
   }
@@ -551,6 +560,7 @@ export class EditableSource implements DataSource {
     // back to the identity (e.g. an insert was undone): fast paths come back
     this.order = isIdentity(next, this.base.rowCount) ? null : next;
     this.hiddenIntervalsCache = null;
+    this.heightsView = null;
     this.rebuildDeps();
     this.invalidate();
     return removed;
@@ -914,6 +924,48 @@ export class EditableSource implements DataSource {
     return out;
   }
 
+  /**
+   * Set view rows at..at+count-1 to `height` px (null: the default).
+   * Returns each changed row id with its old height (null: default), for undo.
+   */
+  setRowHeights(at: number, count: number, height: number | null): [number, number | null][] {
+    const changed: [number, number | null][] = [];
+    for (let v = at; v < at + count && v < this.rowCount; v++) {
+      const id = this.toBase(v);
+      const old = this.rowHeights.get(id) ?? null;
+      if (old === height) continue;
+      changed.push([id, old]);
+      if (height === null) this.rowHeights.delete(id);
+      else this.rowHeights.set(id, height);
+    }
+    if (changed.length) this.heightsView = null;
+    return changed;
+  }
+
+  /** Put row heights back by id (undo); returns what they were. */
+  restoreRowHeights(entries: [number, number | null][]): [number, number | null][] {
+    const before: [number, number | null][] = entries.map(([id]) => [id, this.rowHeights.get(id) ?? null]);
+    for (const [id, h] of entries) {
+      if (h === null) this.rowHeights.delete(id);
+      else this.rowHeights.set(id, h);
+    }
+    this.heightsView = null;
+    return before;
+  }
+
+  /** Row heights by view row, for the grid. */
+  rowHeightsByView(): ReadonlyMap<number, number> {
+    if (this.heightsView) return this.heightsView;
+    const out = new Map<number, number>();
+    const viewOf = this.order ? this.viewLookup() : (id: number) => (id < this.rowCount ? id : -1);
+    for (const [id, h] of this.rowHeights) {
+      const v = viewOf(id);
+      if (v >= 0) out.set(v, h);
+    }
+    this.heightsView = out;
+    return out;
+  }
+
   get hiddenColumns(): ReadonlySet<number> {
     return this.hiddenCols;
   }
@@ -927,6 +979,7 @@ export class EditableSource implements DataSource {
     if (order && order.length !== this.rowCount) throw new Error("row order has the wrong length");
     this.order = order;
     this.hiddenIntervalsCache = null;
+    this.heightsView = null;
     this.rebuildDeps();
     this.invalidate();
   }

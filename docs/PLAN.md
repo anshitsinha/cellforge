@@ -69,8 +69,8 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Merge cells and Center Across Selection; row heights, auto-fit, freeze panes
-- [ ] Freeze rows and columns: the grid draws four panes; scroll, selection and hit-testing respect them
-- [ ] Row heights: variable heights stored sparsely, drag to resize, double-click to auto-fit; wrapped text auto-grows
+- [x] Freeze rows and columns: the grid draws four panes; scroll, selection and hit-testing respect them
+- [x] Row heights: variable heights stored sparsely, drag to resize, double-click or "Fit row height" to auto-fit (wrapped text too)
 - [ ] Merge cells (merge, merge across, unmerge) and Centre Across Selection; selection snaps to merged blocks
 - [ ] Actions for all of it (view.freeze, rows.height, cells.merge) with undo; moves with insert/delete
 - [ ] Toolbar and menu entries, tests, user guide
