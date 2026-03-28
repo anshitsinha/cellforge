@@ -1,5 +1,6 @@
 import { CellEditor, type EditorRect } from "./CellEditor";
 import { RowVisibility } from "./rows";
+import { RowLayout } from "./rowlayout";
 import type { BorderLine, BorderStyle, CellStyle } from "./types";
 import { ColumnLayout, columnLetter } from "./columns";
 import { formatCell } from "./format";
@@ -92,6 +93,15 @@ export class Grid {
   private readonly hidden = new RowVisibility();
   /** hidden columns, with the width each had, to restore on unhide */
   private hiddenCols = new Map<number, number>();
+  /** row heights that differ from the default, by real row */
+  private customHeights = new Map<number, number>();
+  private readonly rowLayout: RowLayout;
+  private layoutKey = "";
+  private hiddenVersion = 0;
+  private heightsVersion = 0;
+  /** rows 0..frozenRows-1 and columns 0..frozenCols-1 stay put when scrolling */
+  private frozenRows = 0;
+  private frozenCols = 0;
   private readonly headerHeight: number;
   private readonly defaultColumnWidth: number;
   private readonly touchEnabled: boolean;
@@ -138,6 +148,7 @@ export class Grid {
     options: GridOptions = {},
   ) {
     this.rowHeight = options.rowHeight ?? 24;
+    this.rowLayout = new RowLayout(this.rowHeight);
     this.headerHeight = options.headerHeight ?? 24;
     this.defaultColumnWidth = options.defaultColumnWidth ?? 110;
     this.touchEnabled = options.touch ?? true;
@@ -232,9 +243,78 @@ export class Grid {
     this.extent = clamp(this.extent);
   }
 
+  /** Rows with their own height (px), by real row; every other row is the default. */
+  setRowHeights(heights: ReadonlyMap<number, number>): void {
+    this.customHeights = new Map(heights);
+    this.heightsVersion++;
+    this.clampScroll();
+    this.invalidate();
+  }
+
+  /** Height of a real row in px. */
+  rowHeightOf(row: number): number {
+    return this.customHeights.get(row) ?? this.rowHeight;
+  }
+
+  get defaultRowHeight(): number {
+    return this.rowHeight;
+  }
+
+  /** Keep the top `rows` rows and left `cols` columns in place while scrolling. */
+  setFrozen(rows: number, cols: number): void {
+    this.frozenRows = Math.max(0, rows);
+    this.frozenCols = Math.max(0, cols);
+    this.clampScroll();
+    this.invalidate();
+  }
+
+  get frozen(): { rows: number; cols: number } {
+    return { rows: this.frozenRows, cols: this.frozenCols };
+  }
+
+  /** Row geometry, rebuilt only when heights, hidden rows or the row count change. */
+  private get layout(): RowLayout {
+    const key = `${this.hiddenVersion}:${this.heightsVersion}:${this.displayRows}`;
+    if (key !== this.layoutKey) {
+      this.rowLayout.update(this.customHeights, this.hidden, this.displayRows);
+      this.layoutKey = key;
+    }
+    return this.rowLayout;
+  }
+
+  /** Frozen display rows / columns and their size in px. */
+  private frozenGeometry(): { fd: number; fc: number; fh: number; fw: number } {
+    const layout = this.layout;
+    const fd = Math.min(this.hidden.toDisplay(Math.min(this.frozenRows, this.source.rowCount)), layout.count);
+    const fc = Math.min(this.frozenCols, this.columns.count);
+    return { fd, fc, fh: layout.top(fd), fw: this.columns.left(fc) };
+  }
+
+  /** Screen y of display row d (frozen rows don't scroll). */
+  private rowScreenY(d: number): number {
+    const fd = this.frozenRows ? this.frozenGeometry().fd : 0;
+    return this.headerHeight + this.layout.top(d) - (d < fd ? 0 : this.scrollY);
+  }
+
+  private colScreenX(c: number): number {
+    return this.rowHeaderWidth + this.columns.left(c) - (c < this.frozenCols ? 0 : this.scrollX);
+  }
+
+  /** A y offset inside the body (0 = just under the header) to a content offset. */
+  private contentY(y: number): number {
+    const fh = this.frozenRows ? this.frozenGeometry().fh : 0;
+    return y < fh ? y : y + this.scrollY;
+  }
+
+  private contentX(x: number): number {
+    const fw = this.frozenCols ? this.columns.left(Math.min(this.frozenCols, this.columns.count)) : 0;
+    return x < fw ? x : x + this.scrollX;
+  }
+
   /** Hide exactly these rows (inclusive intervals of real row numbers). */
   setHiddenRows(intervals: readonly [number, number][]): void {
     this.hidden.set(intervals);
+    this.hiddenVersion++;
     this.snapActiveToVisible();
     this.clampScroll();
     this.invalidate();
@@ -363,26 +443,32 @@ export class Grid {
 
   /** Cell bounds in css px relative to the container. */
   private cellRect(row: number, col: number): EditorRect {
-    const firstRow = Math.floor(this.scrollY / this.rowHeight);
-    const rowShift = this.scrollY - firstRow * this.rowHeight;
+    const d = this.hidden.toDisplay(row);
     return {
-      x: this.rowHeaderWidth + this.columns.left(col) - this.scrollX,
-      y: this.headerHeight + (this.hidden.toDisplay(row) - firstRow) * this.rowHeight - rowShift,
+      x: this.colScreenX(col),
+      y: this.rowScreenY(d),
       width: this.columns.width(col) + 1,
-      height: this.rowHeight + 1,
+      height: this.layout.height(d) + 1,
     };
   }
 
   scrollIntoView(row: number, col: number): void {
-    const top = this.hidden.toDisplay(row) * this.rowHeight;
-    const bottom = top + this.rowHeight;
-    if (top < this.scrollY) this.scrollY = top;
-    else if (bottom > this.scrollY + this.bodyHeight) this.scrollY = bottom - this.bodyHeight;
-
-    const left = this.columns.left(col);
-    const right = left + this.columns.width(col);
-    if (left < this.scrollX) this.scrollX = left;
-    else if (right > this.scrollX + this.bodyWidth) this.scrollX = right - this.bodyWidth;
+    // frozen rows and columns are always on screen; the rest must fit
+    // between the frozen part and the far edge
+    const { fd, fh, fw } = this.frozenGeometry();
+    const d = this.hidden.toDisplay(row);
+    if (d >= fd) {
+      const top = this.layout.top(d);
+      const bottom = top + this.layout.height(d);
+      if (top < this.scrollY + fh) this.scrollY = top - fh;
+      else if (bottom > this.scrollY + this.bodyHeight) this.scrollY = bottom - this.bodyHeight;
+    }
+    if (col >= this.frozenCols) {
+      const left = this.columns.left(col);
+      const right = left + this.columns.width(col);
+      if (left < this.scrollX + fw) this.scrollX = left - fw;
+      else if (right > this.scrollX + this.bodyWidth) this.scrollX = right - this.bodyWidth;
+    }
 
     this.clampScroll();
     this.invalidate();
@@ -429,7 +515,7 @@ export class Grid {
   }
 
   private get maxScrollY(): number {
-    return Math.max(0, this.displayRows * this.rowHeight - this.bodyHeight);
+    return Math.max(0, this.layout.total - this.bodyHeight);
   }
 
   private updateRowHeaderWidth(): void {
@@ -663,13 +749,14 @@ export class Grid {
       return;
     }
     if (y < this.headerHeight) {
-      const col = this.columns.indexAt(x - this.rowHeaderWidth + this.scrollX);
+      const col = this.columns.indexAt(this.contentX(x - this.rowHeaderWidth));
       if (extend) this.setSelection({ row: 0, col: active.col }, { row: lastRow, col });
       else this.setSelection({ row: 0, col }, { row: lastRow, col });
       return;
     }
-    const d = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight);
-    if (d >= this.displayRows) return;
+    const cy = this.contentY(y - this.headerHeight);
+    if (cy >= this.layout.total) return;
+    const d = this.layout.indexAt(cy);
     const row = this.hidden.toRow(d);
     if (extend) this.setSelection({ row: active.row, col: 0 }, { row, col: lastCol });
     else this.setSelection({ row, col: 0 }, { row, col: lastCol });
@@ -854,7 +941,7 @@ export class Grid {
   /** If (x, y) is on a column border inside the header, return that column. */
   private resizeHandleAt(x: number, y: number): number | null {
     if (y > this.headerHeight || x < this.rowHeaderWidth) return null;
-    const contentX = x - this.rowHeaderWidth + this.scrollX;
+    const contentX = this.contentX(x - this.rowHeaderWidth);
     const col = this.columns.indexAt(contentX);
     const right = this.columns.left(col) + this.columns.width(col);
     if (Math.abs(contentX - right) <= RESIZE_HANDLE) return col;
@@ -886,7 +973,7 @@ export class Grid {
     if (y < this.headerHeight && x < this.rowHeaderWidth) return null;
     const r = this.range;
     if (y < this.headerHeight) {
-      const col = this.columns.indexAt(x - this.rowHeaderWidth + this.scrollX);
+      const col = this.columns.indexAt(this.contentX(x - this.rowHeaderWidth));
       if (col < r.left || col > r.right || r.top !== 0 || r.bottom !== this.source.rowCount - 1) this.onHeaderDown(x, y, false);
       return "cols";
     }
@@ -904,9 +991,10 @@ export class Grid {
   private hitTest(x: number, y: number): CellRef | null {
     if (x < this.rowHeaderWidth || y < this.headerHeight) return null;
     if (x > this.rowHeaderWidth + this.bodyWidth || y > this.headerHeight + this.bodyHeight) return null;
-    const d = Math.floor((y - this.headerHeight + this.scrollY) / this.rowHeight);
-    const col = this.columns.indexAt(x - this.rowHeaderWidth + this.scrollX);
-    if (d >= this.displayRows) return null;
+    const cy = this.contentY(y - this.headerHeight);
+    const col = this.columns.indexAt(this.contentX(x - this.rowHeaderWidth));
+    if (cy >= this.layout.total) return null;
+    const d = this.layout.indexAt(cy);
     return { row: this.hidden.toRow(d), col };
   }
 
@@ -916,9 +1004,9 @@ export class Grid {
     const cy = clamp(y, this.headerHeight, this.headerHeight + this.bodyHeight - 1);
     return {
       row: this.hidden.toRow(
-        clamp(Math.floor((cy - this.headerHeight + this.scrollY) / this.rowHeight), 0, Math.max(0, this.displayRows - 1)),
+        this.layout.indexAt(this.contentY(cy - this.headerHeight)),
       ),
-      col: this.columns.indexAt(cx - this.rowHeaderWidth + this.scrollX),
+      col: this.columns.indexAt(this.contentX(cx - this.rowHeaderWidth)),
     };
   }
 
@@ -1007,8 +1095,7 @@ export class Grid {
   }
 
   private draw(): void {
-    const { ctx, theme, columns, rowHeight, headerHeight, rowHeaderWidth } = this;
-    const { rowCount } = this.source;
+    const { ctx, theme, columns, headerHeight, rowHeaderWidth } = this;
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = theme.background;
@@ -1017,142 +1104,159 @@ export class Grid {
 
     const bodyW = this.bodyWidth;
     const bodyH = this.bodyHeight;
-
-    // visible window
-    // display positions (hidden rows take no space); rows keep real numbers
     const hidden = this.hidden;
-    const firstRow = Math.floor(this.scrollY / rowHeight);
-    const rowShift = this.scrollY - firstRow * rowHeight; // partial row at the top
-    const lastRow = Math.min(rowCount - hidden.hiddenCount - 1, firstRow + Math.ceil(bodyH / rowHeight));
+    const layout = this.layout;
+    const displayRows = layout.count;
     const realRow = (d: number) => hidden.toRow(d);
     const dispTop = (r: number) => hidden.toDisplay(r);
     const dispBottom = (r: number) => hidden.toDisplay(r + 1) - 1;
-    const firstCol = columns.indexAt(this.scrollX);
-    let lastCol = firstCol;
-    while (lastCol < columns.count - 1 && columns.left(lastCol + 1) < this.scrollX + bodyW) {
-      lastCol++;
+    const rowY = (d: number) => this.rowScreenY(d);
+    const colX = (c: number) => this.colScreenX(c);
+    const rowH = (d: number) => layout.height(d);
+
+    // panes: frozen rows/columns first (if any), then the scrolling part
+    const { fd, fc, fh, fw } = this.frozenGeometry();
+    type Span = { from: number; to: number; start: number; size: number };
+    const rowSpans: Span[] = [];
+    if (fd > 0) rowSpans.push({ from: 0, to: fd - 1, start: headerHeight, size: Math.min(fh, bodyH) });
+    if (fh < bodyH && fd < displayRows) {
+      const from = Math.max(fd, layout.indexAt(this.scrollY + fh));
+      let to = from;
+      while (to < displayRows - 1 && rowY(to + 1) < headerHeight + bodyH) to++;
+      rowSpans.push({ from, to, start: headerHeight + fh, size: bodyH - fh });
+    }
+    const colSpans: Span[] = [];
+    if (fc > 0) colSpans.push({ from: 0, to: fc - 1, start: rowHeaderWidth, size: Math.min(fw, bodyW) });
+    if (fw < bodyW && fc < columns.count) {
+      const from = Math.max(fc, columns.indexAt(this.scrollX + fw));
+      let to = from;
+      while (to < columns.count - 1 && colX(to + 1) < rowHeaderWidth + bodyW) to++;
+      colSpans.push({ from, to, start: rowHeaderWidth + fw, size: bodyW - fw });
     }
 
-    const colX = (c: number) => rowHeaderWidth + columns.left(c) - this.scrollX;
-    const rowY = (r: number) => headerHeight + (r - firstRow) * rowHeight - rowShift;
-
-    // --- cells -------------------------------------------------------------
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(rowHeaderWidth, headerHeight, bodyW, bodyH);
-    ctx.clip();
+    const range = this.range;
+    const sel = { top: dispTop(range.top), bottom: dispBottom(range.bottom), left: range.left, right: range.right };
+    const multi = range.top !== range.bottom || range.left !== range.right;
+    const { row: activeRow, col: ac } = this.active;
+    const ar = hidden.isHidden(activeRow) ? -1 : dispTop(activeRow);
 
     ctx.font = FONT;
     ctx.textBaseline = "middle";
-    ctx.fillStyle = theme.text;
 
-    for (let c = firstCol; c <= lastCol; c++) {
-      const x = colX(c);
-      const w = columns.width(c);
-      // clip once per column rather than per cell - way cheaper and still
-      // stops long strings from bleeding into the next column
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(x, headerHeight, w, bodyH);
-      ctx.clip();
-      for (let d = firstRow; d <= lastRow; d++) this.paintCell(realRow(d), c, x, rowY(d), w, rowHeight, true);
-      ctx.restore();
-    }
-
-    // grid lines - one path for everything, single stroke call
-    ctx.beginPath();
-    for (let c = firstCol; c <= lastCol + 1; c++) {
-      const x = Math.round(colX(Math.min(c, columns.count))) + 0.5;
-      ctx.moveTo(x, headerHeight);
-      ctx.lineTo(x, headerHeight + bodyH);
-    }
-    for (let r = firstRow; r <= lastRow + 1; r++) {
-      const y = Math.round(rowY(r)) + 0.5;
-      ctx.moveTo(rowHeaderWidth, y);
-      ctx.lineTo(rowHeaderWidth + bodyW, y);
-    }
-    ctx.strokeStyle = theme.gridLine;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // cell borders, over the grid lines
-    if (this.source.getStyle) {
-      for (let c = firstCol; c <= lastCol; c++) {
-        const w = columns.width(c);
-        if (w === 0) continue;
-        const x = colX(c);
-        for (let d = firstRow; d <= lastRow; d++) {
-          const st = this.source.getStyle(realRow(d), c);
-          if (!st || !(st.borderTop || st.borderRight || st.borderBottom || st.borderLeft)) continue;
-          const y = rowY(d);
-          if (st.borderTop) this.strokeBorder(st.borderTop, x, y, x + w, y);
-          if (st.borderBottom) this.strokeBorder(st.borderBottom, x, y + rowHeight, x + w, y + rowHeight);
-          if (st.borderLeft) this.strokeBorder(st.borderLeft, x, y, x, y + rowHeight);
-          if (st.borderRight) this.strokeBorder(st.borderRight, x + w, y, x + w, y + rowHeight);
-        }
-      }
-      ctx.setLineDash([]);
-    }
-
-    // selected range: light fill + border. A range can be 100M rows tall, so
-    // edges that are off-screen get pinned just outside the viewport instead
-    // of computing pixel coords in the billions.
-    const range = this.range;
-    // the selection in display positions
-    const sel = { top: dispTop(range.top), bottom: dispBottom(range.bottom), left: range.left, right: range.right };
-    const visTop = Math.max(sel.top, firstRow);
-    const visBottom = Math.min(sel.bottom, lastRow);
-    const visLeft = Math.max(sel.left, firstCol);
-    const visRight = Math.min(sel.right, lastCol);
-    const rangeVisible = visTop <= visBottom && visLeft <= visRight;
-    const multi = range.top !== range.bottom || range.left !== range.right;
-    if (rangeVisible && multi) {
-      const x0 = sel.left < firstCol ? rowHeaderWidth - 4 : colX(sel.left);
-      const x1 = sel.right > lastCol ? rowHeaderWidth + bodyW + 4 : colX(sel.right) + columns.width(sel.right);
-      const y0 = sel.top < firstRow ? headerHeight - 4 : rowY(sel.top);
-      const y1 = sel.bottom > lastRow ? headerHeight + bodyH + 4 : rowY(sel.bottom) + rowHeight;
-      ctx.save();
-      ctx.globalAlpha = 0.12;
-      ctx.fillStyle = theme.accent;
-      ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
-      ctx.restore();
-      ctx.strokeStyle = theme.accent;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(Math.round(x0) + 0.5, Math.round(y0) + 0.5, Math.round(x1 - x0), Math.round(y1 - y0));
-    }
-
-    // active cell outline (drawn even if partly off-screen; the clip handles it)
-    const { row: activeRow, col: ac } = this.active;
-    const ar = hidden.isHidden(activeRow) ? -1 : dispTop(activeRow);
-    if (ar >= firstRow && ar <= lastRow && ac >= firstCol && ac <= lastCol && !this.hiddenCols.has(ac)) {
-      if (multi) {
-        // inside a range the active cell shows as unfilled, like Excel
-        ctx.fillStyle = theme.background;
-        ctx.globalAlpha = 0.6;
-        ctx.fillRect(colX(ac) + 1, rowY(ar) + 1, columns.width(ac) - 1, rowHeight - 1);
-        ctx.globalAlpha = 1;
-        // the fill covered the text, so redraw it
+    for (const rs of rowSpans) {
+      for (const cs of colSpans) {
         ctx.save();
         ctx.beginPath();
-        ctx.rect(colX(ac), rowY(ar), columns.width(ac), rowHeight);
+        ctx.rect(cs.start, rs.start, cs.size, rs.size);
         ctx.clip();
-        this.paintCell(activeRow, ac, colX(ac), rowY(ar), columns.width(ac), rowHeight, false);
+        const yTop = rs.start;
+        const yBottom = rs.start + rs.size;
+        const xLeft = cs.start;
+        const xRight = cs.start + cs.size;
+
+        // cells: clip once per column so long text stays in its column
+        for (let c = cs.from; c <= cs.to; c++) {
+          const x = colX(c);
+          const w = columns.width(c);
+          if (w === 0) continue;
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(x, yTop, w, rs.size);
+          ctx.clip();
+          for (let d = rs.from; d <= rs.to; d++) this.paintCell(realRow(d), c, x, rowY(d), w, rowH(d), true);
+          ctx.restore();
+        }
+
+        // grid lines, one path
+        ctx.beginPath();
+        for (let c = cs.from; c <= cs.to + 1; c++) {
+          const x = Math.round(colX(Math.min(c, columns.count))) + 0.5;
+          ctx.moveTo(x, yTop);
+          ctx.lineTo(x, yBottom);
+        }
+        for (let d = rs.from; d <= rs.to + 1; d++) {
+          const y = Math.round(rowY(d)) + 0.5;
+          ctx.moveTo(xLeft, y);
+          ctx.lineTo(xRight, y);
+        }
+        ctx.strokeStyle = theme.gridLine;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // cell borders, over the grid lines
+        if (this.source.getStyle) {
+          for (let c = cs.from; c <= cs.to; c++) {
+            const w = columns.width(c);
+            if (w === 0) continue;
+            const x = colX(c);
+            for (let d = rs.from; d <= rs.to; d++) {
+              const st = this.source.getStyle(realRow(d), c);
+              if (!st || !(st.borderTop || st.borderRight || st.borderBottom || st.borderLeft)) continue;
+              const y = rowY(d);
+              const h = rowH(d);
+              if (st.borderTop) this.strokeBorder(st.borderTop, x, y, x + w, y);
+              if (st.borderBottom) this.strokeBorder(st.borderBottom, x, y + h, x + w, y + h);
+              if (st.borderLeft) this.strokeBorder(st.borderLeft, x, y, x, y + h);
+              if (st.borderRight) this.strokeBorder(st.borderRight, x + w, y, x + w, y + h);
+            }
+          }
+          ctx.setLineDash([]);
+        }
+
+        // selection: a range can be 100M rows tall, so edges outside this
+        // pane are pinned just outside it rather than computed in pixels
+        const visTop = Math.max(sel.top, rs.from);
+        const visBottom = Math.min(sel.bottom, rs.to);
+        const visLeft = Math.max(sel.left, cs.from);
+        const visRight = Math.min(sel.right, cs.to);
+        if (multi && visTop <= visBottom && visLeft <= visRight) {
+          const x0 = sel.left < cs.from ? xLeft - 4 : colX(sel.left);
+          const x1 = sel.right > cs.to ? xRight + 4 : colX(sel.right) + columns.width(sel.right);
+          const y0 = sel.top < rs.from ? yTop - 4 : rowY(sel.top);
+          const y1 = sel.bottom > rs.to ? yBottom + 4 : rowY(sel.bottom) + rowH(sel.bottom);
+          ctx.save();
+          ctx.globalAlpha = 0.12;
+          ctx.fillStyle = theme.accent;
+          ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+          ctx.restore();
+          ctx.strokeStyle = theme.accent;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(Math.round(x0) + 0.5, Math.round(y0) + 0.5, Math.round(x1 - x0), Math.round(y1 - y0));
+        }
+
+        // active cell
+        if (ar >= rs.from && ar <= rs.to && ac >= cs.from && ac <= cs.to && !this.hiddenCols.has(ac)) {
+          const x = colX(ac);
+          const y = rowY(ar);
+          const w = columns.width(ac);
+          const h = rowH(ar);
+          if (multi) {
+            // inside a range the active cell shows as unfilled, like Excel
+            ctx.fillStyle = theme.background;
+            ctx.globalAlpha = 0.6;
+            ctx.fillRect(x + 1, y + 1, w - 1, h - 1);
+            ctx.globalAlpha = 1;
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(x, y, w, h);
+            ctx.clip();
+            this.paintCell(activeRow, ac, x, y, w, h, false);
+            ctx.restore();
+          }
+          ctx.strokeStyle = theme.accent;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(Math.round(x) + 1, Math.round(y) + 1, w - 1, h - 1);
+        }
         ctx.restore();
       }
-      ctx.strokeStyle = theme.accent;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(
-        Math.round(colX(ac)) + 1,
-        Math.round(rowY(ar)) + 1,
-        columns.width(ac) - 1,
-        rowHeight - 1,
-      );
     }
-    ctx.restore();
+
+    // the lines under frozen rows and beside frozen columns
+    ctx.fillStyle = theme.mutedText;
+    if (fd > 0 && fh < bodyH) ctx.fillRect(rowHeaderWidth, headerHeight + fh - 1, bodyW, 2);
+    if (fc > 0 && fw < bodyW) ctx.fillRect(rowHeaderWidth + fw - 1, headerHeight, 2, bodyH);
 
     // --- headers -----------------------------------------------------------
-    // (textBaseline has to be set again - the cell pass set it inside a
-    // save/restore, so it's back to "alphabetic" here)
     ctx.font = HEADER_FONT;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -1160,52 +1264,55 @@ export class Grid {
     ctx.fillRect(0, 0, this.width, headerHeight);
     ctx.fillRect(0, 0, rowHeaderWidth, this.height);
 
-    // tint the headers of the selected rows/columns so it's easy to find your place
-    ctx.save();
-    ctx.globalAlpha = 0.18;
-    ctx.fillStyle = theme.accent;
-    if (visLeft <= visRight) {
-      const hx0 = Math.max(rowHeaderWidth, colX(visLeft));
-      const hx1 = colX(visRight) + columns.width(visRight);
-      ctx.fillRect(hx0, 0, hx1 - hx0, headerHeight);
-    }
-    if (visTop <= visBottom) {
-      const hy0 = Math.max(headerHeight, rowY(visTop));
-      const hy1 = rowY(visBottom) + rowHeight;
-      ctx.fillRect(0, hy0, rowHeaderWidth, hy1 - hy0);
-    }
-    ctx.restore();
-
-    // column headers
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(rowHeaderWidth, 0, bodyW, headerHeight);
-    ctx.clip();
-    ctx.fillStyle = theme.mutedText;
-    for (let c = firstCol; c <= lastCol; c++) {
-      if (this.hiddenCols.has(c)) {
-        // a hidden column: a thicker line where it sits, like Excel
-        ctx.fillRect(colX(c) - 1, 0, 2, headerHeight);
-        continue;
+    for (const cs of colSpans) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(cs.start, 0, cs.size, headerHeight);
+      ctx.clip();
+      // tint the selected columns' headers
+      const l = Math.max(sel.left, cs.from);
+      const r = Math.min(sel.right, cs.to);
+      if (l <= r) {
+        ctx.globalAlpha = 0.18;
+        ctx.fillStyle = theme.accent;
+        ctx.fillRect(colX(l), 0, colX(r) + columns.width(r) - colX(l), headerHeight);
+        ctx.globalAlpha = 1;
       }
-      const label = this.source.getColumnName?.(c) ?? columnLetter(c);
-      ctx.fillText(label, colX(c) + columns.width(c) / 2, headerHeight / 2);
+      ctx.fillStyle = theme.mutedText;
+      for (let c = cs.from; c <= cs.to; c++) {
+        if (this.hiddenCols.has(c)) {
+          // a hidden column: a thicker line where it sits, like Excel
+          ctx.fillRect(colX(c) - 1, 0, 2, headerHeight);
+          continue;
+        }
+        const label = this.source.getColumnName?.(c) ?? columnLetter(c);
+        ctx.fillText(label, colX(c) + columns.width(c) / 2, headerHeight / 2);
+      }
+      ctx.restore();
     }
-    ctx.restore();
 
-    // row numbers (1-based, like every other spreadsheet)
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, headerHeight, rowHeaderWidth, bodyH);
-    ctx.clip();
-    ctx.fillStyle = theme.mutedText;
-    for (let d = firstRow; d <= lastRow; d++) {
-      const r = realRow(d);
-      ctx.fillText(String(r + 1), rowHeaderWidth / 2, rowY(d) + rowHeight / 2);
-      // a hidden block just above: a thicker line, like Excel
-      if (r > 0 && hidden.isHidden(r - 1)) ctx.fillRect(0, rowY(d) - 1, rowHeaderWidth, 2);
+    for (const rs of rowSpans) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, rs.start, rowHeaderWidth, rs.size);
+      ctx.clip();
+      const t = Math.max(sel.top, rs.from);
+      const b = Math.min(sel.bottom, rs.to);
+      if (t <= b) {
+        ctx.globalAlpha = 0.18;
+        ctx.fillStyle = theme.accent;
+        ctx.fillRect(0, rowY(t), rowHeaderWidth, rowY(b) + rowH(b) - rowY(t));
+        ctx.globalAlpha = 1;
+      }
+      ctx.fillStyle = theme.mutedText;
+      for (let d = rs.from; d <= rs.to; d++) {
+        const row = realRow(d);
+        ctx.fillText(String(row + 1), rowHeaderWidth / 2, rowY(d) + rowH(d) / 2);
+        // a hidden block just above: a thicker line, like Excel
+        if (row > 0 && hidden.isHidden(row - 1)) ctx.fillRect(0, rowY(d) - 1, rowHeaderWidth, 2);
+      }
+      ctx.restore();
     }
-    ctx.restore();
 
     // header borders
     ctx.beginPath();
@@ -1243,7 +1350,7 @@ export class Grid {
 
   private verticalThumb(): Thumb | null {
     return thumbFor(
-      this.displayRows * this.rowHeight,
+      this.layout.total,
       this.bodyHeight,
       this.scrollY,
       this.maxScrollY,
