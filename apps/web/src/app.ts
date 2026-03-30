@@ -684,6 +684,7 @@ sheet.addEventListener("contextmenu", (e) => {
     item("Merge cells", "", () => void run({ type: "cells.merge", params: { range: sel } }));
     item("Merge and centre", "", () => void run({ type: "cells.merge", params: { range: sel, center: true } }));
     if (sel.bottom > sel.top) item("Merge across", "", () => void run({ type: "cells.merge", params: { range: sel, across: true } }));
+    if (sel.right > sel.left) item("Centre across selection (no merge)", "", () => void run({ type: "format.set", params: { range: sel, style: { align: "centerAcross" } } }));
   }
   // freeze panes, as in Excel: rows above and columns left of the active cell
   sep();

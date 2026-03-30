@@ -1160,7 +1160,14 @@ export class Grid {
    * One cell's fill (optional) and text, in its style. The caller has
    * clipped to the column (or the cell).
    */
-  private paintCell(row: number, col: number, x: number, y: number, w: number, h: number, fill: boolean): void {
+  /** Last column of a Centre Across Selection run starting at (row, col). */
+  private acrossEnd(row: number, col: number): number {
+    let e = col;
+    while (e + 1 < this.columns.count && this.source.getCell(row, e + 1) === null && this.source.getStyle?.(row, e + 1)?.align === "centerAcross") e++;
+    return e;
+  }
+
+  private paintCell(row: number, col: number, x: number, y: number, w: number, h: number, fill: boolean, spanText = false): void {
     const { ctx } = this;
     const style = this.source.getStyle?.(row, col) ?? null;
     if (fill && style?.fill) {
@@ -1169,11 +1176,13 @@ export class Grid {
     }
     const value = this.source.getCell(row, col);
     if (value === null) return;
+    // centred across empty neighbours: the span pass draws the text
+    if (style?.align === "centerAcross" && !spanText && this.acrossEnd(row, col) > col) return;
     const shown = this.source.formatValue ? this.source.formatValue(value, style) : { text: formatCell(value) };
     const text = shown.text;
     ctx.font = fontFor(style);
     ctx.fillStyle = shown.color ?? style?.color ?? this.theme.text;
-    const align = style?.align ?? (typeof value === "number" ? "right" : "left");
+    const align = style?.align === "centerAcross" ? "center" : (style?.align ?? (typeof value === "number" ? "right" : "left"));
     ctx.textAlign = align;
     const tx = align === "left" ? x + CELL_PADDING : align === "right" ? x + w - CELL_PADDING : x + w / 2;
     const px = style?.size ? Math.round((style.size * 4) / 3) : DEFAULT_PX;
@@ -1351,6 +1360,27 @@ export class Grid {
             }
           }
           ctx.setLineDash([]);
+        }
+
+        // Centre Across Selection: text centred over its run of empty cells
+        if (this.source.getStyle) {
+          for (let d = rs.from; d <= rs.to; d++) {
+            const row = realRow(d);
+            for (let c = Math.max(0, cs.from - 30); c <= cs.to; c++) {
+              if (this.source.getStyle(row, c)?.align !== "centerAcross" || this.source.getCell(row, c) === null) continue;
+              const e = this.acrossEnd(row, c);
+              if (e === c) continue;
+              const x = colX(c);
+              const w = colX(e) + columns.width(e) - x;
+              ctx.save();
+              ctx.beginPath();
+              ctx.rect(Math.max(x, xLeft), yTop, Math.min(x + w, xRight) - Math.max(x, xLeft), rs.size);
+              ctx.clip();
+              this.paintCell(row, c, x, rowY(d), w, rowH(d), false, true);
+              ctx.restore();
+              c = e;
+            }
+          }
         }
 
         // merged blocks: one cell's look over the whole block

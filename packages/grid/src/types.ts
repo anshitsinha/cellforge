@@ -88,7 +88,8 @@ export interface CellStyle {
   font?: string;
   color?: string;
   fill?: string;
-  align?: "left" | "center" | "right";
+  /** centerAcross: centred over the empty cells to the right that share it */
+  align?: "left" | "center" | "right" | "centerAcross";
   valign?: "top" | "middle" | "bottom";
   wrap?: boolean;
   /** Excel number format code, e.g. "#,##0.00" or "yyyy-mm-dd" */

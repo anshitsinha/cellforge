@@ -100,7 +100,7 @@ const styleSchema = s.object(
     font: nullable(s.string("font family")),
     color: nullable(color),
     fill: nullable(color),
-    align: nullable(s.string("horizontal alignment", { enum: ["left", "center", "right"] })),
+    align: nullable(s.string("horizontal alignment; centerAcross centres over the empty cells to the right", { enum: ["left", "center", "right", "centerAcross"] })),
     valign: nullable(s.string("vertical alignment", { enum: ["top", "middle", "bottom"] })),
     wrap: nullable(s.bool()),
     numFmt: nullable(s.string('Excel number format code, e.g. "#,##0.00", "0.0%", "yyyy-mm-dd", \'$#,##0;[Red]($#,##0)\'', { maxLength: 255 })),
