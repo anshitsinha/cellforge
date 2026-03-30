@@ -104,3 +104,44 @@ leaves the values alone.
   ten-row one, so it's instant.
 - **Duplicate sheet** copies the formatting.
 - CSV files don't store formatting, so **Export CSV** leaves it out.
+
+## Merge cells and Centre Across Selection
+
+Select the cells, then right-click:
+
+- **Merge cells** joins them into one cell. If several of them had values,
+  the first one (reading left to right, top to bottom) is kept in the
+  top-left cell and the others are cleared; undo brings them back.
+- **Merge and centre** does the same and centres the text (also the
+  merge button on the format bar; click it again to unmerge).
+- **Merge across** merges each selected row on its own, handy for a block
+  of labels.
+- **Unmerge cells** splits every merged block the selection touches.
+- **Centre across selection (no merge)** centres text over the empty cells
+  to its right *without* merging. It looks the same, but you can still
+  select, sort and paste each cell normally, which is why many finance teams
+  prefer it.
+
+Clicking anywhere in a merged block selects the whole block, and the arrow
+keys step over it. Inserting rows or columns inside a merged block grows it;
+deleting some of its rows or columns shrinks it. Sorting asks you to unmerge
+first, as Excel does.
+
+## Row heights
+
+Drag the line under a row number to change that row's height; with several
+whole rows selected, they all change. Double-click the line, or right-click
+and choose **Fit row height**, to fit the row to its text, which is how a
+wrapped cell gets the room to show every line. Heights stay with their rows
+when you sort.
+
+Double-click the line between two column letters to fit the column to the
+widest value on screen.
+
+## Freeze panes
+
+Right-click and choose **Freeze top row**, **Freeze first column**, or
+**Freeze above row N and left of X** to keep everything above and to the
+left of the selected cell on screen while you scroll. A darker line marks
+the frozen edge. **Unfreeze panes** turns it off. Freezing is per sheet and
+can be undone.

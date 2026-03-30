@@ -68,12 +68,12 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Merge cells and Center Across Selection; row heights, auto-fit, freeze panes
-- [x] Freeze rows and columns: the grid draws four panes; scroll, selection and hit-testing respect them
-- [x] Row heights: variable heights stored sparsely, drag to resize, double-click or "Fit row height" to auto-fit (wrapped text too)
-- [ ] Merge cells (merge, merge across, unmerge) and Centre Across Selection; selection snaps to merged blocks
-- [ ] Actions for all of it (view.freeze, rows.height, cells.merge) with undo; moves with insert/delete
-- [ ] Toolbar and menu entries, tests, user guide
+### Fill handle with series detection; default paste mode setting
+- [ ] Series detection: numbers (step from the selection), dates by day/month/year, weekdays and month names, text with a trailing number (Q1, Item 7)
+- [ ] `fill.series` action: fill down / right / up / left from a source block, copying or extending, formulas shifted
+- [ ] Fill handle: the square on the selection corner; drag to fill, double-click to fill down to the end of the neighbouring data
+- [ ] Paste options: paste values / formulas / formats, and a default paste mode setting
+- [ ] Tests against Excel's results, user guide
 
 ## Milestones
 
@@ -89,8 +89,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Range-run styles: font, size, bold/italic/underline/strike, colours, fill,
   borders, alignment, wrap; format painter
 - ✅ Number formats incl. custom codes and accounting styles (K/M, red parentheses)
-- 🔨 Merge cells and Center Across Selection; row heights, auto-fit, freeze panes
-- ⬜ Fill handle with series detection; default paste mode setting
+- ✅ Merge cells and Center Across Selection; row heights, auto-fit, freeze panes
+- 🔨 Fill handle with series detection; default paste mode setting
 - ⬜ Command palette (Ctrl+K) listing every public action
 - ⬜ Crash-proof saving: action journal in OPFS, autosave, open/save via File System Access
 - ⬜ History panel: timeline, named versions, compare any two points, per-cell history
