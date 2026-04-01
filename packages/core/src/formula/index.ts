@@ -4,3 +4,4 @@ export { formatFormula, sheetPrefix } from "./print";
 export { compileFill, readsOtherSheets, type ColumnInput, type CompiledFill, type KernelFn, type ScalarInput } from "./compile";
 export { FormulaSyntaxError, columnIndex, parseFormula } from "./parser";
 export { adjustForColChange, adjustForRowChange, breakpoints, mapCol, mapRow, type ColChange, type RowChange } from "./adjust";
+export { moveFormula } from "./move";

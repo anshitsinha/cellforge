@@ -69,7 +69,7 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Fill handle with series detection; default paste mode setting
-- [ ] Series detection: numbers (step from the selection), dates by day/month/year, weekdays and month names, text with a trailing number (Q1, Item 7)
+- [x] Series detection: numbers (step from the selection), dates by day/month/year, weekdays and month names, text with a trailing number (Q1, Item 7)
 - [ ] `fill.series` action: fill down / right / up / left from a source block, copying or extending, formulas shifted
 - [ ] Fill handle: the square on the selection corner; drag to fill, double-click to fill down to the end of the neighbouring data
 - [ ] Paste options: paste values / formulas / formats, and a default paste mode setting
