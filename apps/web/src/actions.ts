@@ -9,7 +9,7 @@
  */
 import { type Action, ActionRegistry, type BlobStore, type JsonSchema, s } from "@cellforge/actions";
 import { columnLetter, expandToMerges, intersects } from "@cellforge/grid";
-import { type ColChange, formatFormula, parseFormula, parseTyped, type Node, type RowChange } from "@cellforge/core";
+import { type ColChange, formatFormula, isDateFormat, moveFormula, parseFormula, parseTyped, seriesOf, type Node, type RowChange, type SeriesValue } from "@cellforge/core";
 import { type ColumnRemoval, type EditableSource, effectiveShift, type Fill, type FormulaSnapshot, isFormula, parseInput, type Stored } from "./editable";
 import { BlankSource, EditableSource as Source } from "./editable";
 import { CLEAR_ALL, type ColumnStyles, type StylePatch } from "./styles";
@@ -175,6 +175,14 @@ function borderItems(r: Range, which: BorderWhich, line: StylePatch["borderTop"]
   }
 }
 
+function safeParse(text: string): Node | null {
+  try {
+    return parseFormula(text);
+  } catch {
+    return null;
+  }
+}
+
 /** The sheet a cell action targets, and its id for the inverse. */
 function target(ctx: SheetCtx, sheet: string | undefined): { id: string; data: EditableSource } {
   const id = sheet ?? ctx.activeSheet;
@@ -198,6 +206,21 @@ function checkBounds(sheet: EditableSource, cells: { row: number; col: number }[
       throw new Error(`${cellRef(row, col)} is outside the sheet (${sheet.rowCount} rows × ${sheet.colCount} columns)`);
     }
   }
+}
+
+/** Most cells one fill can write one by one (a formula filled down uses fill.down instead). */
+const MAX_FILL_CELLS = 2_000_000;
+
+type FillDir = "down" | "up" | "right" | "left";
+
+function fillDirection(src: Range, to: Range): FillDir {
+  const sameCols = to.left === src.left && to.right === src.right;
+  const sameRows = to.top === src.top && to.bottom === src.bottom;
+  if (sameCols && to.top === src.top && to.bottom > src.bottom) return "down";
+  if (sameCols && to.bottom === src.bottom && to.top < src.top) return "up";
+  if (sameRows && to.left === src.left && to.right > src.right) return "right";
+  if (sameRows && to.right === src.right && to.left < src.left) return "left";
+  throw new Error("The fill range has to extend the source range in one direction.");
 }
 
 function describeCells(cells: { row: number; col: number }[], verb: string) {
@@ -591,6 +614,83 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         return { type: "cols.hideList", params: { ...p, hidden: !p.hidden } };
       },
     });
+
+  // ------------------------------------------------------------- fill --
+  registry.register<{ source: Range; target: Range; sheet?: string }>({
+    type: "fill.series",
+    title:
+      "Fill from a source range into a bigger target range, like dragging the fill handle: numbers and dates continue their trend, day/month names and numbered text count on, formulas move, other values repeat; formats are copied",
+    schema: withSheet({ source: rangeSchema, target: rangeSchema }, ["source", "target"]),
+    describe: (p) => `fill ${fillDirection(p.source, p.target)}`,
+    recordable: true,
+    apply(ctx, p) {
+      const { id, data } = target(ctx, p.sheet);
+      const { source: src, target: to } = p;
+      checkBounds(data, [{ row: to.bottom, col: to.right }]);
+      const dir = fillDirection(src, to);
+      const vertical = dir === "down" || dir === "up";
+      const cells = (to.bottom - to.top + 1) * (to.right - to.left + 1) - (src.bottom - src.top + 1) * (src.right - src.left + 1);
+      if (cells > MAX_FILL_CELLS) throw new Error(`That fills ${cells.toLocaleString()} cells; the limit for now is ${MAX_FILL_CELLS.toLocaleString()}.`);
+
+      const writes: { row: number; col: number; value: Stored }[] = [];
+      const styled: { row: number; col: number; from: { row: number; col: number } }[] = [];
+      // one line per column (vertical fill) or row (horizontal fill)
+      const lines = vertical ? src.right - src.left + 1 : src.bottom - src.top + 1;
+      const n = vertical ? src.bottom - src.top + 1 : src.right - src.left + 1;
+      for (let l = 0; l < lines; l++) {
+        const at = (k: number) => (vertical ? { row: src.top + k, col: src.left + l } : { row: src.top + l, col: src.left + k });
+        const srcCells = Array.from({ length: n }, (_, k) => at(k));
+        const texts = srcCells.map(({ row, col }) => data.getEditText(row, col));
+        const formulas = texts.map((t) => (t.startsWith("=") ? safeParse(t) : null));
+        const anyFormula = formulas.some((f) => f !== null);
+        const values: SeriesValue[] = srcCells.map(({ row, col }) => {
+          const v = data.getCell(row, col);
+          return typeof v === "number" || typeof v === "string" ? v : null;
+        });
+        const dates = srcCells.every(({ row, col }, k) => values[k] === null || isDateFormat(data.getStyle(row, col)?.numFmt)) && values.some((v) => typeof v === "number");
+        const f = anyFormula ? null : seriesOf(values, { dates });
+        const first = vertical ? (dir === "down" ? src.bottom + 1 : to.top) : dir === "right" ? src.right + 1 : to.left;
+        const last = vertical ? (dir === "down" ? to.bottom : src.top - 1) : dir === "right" ? to.right : src.left - 1;
+        for (let pos = first; pos <= last; pos++) {
+          const i = pos - (vertical ? src.top : src.left); // index in the series
+          const k = ((i % n) + n) % n;
+          const cell = vertical ? { row: pos, col: src.left + l } : { row: src.top + l, col: pos };
+          let value: Stored;
+          if (f) value = f(i);
+          else {
+            const ast = formulas[k];
+            if (ast) {
+              const shift = i - k;
+              value = parseInput(formatFormula(moveFormula(ast, vertical ? shift : 0, vertical ? 0 : shift)));
+            } else value = values[k];
+          }
+          writes.push({ ...cell, value });
+          styled.push({ ...cell, from: at(k) });
+        }
+      }
+      const before = snapshot(data, writes);
+      // formats: the target takes the source's, cell for cell
+      const cols = new Map<number, ColumnStyles | undefined>();
+      for (let c = to.left; c <= to.right; c++) cols.set(c, data.styles.snapshot(c));
+      for (const w of writes) data.setCell(w.row, w.col, w.value);
+      const fillArea: Range = vertical
+        ? { top: dir === "down" ? src.bottom + 1 : to.top, bottom: dir === "down" ? to.bottom : src.top - 1, left: to.left, right: to.right }
+        : { top: to.top, bottom: to.bottom, left: dir === "right" ? src.right + 1 : to.left, right: dir === "right" ? to.right : src.left - 1 };
+      const sourceStyled = styled.some((s) => data.getStyle(s.from.row, s.from.col));
+      const targetStyled = !data.styles.isEmpty;
+      if (sourceStyled || targetStyled) {
+        for (let c = fillArea.left; c <= fillArea.right; c++) data.styles.apply(c, data.rowIdIntervals(fillArea.top, fillArea.bottom), CLEAR_ALL);
+        if (sourceStyled) {
+          if (styled.length > 200_000) throw new Error("Filling formats over more than 200,000 cells isn't supported yet.");
+          for (const s of styled) {
+            const st = data.getStyle(s.from.row, s.from.col);
+            if (st) data.styles.apply(s.col, data.rowIdIntervals(s.row, s.row), st as StylePatch);
+          }
+        }
+      }
+      return { type: "cells.restore", params: restoreParams(id, before, undefined, ctx.blobs.put([...cols])) };
+    },
+  });
 
   // ------------------------------------------------------------ merge --
   registry

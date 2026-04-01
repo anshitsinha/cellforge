@@ -142,6 +142,7 @@ describe("sheet actions", () => {
       "cols.delete",
       "rows.hide",
       "cols.hide",
+      "fill.series",
       "cells.merge",
       "cells.unmerge",
       "rows.height",

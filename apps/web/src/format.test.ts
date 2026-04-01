@@ -155,3 +155,46 @@ describe("number formats", () => {
     expect(sheet.formatValue(sheet.getCell(0, 0), sheet.getStyle(0, 0))).toEqual({ text: "(1,234.50)", color: "#ff0000" });
   });
 });
+
+describe("fill.series", () => {
+  it("continues numbers down, text across, and undoes in one step", async () => {
+    const { history, sheet, type } = setup(10, 6);
+    await type([[0, 0, "1"], [1, 0, "2"], [0, 1, "Mon"]]);
+    await history.run({ type: "fill.series", params: { source: R(0, 0, 1, 0), target: R(0, 0, 4, 0) } });
+    expect([2, 3, 4].map((r) => sheet.getCell(r, 0))).toEqual([3, 4, 5]);
+    await history.run({ type: "fill.series", params: { source: R(0, 1), target: R(0, 1, 0, 4) } });
+    expect([2, 3, 4].map((c) => sheet.getCell(0, c))).toEqual(["Tue", "Wed", "Thu"]);
+    await history.undo();
+    await history.undo();
+    expect(sheet.getCell(2, 0)).toBeNull();
+    expect(sheet.getCell(0, 2)).toBeNull();
+  });
+
+  it("moves formulas by row filling down and by column filling right", async () => {
+    const { history, sheet, type } = setup(10, 6);
+    await type([[0, 0, "5"], [1, 0, "7"], [0, 1, "=A1*2"]]);
+    await history.run({ type: "fill.series", params: { source: R(0, 1), target: R(0, 1, 1, 1) } });
+    expect(sheet.getEditText(1, 1)).toBe("=A2*2");
+    expect(sheet.getCell(1, 1)).toBe(14);
+    await history.run({ type: "fill.series", params: { source: R(0, 1), target: R(0, 1, 0, 2) } });
+    expect(sheet.getEditText(0, 2)).toBe("=B1*2");
+    expect(sheet.getCell(0, 2)).toBe(20);
+  });
+
+  it("dates step by month and keep their format; filling up goes backwards", async () => {
+    const { history, sheet, type } = setup(10, 2);
+    await type([[4, 0, "2024-01-31"], [5, 0, "2024-02-29"]]);
+    await history.run({ type: "fill.series", params: { source: R(4, 0, 5, 0), target: R(4, 0, 7, 0) } });
+    expect(sheet.getEditText(6, 0)).toBe("2024-03-31");
+    expect(sheet.getStyle(7, 0)?.numFmt).toBe("yyyy-mm-dd");
+    await type([[0, 1, "Item 5"]]);
+    await history.run({ type: "fill.series", params: { source: R(0, 1), target: R(0, 1, 2, 1) } });
+    await history.run({ type: "fill.series", params: { source: R(1, 1, 2, 1), target: R(0, 1, 2, 1) } });
+    expect(sheet.getCell(0, 1)).toBe("Item 5");
+  });
+
+  it("rejects a target that doesn't extend the source in one direction", async () => {
+    const { history } = setup();
+    await expect(history.run({ type: "fill.series", params: { source: R(1, 1), target: R(0, 0, 3, 3) } })).rejects.toThrow(/one direction/);
+  });
+});
