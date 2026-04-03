@@ -198,3 +198,33 @@ describe("fill.series", () => {
     await expect(history.run({ type: "fill.series", params: { source: R(1, 1), target: R(0, 0, 3, 3) } })).rejects.toThrow(/one direction/);
   });
 });
+
+describe("cells.paste", () => {
+  it("pastes formulas moved, values, and formats; undo restores", async () => {
+    const { history, sheet, type } = setup(10, 6);
+    await type([[0, 0, "4"], [1, 0, "6"], [0, 1, "=A1*2"]]);
+    await history.run({ type: "format.set", params: { range: R(0, 1), style: { bold: true } } });
+    await history.run({ type: "cells.paste", params: { from: R(0, 1), to: { row: 1, col: 1 } } });
+    expect(sheet.getEditText(1, 1)).toBe("=A2*2");
+    expect(sheet.getCell(1, 1)).toBe(12);
+    expect(sheet.getStyle(1, 1)).toEqual({ bold: true });
+    await history.run({ type: "cells.paste", params: { from: R(0, 1), to: { row: 0, col: 3 }, mode: "values" } });
+    expect(sheet.getEditText(0, 3)).toBe("8");
+    expect(sheet.getStyle(0, 3)).toBeNull();
+    await history.run({ type: "cells.paste", params: { from: R(0, 1), to: { row: 5, col: 5 }, mode: "formats" } });
+    expect(sheet.getCell(5, 5)).toBeNull();
+    expect(sheet.getStyle(5, 5)).toEqual({ bold: true });
+    await history.undo();
+    await history.undo();
+    await history.undo();
+    expect(sheet.getCell(1, 1)).toBeNull();
+    expect(sheet.getStyle(1, 1)).toBeNull();
+  });
+
+  it("handles overlapping source and target", async () => {
+    const { history, sheet, type } = setup(10, 2);
+    await type([[0, 0, "1"], [1, 0, "2"], [2, 0, "3"]]);
+    await history.run({ type: "cells.paste", params: { from: R(0, 0, 2, 0), to: { row: 1, col: 0 } } });
+    expect([0, 1, 2, 3].map((r) => sheet.getCell(r, 0))).toEqual([1, 1, 2, 3]);
+  });
+});

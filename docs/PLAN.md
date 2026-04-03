@@ -72,7 +72,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - [x] Series detection: numbers (step from the selection), dates by day/month/year, weekdays and month names, text with a trailing number (Q1, Item 7)
 - [x] `fill.series` action: fill down / right / up / left from a source block, copying or extending, formulas shifted
 - [x] Fill handle: the square on the selection corner; drag to fill, double-click to fill down to the end of the neighbouring data
-- [ ] Paste options: paste values / formulas / formats, and a default paste mode setting
+- [x] Paste options: paste values / formulas / formats, and a default paste mode setting
 - [ ] Tests against Excel's results, user guide
 
 ## Milestones

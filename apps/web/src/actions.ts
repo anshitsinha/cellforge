@@ -8,7 +8,7 @@
  * tabs still changes the right sheet.
  */
 import { type Action, ActionRegistry, type BlobStore, type JsonSchema, s } from "@cellforge/actions";
-import { columnLetter, expandToMerges, intersects } from "@cellforge/grid";
+import { type CellStyle, columnLetter, expandToMerges, intersects } from "@cellforge/grid";
 import { type ColChange, formatFormula, isDateFormat, moveFormula, parseFormula, parseTyped, seriesOf, type Node, type RowChange, type SeriesValue } from "@cellforge/core";
 import { type ColumnRemoval, type EditableSource, effectiveShift, type Fill, type FormulaSnapshot, isFormula, parseInput, type Stored } from "./editable";
 import { BlankSource, EditableSource as Source } from "./editable";
@@ -689,6 +689,66 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         }
       }
       return { type: "cells.restore", params: restoreParams(id, before, undefined, ctx.blobs.put([...cols])) };
+    },
+  });
+
+  registry.register<{ from: Range; fromSheet?: string; to: { row: number; col: number }; mode?: "all" | "values" | "formulas" | "formats"; sheet?: string }>({
+    type: "cells.paste",
+    title:
+      "Paste a copied range from this workbook at a cell: all (formulas moved, values and formats), values (results only), formulas, or formats",
+    schema: withSheet(
+      {
+        from: rangeSchema,
+        fromSheet: s.string("sheet id the range was copied from; defaults to the target sheet"),
+        to: s.object({ row: s.int("row, 0-based", 0), col: s.int("column, 0-based", 0) }),
+        mode: s.string("what to paste", { enum: ["all", "values", "formulas", "formats"] }),
+      },
+      ["from", "to"],
+    ),
+    describe: (p) => (p.mode && p.mode !== "all" ? `paste ${p.mode}` : "paste"),
+    recordable: true,
+    apply(ctx, p) {
+      const { id, data } = target(ctx, p.sheet);
+      const src = ctx.workbook.get(p.fromSheet ?? id).source;
+      const mode = p.mode ?? "all";
+      const { from, to } = p;
+      const rows = Math.min(from.bottom - from.top + 1, data.rowCount - to.row);
+      const cols = Math.min(from.right - from.left + 1, data.colCount - to.col);
+      if (rows <= 0 || cols <= 0) return null;
+      if (rows * cols > MAX_FILL_CELLS) throw new Error(`Pasting more than ${MAX_FILL_CELLS.toLocaleString()} cells isn't supported yet.`);
+      const dr = to.row - from.top;
+      const dc = to.col - from.left;
+      // read everything first: the source and target may overlap
+      const cells: { row: number; col: number; value?: Stored; style: CellStyle | null }[] = [];
+      for (let i = 0; i < rows; i++) {
+        for (let j = 0; j < cols; j++) {
+          const r = from.top + i;
+          const c = from.left + j;
+          const style = src.getStyle(r, c);
+          let value: Stored | undefined;
+          if (mode !== "formats") {
+            const text = src.getEditText(r, c);
+            const ast = text.startsWith("=") ? safeParse(text) : null;
+            if (ast && mode !== "values") value = parseInput(formatFormula(moveFormula(ast, dr, dc)));
+            else value = src.getCell(r, c);
+          }
+          cells.push({ row: to.row + i, col: to.col + j, value, style });
+        }
+      }
+      const writes = cells.filter((c) => c.value !== undefined) as { row: number; col: number; value: Stored }[];
+      const before = snapshot(data, writes);
+      let formats: string | undefined;
+      if (mode === "all" || mode === "formats") {
+        const saved = new Map<number, ColumnStyles | undefined>();
+        for (let c = to.col; c < to.col + cols; c++) saved.set(c, data.styles.snapshot(c));
+        formats = ctx.blobs.put([...saved]);
+      }
+      for (const w of writes) data.setCell(w.row, w.col, w.value);
+      if (formats) {
+        for (let c = to.col; c < to.col + cols; c++) data.styles.apply(c, data.rowIdIntervals(to.row, to.row + rows - 1), CLEAR_ALL);
+        for (const c of cells) if (c.style) data.styles.apply(c.col, data.rowIdIntervals(c.row, c.row), c.style as StylePatch);
+      }
+      return { type: "cells.restore", params: restoreParams(id, before, undefined, formats) };
     },
   });
 

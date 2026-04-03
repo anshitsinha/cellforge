@@ -454,8 +454,54 @@ function copySelection(e: ClipboardEvent): boolean {
     e.preventDefault();
     return false;
   }
-  e.clipboardData?.setData("text/plain", rangeToTsv(source, range));
+  const text = rangeToTsv(source, range);
+  e.clipboardData?.setData("text/plain", text);
   e.preventDefault();
+  // remember it: pasting it back here moves formulas and keeps formats
+  copied = { sheet: activeId, range, text };
+  return true;
+}
+
+/** The last range copied in this tab, so a paste of it can be a real copy. */
+let copied: { sheet: string; range: CellRange; text: string } | null = null;
+
+/** "all" pastes formulas and formats from cellforge; "values" pastes results only. */
+type PasteMode = "all" | "values";
+let defaultPaste: PasteMode = (() => {
+  try {
+    return localStorage.getItem("cellforge.pasteMode") === "values" ? "values" : "all";
+  } catch {
+    return "all";
+  }
+})();
+function setDefaultPaste(mode: PasteMode) {
+  defaultPaste = mode;
+  try {
+    localStorage.setItem("cellforge.pasteMode", mode);
+  } catch {
+    // private mode: the setting lasts for this tab
+  }
+}
+
+/** Ctrl+Shift+V pastes values only (the paste event can't tell, so remember the keys). */
+let pasteValuesNext = false;
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "v") pasteValuesNext = true;
+});
+
+async function pasteCopied(mode: "all" | "values" | "formulas" | "formats") {
+  if (!copied || !workbook.has(copied.sheet)) return false;
+  const { row, col } = grid.selection;
+  const r = copied.range;
+  const ok = await run({ type: "cells.paste", params: { from: r, fromSheet: copied.sheet, to: { row, col }, mode } });
+  if (ok) {
+    grid.selectRange({
+      top: row,
+      left: col,
+      bottom: Math.min(source.rowCount - 1, row + r.bottom - r.top),
+      right: Math.min(source.colCount - 1, col + r.right - r.left),
+    });
+  }
   return true;
 }
 
@@ -470,8 +516,15 @@ document.addEventListener("cut", (e) => {
 document.addEventListener("paste", (e) => {
   if (!gridHasFocus()) return;
   const text = e.clipboardData?.getData("text/plain");
+  const valuesOnly = pasteValuesNext || defaultPaste === "values";
+  pasteValuesNext = false;
   if (!text) return;
   e.preventDefault();
+  // our own copy: paste it properly (formulas moved, formats kept)
+  if (copied && text.replace(/\r?\n$/, "") === copied.text) {
+    void pasteCopied(valuesOnly ? "values" : "all");
+    return;
+  }
 
   const rows = parseTsv(text.replace(/\r?\n$/, "")); // Excel adds a trailing newline
   const { row: top, col: left } = grid.selection;
@@ -702,6 +755,17 @@ sheet.addEventListener("contextmenu", (e) => {
     item(`Delete ${cols}`, "", () => void deleteCols());
     item(`Hide ${cols}`, "Ctrl 0", () => void hideCols(true));
     item("Unhide columns", "Ctrl Shift 0", () => void hideCols(false));
+  }
+  // paste options, for a range copied in cellforge
+  if (kind === "cell" && copied && workbook.has(copied.sheet)) {
+    sep();
+    item("Paste", "Ctrl V", () => void pasteCopied("all"));
+    item("Paste values only", "Ctrl Shift V", () => void pasteCopied("values"));
+    item("Paste formulas only", "", () => void pasteCopied("formulas"));
+    item("Paste formats only", "", () => void pasteCopied("formats"));
+    item(defaultPaste === "values" ? "Ctrl V pastes: values only ✓ (switch to everything)" : "Ctrl V pastes: everything ✓ (switch to values only)", "", () =>
+      setDefaultPaste(defaultPaste === "values" ? "all" : "values"),
+    );
   }
   // merging, for a selection of more than one cell
   const sel = grid.range;

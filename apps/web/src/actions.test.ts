@@ -143,6 +143,7 @@ describe("sheet actions", () => {
       "rows.hide",
       "cols.hide",
       "fill.series",
+      "cells.paste",
       "cells.merge",
       "cells.unmerge",
       "rows.height",
