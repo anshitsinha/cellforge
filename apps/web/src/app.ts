@@ -123,6 +123,34 @@ grid.onRowResize = (row, height) => {
   void run({ type: "rows.height", params: { at: inside ? r.top : row, count: inside ? r.bottom - r.top + 1 : 1, height } });
 };
 
+// the fill handle: drag to continue a series, double-click to fill down
+// alongside the neighbouring data
+async function fillRange(sourceRange: CellRange, target: CellRange) {
+  const down = target.top === sourceRange.top && target.bottom > sourceRange.bottom;
+  const oneRow = sourceRange.top === sourceRange.bottom;
+  let allFormulas = oneRow;
+  for (let c = sourceRange.left; allFormulas && c <= sourceRange.right; c++) {
+    allFormulas = source.getEditText(sourceRange.top, c).startsWith("=");
+  }
+  // a formula row filled down a long way: one fill block, instant at any size
+  const action: Action =
+    down && allFormulas && target.bottom - target.top > 10_000
+      ? { type: "fill.down", params: { range: target } }
+      : { type: "fill.series", params: { source: sourceRange, target } };
+  if (await run(action)) grid.selectRange(target);
+}
+
+grid.onFill = (s, t) => void fillRange(s, t);
+grid.onFillDoubleClick = (r) => {
+  // fill down as far as the column beside the selection has data (Excel's rule)
+  const side = r.left > 0 && source.getCell(r.bottom + 1, r.left - 1) !== null ? r.left - 1 : r.right + 1 < source.colCount ? r.right + 1 : -1;
+  if (side < 0) return;
+  const limit = Math.min(source.rowCount - 1, r.bottom + 5_000_000);
+  let end = r.bottom;
+  while (end < limit && source.getCell(end + 1, side) !== null) end++;
+  if (end > r.bottom) void fillRange(r, { ...r, bottom: end });
+};
+
 const formatBar = setupFormatBar({
   root: document.getElementById("format-bar")!,
   grid,

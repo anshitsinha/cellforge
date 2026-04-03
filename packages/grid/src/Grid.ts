@@ -70,6 +70,7 @@ interface Thumb {
 
 type Drag =
   | { kind: "select" }
+  | { kind: "fill"; source: CellRange; target: CellRange }
   | { kind: "resize"; col: number; startX: number; startWidth: number }
   | { kind: "rowresize"; row: number; startY: number; startHeight: number; height: number }
   | { kind: "vscroll" | "hscroll"; startPos: number; startScroll: number };
@@ -135,6 +136,10 @@ export class Grid {
 
   /** Called whenever the selection changes (click, keyboard, or select()). */
   onSelectionChange: ((cell: CellRef) => void) | null = null;
+  /** The fill handle was dragged from `source` to cover `target`. */
+  onFill: ((source: CellRange, target: CellRange) => void) | null = null;
+  /** The fill handle was double-clicked: fill down as far as the data next to it goes. */
+  onFillDoubleClick: ((source: CellRange) => void) | null = null;
   /** A row was resized by dragging its border or auto-fitted (height in px). */
   onRowResize: ((row: number, height: number) => void) | null = null;
 
@@ -781,6 +786,15 @@ export class Grid {
       return;
     }
 
+    // the fill handle: drag to fill (double-click is handled in onDoubleClick)
+    if (this.onFillHandle(x, y)) {
+      e.preventDefault();
+      this.canvas.focus();
+      const source = this.range;
+      this.startDrag({ kind: "fill", source, target: { ...source } });
+      return;
+    }
+
     const cell = this.hitTest(x, y);
     if (!cell) return;
     // stop the browser from moving focus elsewhere / starting a text selection
@@ -957,6 +971,18 @@ export class Grid {
       else if (x < this.rowHeaderWidth) this.scrollX -= this.rowHeaderWidth - x;
       this.clampScroll();
       this.setSelection(this.active, this.cellAtClamped(x, y));
+    } else if (drag.kind === "fill") {
+      const rect = this.canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const bottom = this.headerHeight + this.bodyHeight;
+      const right = this.rowHeaderWidth + this.bodyWidth;
+      if (y > bottom) this.scrollY += y - bottom;
+      else if (y < this.headerHeight) this.scrollY -= this.headerHeight - y;
+      if (x > right) this.scrollX += x - right;
+      else if (x < this.rowHeaderWidth) this.scrollX -= this.rowHeaderWidth - x;
+      this.clampScroll();
+      drag.target = this.fillTarget(drag.source, this.cellAtClamped(x, y));
     } else if (drag.kind === "resize") {
       const width = Math.max(MIN_COLUMN_WIDTH, drag.startWidth + e.clientX - drag.startX);
       this.columns.setWidth(drag.col, width);
@@ -987,6 +1013,12 @@ export class Grid {
     const drag = this.drag;
     this.drag = null;
     if (drag?.kind === "rowresize" && drag.height !== drag.startHeight) this.onRowResize?.(drag.row, drag.height);
+    if (drag?.kind === "fill") {
+      const { source, target } = drag;
+      const same = source.top === target.top && source.bottom === target.bottom && source.left === target.left && source.right === target.right;
+      if (!same) this.onFill?.(source, target);
+      this.invalidate();
+    }
     window.removeEventListener("pointermove", this.onDragMove);
     window.removeEventListener("pointerup", this.endDrag);
     window.removeEventListener("pointercancel", this.endDrag);
@@ -998,9 +1030,44 @@ export class Grid {
     const rect = this.canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    this.canvas.style.cursor =
-      this.resizeHandleAt(x, y) !== null ? "col-resize" : this.rowResizeHandleAt(x, y) !== null ? "row-resize" : "default";
+    this.canvas.style.cursor = this.onFillHandle(x, y)
+      ? "crosshair"
+      : this.resizeHandleAt(x, y) !== null
+        ? "col-resize"
+        : this.rowResizeHandleAt(x, y) !== null
+          ? "row-resize"
+          : "default";
   };
+
+  /** Where the fill handle (the square on the selection's corner) is, if on screen. */
+  private fillHandleRect(): { x: number; y: number; size: number } | null {
+    if (this.editor.isEditing || !this.onFill) return null;
+    const r = this.range;
+    if (this.hidden.isHidden(r.bottom) || this.hiddenCols.has(r.right)) return null;
+    const d = this.hidden.toDisplay(r.bottom);
+    const x = this.colScreenX(r.right) + this.columns.width(r.right);
+    const y = this.rowScreenY(d) + this.layout.height(d);
+    if (x < this.rowHeaderWidth || x > this.rowHeaderWidth + this.bodyWidth || y < this.headerHeight || y > this.headerHeight + this.bodyHeight) return null;
+    return { x, y, size: 7 };
+  }
+
+  private onFillHandle(x: number, y: number): boolean {
+    const h = this.fillHandleRect();
+    return !!h && Math.abs(x - h.x) <= h.size && Math.abs(y - h.y) <= h.size;
+  }
+
+  /** The range a fill drag covers: the selection grown towards the pointer along one axis. */
+  private fillTarget(src: CellRange, p: CellRef): CellRange {
+    const down = p.row > src.bottom ? p.row - src.bottom : 0;
+    const up = p.row < src.top ? src.top - p.row : 0;
+    const right = p.col > src.right ? p.col - src.right : 0;
+    const left = p.col < src.left ? src.left - p.col : 0;
+    const vertical = Math.max(down, up);
+    const horizontal = Math.max(right, left);
+    if (vertical === 0 && horizontal === 0) return { ...src };
+    if (vertical >= horizontal) return down ? { ...src, bottom: p.row } : { ...src, top: p.row };
+    return right ? { ...src, right: p.col } : { ...src, left: p.col };
+  }
 
   /** If (x, y) is on a row's bottom border inside the row header, return that (real) row. */
   private rowResizeHandleAt(x: number, y: number): number | null {
@@ -1080,6 +1147,10 @@ export class Grid {
     // double-click a border: fit the row or column to its contents
     const bx = e.clientX - rect.left;
     const by = e.clientY - rect.top;
+    if (this.onFillHandle(bx, by)) {
+      this.onFillDoubleClick?.(this.range);
+      return;
+    }
     const fitRow = this.rowResizeHandleAt(bx, by);
     if (fitRow !== null) {
       const h = this.fitRowHeight(fitRow);
@@ -1447,6 +1518,33 @@ export class Grid {
         }
         ctx.restore();
       }
+    }
+
+    // the fill handle, and while dragging it, the area it will fill
+    const handle = this.fillHandleRect();
+    if (handle) {
+      ctx.fillStyle = theme.background;
+      ctx.fillRect(handle.x - 4, handle.y - 4, 8, 8);
+      ctx.fillStyle = theme.accent;
+      ctx.fillRect(handle.x - 3, handle.y - 3, 6, 6);
+    }
+    if (this.drag?.kind === "fill") {
+      const t = this.drag.target;
+      const d0 = dispTop(t.top);
+      const d1 = dispBottom(t.bottom);
+      const x0 = colX(t.left);
+      const y0 = rowY(d0);
+      const x1 = colX(t.right) + columns.width(t.right);
+      const y1 = rowY(d1) + rowH(d1);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(rowHeaderWidth, headerHeight, bodyW, bodyH);
+      ctx.clip();
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = theme.accent;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(Math.round(x0) + 0.5, Math.round(y0) + 0.5, Math.round(x1 - x0), Math.round(y1 - y0));
+      ctx.restore();
     }
 
     // the lines under frozen rows and beside frozen columns
