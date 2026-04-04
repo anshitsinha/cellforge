@@ -68,12 +68,11 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Fill handle with series detection; default paste mode setting
-- [x] Series detection: numbers (step from the selection), dates by day/month/year, weekdays and month names, text with a trailing number (Q1, Item 7)
-- [x] `fill.series` action: fill down / right / up / left from a source block, copying or extending, formulas shifted
-- [x] Fill handle: the square on the selection corner; drag to fill, double-click to fill down to the end of the neighbouring data
-- [x] Paste options: paste values / formulas / formats, and a default paste mode setting
-- [ ] Tests against Excel's results, user guide
+### Command palette (Ctrl+K) listing every public action
+- [ ] Palette UI: Ctrl+K opens a search box over every public action and app command, fuzzy matched, keyboard driven
+- [ ] Each entry shows its shortcut; actions that need parameters ask for them in a small form built from the action's schema
+- [ ] Recent commands first; runs through the same history, so everything stays undoable
+- [ ] Tests, user guide
 
 ## Milestones
 
@@ -90,8 +89,8 @@ tracker shows this expanded, with the first unticked step as the current one.
   borders, alignment, wrap; format painter
 - ✅ Number formats incl. custom codes and accounting styles (K/M, red parentheses)
 - ✅ Merge cells and Center Across Selection; row heights, auto-fit, freeze panes
-- 🔨 Fill handle with series detection; default paste mode setting
-- ⬜ Command palette (Ctrl+K) listing every public action
+- ✅ Fill handle with series detection; default paste mode setting
+- 🔨 Command palette (Ctrl+K) listing every public action
 - ⬜ Crash-proof saving: action journal in OPFS, autosave, open/save via File System Access
 - ⬜ History panel: timeline, named versions, compare any two points, per-cell history
 - ⬜ Instant insert/delete on 100M-row sheets (segment row map; today capped at 20M rows)

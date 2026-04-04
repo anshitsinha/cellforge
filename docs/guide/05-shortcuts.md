@@ -20,6 +20,7 @@
 | Ctrl + 0 / Ctrl + Shift + 0 | Hide / unhide columns |
 | Ctrl + PgUp / PgDn | Previous / next sheet |
 | Ctrl + C / X / V | Copy / cut / paste |
+| Ctrl + Shift + V | Paste values only |
 | Ctrl + Z / Ctrl + Y | Undo / redo |
 
 On a Mac, use **Cmd** instead of **Ctrl**.
