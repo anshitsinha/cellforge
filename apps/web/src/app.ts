@@ -8,7 +8,8 @@ import { setCells, sheetActions, type SheetCtx } from "./actions";
 import { BlankSource, EditableSource, isFormula, type Fill } from "./editable";
 import { download, exportCsv } from "./exporter";
 import { SheetTabs } from "./tabs";
-import { setupFormatBar } from "./formatbar";
+import { NUMBER_FORMATS, setupFormatBar } from "./formatbar";
+import { type Command, setupPalette } from "./palette";
 import { sheetNameProblem, Workbook } from "./workbook";
 import { extractKeys, sortInWorker } from "./sort";
 import { formatBytes, importCsv } from "./importer";
@@ -800,6 +801,78 @@ statusRight.textContent = infoText;
 syncFormulaBar();
 updateStatus();
 grid.focus();
+
+// --- command palette (Ctrl+K) -------------------------------------------------
+
+const click = (id: string) => () => document.getElementById(id)?.click();
+const fmt = (style: Record<string, unknown>) => () => run({ type: "format.set", params: { range: grid.range, style } });
+const toggle = (prop: "bold" | "italic" | "underline" | "strike" | "wrap") => () => {
+  const { row, col } = grid.selection;
+  return fmt({ [prop]: source.getStyle(row, col)?.[prop] ? null : true })();
+};
+const border = (which: string) => () => run({ type: "format.borders", params: { range: grid.range, which, line: { style: "thin", color: "auto" } } });
+
+function paletteCommands(): Command[] {
+  const { row, col } = grid.selection;
+  const list: Command[] = [
+    { id: "undo", title: "Undo", keys: "Ctrl Z", run: undo },
+    { id: "redo", title: "Redo", keys: "Ctrl Y", run: redo },
+    { id: "bold", title: "Bold", keys: "Ctrl B", run: toggle("bold") },
+    { id: "italic", title: "Italic", keys: "Ctrl I", run: toggle("italic") },
+    { id: "underline", title: "Underline", keys: "Ctrl U", run: toggle("underline") },
+    { id: "strike", title: "Strikethrough", keys: "Ctrl 5", run: toggle("strike") },
+    { id: "wrap", title: "Wrap text", run: toggle("wrap") },
+    { id: "align-left", title: "Align left", run: fmt({ align: "left" }) },
+    { id: "align-center", title: "Align centre", hint: "center", run: fmt({ align: "center" }) },
+    { id: "align-right", title: "Align right", run: fmt({ align: "right" }) },
+    { id: "center-across", title: "Centre across selection", hint: "center across", run: fmt({ align: "centerAcross" }) },
+    { id: "clear-format", title: "Clear formatting", keys: "Ctrl \\", run: () => run({ type: "format.clear", params: { range: grid.range } }) },
+    { id: "borders-all", title: "Borders: all", run: border("all") },
+    { id: "borders-outline", title: "Borders: outline", run: border("outline") },
+    { id: "borders-none", title: "Borders: none", run: border("none") },
+    { id: "merge", title: "Merge cells", run: () => run({ type: "cells.merge", params: { range: grid.range } }) },
+    { id: "merge-center", title: "Merge and centre", hint: "center", run: () => run({ type: "cells.merge", params: { range: grid.range, center: true } }) },
+    { id: "merge-across", title: "Merge across", run: () => run({ type: "cells.merge", params: { range: grid.range, across: true } }) },
+    { id: "unmerge", title: "Unmerge cells", run: () => run({ type: "cells.unmerge", params: { range: grid.range } }) },
+    { id: "insert-rows", title: "Insert rows above", keys: "Ctrl Alt =", run: () => insertRows(false) },
+    { id: "insert-rows-below", title: "Insert rows below", run: () => insertRows(true) },
+    { id: "delete-rows", title: "Delete rows", keys: "Ctrl Alt −", run: deleteRows },
+    { id: "insert-cols", title: "Insert columns left", run: () => insertCols(false) },
+    { id: "insert-cols-right", title: "Insert columns right", run: () => insertCols(true) },
+    { id: "delete-cols", title: "Delete columns", run: deleteCols },
+    { id: "hide-rows", title: "Hide rows", keys: "Ctrl 9", run: () => hideRows(true) },
+    { id: "unhide-rows", title: "Unhide rows", keys: "Ctrl Shift 9", run: () => hideRows(false) },
+    { id: "hide-cols", title: "Hide columns", keys: "Ctrl 0", run: () => hideCols(true) },
+    { id: "unhide-cols", title: "Unhide columns", keys: "Ctrl Shift 0", run: () => hideCols(false) },
+    { id: "fit-rows", title: "Fit row height", hint: "autofit", run: fitRows },
+    { id: "freeze-here", title: `Freeze panes above row ${row + 1}${col ? ` and left of ${columnLetter(col)}` : ""}`, run: () => run({ type: "view.freeze", params: { rows: row, cols: col } }) },
+    { id: "freeze-row", title: "Freeze top row", run: () => run({ type: "view.freeze", params: { rows: 1, cols: 0 } }) },
+    { id: "freeze-col", title: "Freeze first column", run: () => run({ type: "view.freeze", params: { rows: 0, cols: 1 } }) },
+    { id: "unfreeze", title: "Unfreeze panes", run: () => run({ type: "view.freeze", params: { rows: 0, cols: 0 } }) },
+    { id: "sort-asc", title: "Sort A→Z by this column", hint: "ascending smallest", run: () => sortBy(false) },
+    { id: "sort-desc", title: "Sort Z→A by this column", hint: "descending largest", run: () => sortBy(true) },
+    { id: "fill-down", title: "Fill down", keys: "Ctrl D", run: fillDown },
+    { id: "paste-values", title: "Paste values only", keys: "Ctrl Shift V", run: () => pasteCopied("values") },
+    { id: "paste-formats", title: "Paste formats only", run: () => pasteCopied("formats") },
+    { id: "paste-formulas", title: "Paste formulas only", run: () => pasteCopied("formulas") },
+    { id: "new", title: "New workbook", run: click("btn-new") },
+    { id: "open", title: "Open CSV…", hint: "import file", run: click("btn-open") },
+    { id: "export", title: "Export CSV", hint: "download save", run: click("btn-export") },
+    { id: "demo", title: "Load the 100M-row demo", run: click("btn-demo") },
+  ];
+  for (const [name, code, example] of NUMBER_FORMATS) {
+    list.push({ id: `numfmt:${name}`, title: `Number format: ${name}`, hint: example, run: fmt({ numFmt: code || null }) });
+  }
+  return list;
+}
+
+setupPalette({
+  commands: paletteCommands,
+  catalog: () => registry.catalog(),
+  run: (a) => run(a),
+  range: () => grid.range,
+  focusGrid: () => grid.focus(),
+});
 
 function loadSource(next: EditableSource, name: string) {
   workbook = new Workbook({ name: sheetNameFrom(name), source: next });
