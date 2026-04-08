@@ -22,5 +22,6 @@
 | Ctrl + C / X / V | Copy / cut / paste |
 | Ctrl + Shift + V | Paste values only |
 | Ctrl + Z / Ctrl + Y | Undo / redo |
+| Ctrl + K | Command palette: search every command |
 
 On a Mac, use **Cmd** instead of **Ctrl**.

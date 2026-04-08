@@ -68,11 +68,12 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Command palette (Ctrl+K) listing every public action
-- [ ] Palette UI: Ctrl+K opens a search box over every public action and app command, fuzzy matched, keyboard driven
-- [ ] Each entry shows its shortcut; actions that need parameters ask for them in a small form built from the action's schema
-- [ ] Recent commands first; runs through the same history, so everything stays undoable
-- [ ] Tests, user guide
+### Crash-proof saving: action journal in OPFS, autosave, open/save via File System Access
+- [ ] Workbook file format: a versioned snapshot (sheets, edits, fills, styles, heights, merges, freeze) plus the imported data, written to OPFS
+- [ ] Action journal: every applied action appended to OPFS as it happens; on reload, snapshot + journal replay restores the exact state
+- [ ] Autosave: snapshots on idle and compacts the journal; a 'saved' indicator in the toolbar
+- [ ] Open / Save / Save as with the File System Access API (and a download fallback); recent files list
+- [ ] Crash test: kill the tab mid-edit and get everything back; tests, user guide
 
 ## Milestones
 
@@ -90,8 +91,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Number formats incl. custom codes and accounting styles (K/M, red parentheses)
 - ✅ Merge cells and Center Across Selection; row heights, auto-fit, freeze panes
 - ✅ Fill handle with series detection; default paste mode setting
-- 🔨 Command palette (Ctrl+K) listing every public action
-- ⬜ Crash-proof saving: action journal in OPFS, autosave, open/save via File System Access
+- ✅ Command palette (Ctrl+K) listing every public action
+- 🔨 Crash-proof saving: action journal in OPFS, autosave, open/save via File System Access
 - ⬜ History panel: timeline, named versions, compare any two points, per-cell history
 - ⬜ Instant insert/delete on 100M-row sheets (segment row map; today capped at 20M rows)
 
