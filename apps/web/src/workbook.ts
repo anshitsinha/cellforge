@@ -32,6 +32,21 @@ export class Workbook {
     this.add(first?.name ?? "Sheet1", first?.source ?? new EditableSource(new BlankSource()));
   }
 
+  /** A workbook with exactly these sheets (ids kept), e.g. when opening a saved file. */
+  static restore(sheets: Sheet[]): Workbook {
+    if (!sheets.length) throw new Error("A workbook needs at least one sheet.");
+    const wb = new Workbook();
+    wb.sheets.splice(0);
+    for (const s of sheets) {
+      wb.sheets.push({ ...s });
+      wb.connect(s.source);
+    }
+    const ids = sheets.map((s) => Number(/^s(\d+)$/.exec(s.id)?.[1] ?? 0));
+    wb.nextId = Math.max(0, ...ids) + 1;
+    wb.clearAll();
+    return wb;
+  }
+
   newId(): string {
     return `s${this.nextId++}`;
   }

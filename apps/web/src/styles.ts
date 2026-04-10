@@ -74,6 +74,25 @@ export class StyleTable {
     return this.records.length;
   }
 
+  /** Every record, by id (id 0 is the default look). */
+  get all(): readonly CellStyle[] {
+    return this.records;
+  }
+
+  /** A table with these records at exactly these ids. */
+  static from(records: CellStyle[]): StyleTable {
+    const t = new StyleTable();
+    for (let i = 1; i < records.length; i++) {
+      const id = t.intern(records[i]);
+      // keys are canonical, so a saved table re-interns to the same ids;
+      // a duplicate (shouldn't happen) still gets a slot to keep ids aligned
+      if (id !== i) {
+        t.records.push(Object.freeze({ ...records[i] }));
+      }
+    }
+    return t;
+  }
+
   /** The style `id` with `patch` applied, interned. Cached per (id, patch). */
   apply(id: number, patch: StylePatch, patchKey = JSON.stringify(patch)): number {
     const cacheKey = `${id}|${patchKey}`;
@@ -266,6 +285,26 @@ export class SheetStyles {
   putBack(entries: readonly [number, ColumnStyles][]): void {
     for (const [c, e] of entries) this.cols.set(c, e);
   }
+
+  toState(): StylesState {
+    return {
+      records: this.table.all.slice(1).map((r) => ({ ...r })),
+      cols: [...this.cols].map(([col, e]) => ({ col, base: e.base, starts: e.runs.starts, ends: e.runs.ends, ids: e.runs.ids })),
+    };
+  }
+
+  static fromState(state: StylesState): SheetStyles {
+    const table = StyleTable.from([{}, ...state.records]);
+    const cols = new Map<number, ColumnStyles>();
+    for (const c of state.cols) cols.set(c.col, { base: c.base, runs: new RunList(c.starts.slice(), c.ends.slice(), c.ids.slice()) });
+    return new SheetStyles(table, cols);
+  }
+}
+
+/** Formatting as plain data, for saving. */
+export interface StylesState {
+  records: CellStyle[];
+  cols: { col: number; base: number; starts: number[]; ends: number[]; ids: number[] }[];
 }
 
 /** A patch that clears every property (for "clear formatting"). */

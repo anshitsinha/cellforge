@@ -69,7 +69,7 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Crash-proof saving: action journal in OPFS, autosave, open/save via File System Access
-- [ ] Workbook file format: a versioned snapshot (sheets, edits, fills, styles, heights, merges, freeze) plus the imported data, written to OPFS
+- [x] Workbook file format: a versioned snapshot (sheets, edits, fills, styles, heights, merges, freeze) plus the imported data, written to OPFS
 - [ ] Action journal: every applied action appended to OPFS as it happens; on reload, snapshot + journal replay restores the exact state
 - [ ] Autosave: snapshots on idle and compacts the journal; a 'saved' indicator in the toolbar
 - [ ] Open / Save / Save as with the File System Access API (and a download fallback); recent files list

@@ -22,7 +22,7 @@ import {
 import { formatCell, spliceMerges, type CellRange, type CellStyle, type CellValue, type DataSource } from "@cellforge/grid";
 import { formatGeneral, formatValue as formatWithCode, isDateFormat } from "@cellforge/core";
 import { DepIndex, type Rect } from "./deps";
-import { SheetStyles, type ColumnStyles } from "./styles";
+import { SheetStyles, type ColumnStyles, type StylesState } from "./styles";
 
 /** Something whose cached result depends on other cells. */
 type Dep = { kind: "cell"; row: number; col: number } | { kind: "fill"; fill: Fill };
@@ -211,6 +211,66 @@ export class EditableSource implements DataSource {
     private readonly extraColumns = 0,
   ) {
     this.nextRowId = base.rowCount;
+  }
+
+  /** The data underneath the edits (imported, blank or generated). */
+  get baseSource(): DataSource {
+    return this.base;
+  }
+
+  get extraColumnCount(): number {
+    return this.extraColumns;
+  }
+
+  /**
+   * Everything this sheet adds on top of its base data, as plain data for
+   * saving. Big arrays (a sorted 100M-row order) come back separately as
+   * binary, keyed by name.
+   */
+  toState(): { state: SheetState; binary: { order?: Uint32Array } } {
+    const edits: SheetState["edits"] = [];
+    for (const [id, cols] of this.edits) for (const [col, v] of cols) edits.push([id, col, storedToState(v)]);
+    const state: SheetState = {
+      v: 1,
+      edits,
+      fills: this.fills.map((f) => ({ col: f.col, top: f.top, bottom: f.bottom, origin: f.origin, template: storedToState(f.template) })),
+      order: this.order ? "order" : null,
+      nextRowId: this.nextRowId,
+      colMap: this.colMap ? Array.from(this.colMap) : null,
+      hiddenRows: [...this.hiddenRowIds],
+      hiddenCols: [...this.hiddenCols],
+      styles: this.styles.toState(),
+      rowHeights: [...this.rowHeights],
+      frozen: { ...this.frozen },
+      merges: this.merges.map((m) => ({ ...m })),
+    };
+    return { state, binary: this.order ? { order: this.order } : {} };
+  }
+
+  /** A sheet rebuilt from toState's output over the same base data. */
+  static fromState(base: DataSource, extraColumns: number, state: SheetState, binary: { order?: Uint32Array }): EditableSource {
+    const s = new EditableSource(base, extraColumns);
+    for (const [id, col, v] of state.edits) s.putEdit(id, col, storedFromState(v));
+    s.order = state.order && binary.order ? binary.order : null;
+    s.nextRowId = state.nextRowId;
+    s.colMap = state.colMap ? Int32Array.from(state.colMap) : null;
+    for (const f of state.fills) {
+      const template = storedFromState(f.template);
+      let kernel: CompiledFill | null = null;
+      if (isFormula(template) && template.ast) {
+        kernel = compileFill(template.ast, f.origin);
+        if (kernel?.columns.some((c) => c.col === f.col)) kernel = null;
+      }
+      s.fills.push({ col: f.col, top: f.top, bottom: f.bottom, origin: f.origin, template, kernel, chunks: new Map(), computing: false });
+    }
+    s.hiddenRowIds = new Set(state.hiddenRows);
+    s.hiddenCols = new Set(state.hiddenCols);
+    s.styles = SheetStyles.fromState(state.styles);
+    s.rowHeights = new Map(state.rowHeights);
+    s.frozen = { ...state.frozen };
+    s.merges = state.merges.map((m) => ({ ...m }));
+    s.rebuildDeps();
+    return s;
   }
 
   /**
@@ -1441,6 +1501,49 @@ function sheetNames(node: Node): string[] {
   const names: string[] = [];
   collectReads(node, 0, 0, [], names);
   return names;
+}
+
+/** A stored value as plain data: formulas by their canonical text plus shift and anchor. */
+export type StoredState = CellValue | { f: string; shift?: number; anchor?: number };
+
+function storedToState(v: Stored): StoredState {
+  if (!isFormula(v)) return v;
+  const out: { f: string; shift?: number; anchor?: number } = { f: v.ast ? formatFormula(v.ast, 0) : v.text };
+  if (v.shift) out.shift = v.shift;
+  if (v.anchor !== undefined) out.anchor = v.anchor;
+  return out;
+}
+
+function storedFromState(v: StoredState): Stored {
+  if (v === null || typeof v !== "object") return v;
+  let ast: Node | null = null;
+  try {
+    ast = parseFormula(v.f);
+  } catch {
+    // kept as written; shows #ERROR! like when it was typed
+  }
+  const text = ast && v.shift ? formatFormula(ast, v.shift) : v.f;
+  const f: Formula = { kind: "formula", text, ast };
+  if (v.shift) f.shift = v.shift;
+  if (v.anchor !== undefined) f.anchor = v.anchor;
+  return f;
+}
+
+/** One sheet's own state (everything but its base data), as saved. */
+export interface SheetState {
+  v: 1;
+  edits: [number, number, StoredState][];
+  fills: { col: number; top: number; bottom: number; origin: number; template: StoredState }[];
+  /** "order" when the row order is saved as a binary attachment */
+  order: "order" | null;
+  nextRowId: number;
+  colMap: number[] | null;
+  hiddenRows: number[];
+  hiddenCols: number[];
+  styles: StylesState;
+  rowHeights: [number, number][];
+  frozen: { rows: number; cols: number };
+  merges: CellRange[];
 }
 
 export interface FormulaSnapshot {
