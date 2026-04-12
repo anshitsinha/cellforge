@@ -70,9 +70,9 @@ tracker shows this expanded, with the first unticked step as the current one.
 
 ### Crash-proof saving: action journal in OPFS, autosave, open/save via File System Access
 - [x] Workbook file format: a versioned snapshot (sheets, edits, fills, styles, heights, merges, freeze) plus the imported data, written to OPFS
-- [ ] Action journal: every applied action appended to OPFS as it happens; on reload, snapshot + journal replay restores the exact state
-- [ ] Autosave: snapshots on idle and compacts the journal; a 'saved' indicator in the toolbar
-- [ ] Open / Save / Save as with the File System Access API (and a download fallback); recent files list
+- [x] Action journal: every applied action appended to OPFS as it happens; on reload, snapshot + journal replay restores the exact state
+- [x] Autosave: snapshots on idle and compacts the journal; a 'saved' indicator in the toolbar
+- [x] Open / Save / Save as with the File System Access API (and a download fallback); recent files list
 - [ ] Crash test: kill the tab mid-edit and get everything back; tests, user guide
 
 ## Milestones

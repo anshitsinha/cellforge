@@ -10,6 +10,7 @@ import { download, exportCsv } from "./exporter";
 import { SheetTabs } from "./tabs";
 import { NUMBER_FORMATS, setupFormatBar } from "./formatbar";
 import { type Command, setupPalette } from "./palette";
+import { AutoSaver, fromFile, OpfsStore, packWorkbook, toFile, unpackWorkbook, type JournalEntry } from "./persist";
 import { sheetNameProblem, Workbook } from "./workbook";
 import { extractKeys, sortInWorker } from "./sort";
 import { formatBytes, importCsv } from "./importer";
@@ -214,6 +215,7 @@ const history = new ActionHistory(registry, ctx);
 async function run(action: Action) {
   try {
     const applied = await history.run(action);
+    if (applied) journal({ op: "run", action });
     refresh();
     return applied;
   } catch (e) {
@@ -282,6 +284,7 @@ function writeCells(cells: CellInput[], label: string) {
 async function undo() {
   try {
     const label = await history.undo();
+    if (label) journal({ op: "undo" });
     refresh();
     if (label) statusLeft.textContent = `Undid ${label}`;
   } catch (e) {
@@ -292,6 +295,7 @@ async function undo() {
 async function redo() {
   try {
     const label = await history.redo();
+    if (label) journal({ op: "redo" });
     refresh();
     if (label) statusLeft.textContent = `Redid ${label}`;
   } catch (e) {
@@ -802,6 +806,165 @@ syncFormulaBar();
 updateStatus();
 grid.focus();
 
+// --- saving -------------------------------------------------------------------
+// Autosave: every change goes into a journal in the browser's private file
+// system (OPFS) as it happens, with a full snapshot now and then. After a
+// crash or a closed tab, the next start loads the snapshot and replays the
+// journal. Save / Open write and read one .cellforge file.
+
+const saveState = document.getElementById("save-state")!;
+let saver: AutoSaver | null = null;
+let replaying = false;
+// how many journal entries an undo / redo can still be expressed against;
+// past that (undoing something from before the last snapshot) we snapshot
+let journalRuns = 0;
+let journalUndone = 0;
+let snapshotTimer = 0;
+
+function showSaved(text: string) {
+  saveState.textContent = text;
+}
+
+async function snapshotNow() {
+  if (!saver) return;
+  window.clearTimeout(snapshotTimer);
+  showSaved("saving…");
+  try {
+    await saver.snapshot(workbook, activeId, currentName);
+    journalRuns = 0;
+    journalUndone = 0;
+    showSaved("saved");
+  } catch (e) {
+    showSaved("not saved");
+    statusLeft.textContent = `Autosave failed: ${(e as Error).message}`;
+  }
+}
+
+function journal(entry: JournalEntry) {
+  if (!saver || replaying) return;
+  if (entry.op === "run") {
+    journalRuns++;
+    journalUndone = 0;
+  } else if (entry.op === "undo") {
+    if (journalRuns === 0) return void snapshotNow();
+    journalRuns--;
+    journalUndone++;
+  } else {
+    if (journalUndone === 0) return void snapshotNow();
+    journalUndone--;
+    journalRuns++;
+  }
+  showSaved("saving…");
+  saver.record(entry).then(
+    () => showSaved("saved"),
+    (e) => {
+      showSaved("not saved");
+      statusLeft.textContent = `Autosave failed: ${(e as Error).message}`;
+    },
+  );
+  // compact now and then: a snapshot after a quiet spell or many changes
+  window.clearTimeout(snapshotTimer);
+  if (saver.pending >= 200) void snapshotNow();
+  else snapshotTimer = window.setTimeout(() => void snapshotNow(), 20_000);
+}
+
+/** Start autosave; bring back the last session unless a demo was asked for. */
+async function startAutosave() {
+  // one tab owns the autosave; others still work, they just don't save
+  const locks = (navigator as Navigator & { locks?: LockManager }).locks;
+  if (locks) {
+    const got = await new Promise<boolean>((resolve) => {
+      void locks.request("cellforge-autosave", { ifAvailable: true }, (lock) => {
+        resolve(!!lock);
+        return lock ? new Promise<void>(() => undefined) : undefined; // hold it for the page's life
+      });
+    });
+    if (!got) {
+      showSaved("autosave is on in another tab");
+      return;
+    }
+  }
+  const store = await OpfsStore.open();
+  if (!store) {
+    showSaved("autosave unavailable");
+    return;
+  }
+  saver = new AutoSaver(store);
+  if (startWithDemo) return void snapshotNow();
+  try {
+    const last = await AutoSaver.load(store);
+    if (!last) return void snapshotNow();
+    loadWorkbook(last.workbook, last.active, last.name);
+    replaying = true;
+    for (const e of last.journal) {
+      if (e.op === "run") await history.run(e.action);
+      else if (e.op === "undo") await history.undo();
+      else await history.redo();
+    }
+    replaying = false;
+    refresh();
+    statusLeft.textContent = "Picked up where you left off.";
+    void snapshotNow();
+  } catch (e) {
+    replaying = false;
+    // don't overwrite what's there: it may be recoverable by a later version
+    saver = null;
+    showSaved("autosave off");
+    statusLeft.textContent = `Couldn't restore the last session (${(e as Error).message}); autosave is off for this tab.`;
+  }
+}
+
+void startAutosave();
+
+// Save / Save as: one .cellforge file, via the File System Access API where
+// the browser has it (so Ctrl+S saves in place), a download otherwise
+let fileHandle: FileSystemFileHandle | null = null;
+type SavePicker = (opts: unknown) => Promise<FileSystemFileHandle>;
+
+async function saveFile(saveAs = false) {
+  const name = `${currentName.replace(/\.(csv|tsv|txt|cellforge)$/i, "") || "workbook"}.cellforge`;
+  let blob: Blob;
+  try {
+    blob = toFile(packWorkbook(workbook, activeId, currentName));
+  } catch (e) {
+    statusLeft.textContent = `Couldn't save: ${(e as Error).message}`;
+    return;
+  }
+  const picker = (window as Window & { showSaveFilePicker?: SavePicker }).showSaveFilePicker;
+  if (!picker) {
+    download(blob, name);
+    statusLeft.textContent = `Downloaded ${name}`;
+    return;
+  }
+  try {
+    if (!fileHandle || saveAs) {
+      fileHandle = await picker({
+        suggestedName: name,
+        types: [{ description: "cellforge workbook", accept: { "application/x-cellforge": [".cellforge"] } }],
+      });
+    }
+    const w = await fileHandle.createWritable();
+    await w.write(blob);
+    await w.close();
+    statusLeft.textContent = `Saved ${fileHandle.name}`;
+  } catch (e) {
+    if ((e as DOMException).name !== "AbortError") statusLeft.textContent = `Couldn't save: ${(e as Error).message}`;
+  }
+}
+
+document.getElementById("btn-save")!.addEventListener("click", () => void saveFile());
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === "s") {
+    e.preventDefault();
+    void saveFile(e.shiftKey);
+  } else if (k === "o" && !e.shiftKey) {
+    e.preventDefault();
+    document.getElementById("btn-open")?.click();
+  }
+});
+
 // --- command palette (Ctrl+K) -------------------------------------------------
 
 const click = (id: string) => () => document.getElementById(id)?.click();
@@ -856,7 +1019,9 @@ function paletteCommands(): Command[] {
     { id: "paste-formats", title: "Paste formats only", run: () => pasteCopied("formats") },
     { id: "paste-formulas", title: "Paste formulas only", run: () => pasteCopied("formulas") },
     { id: "new", title: "New workbook", run: click("btn-new") },
-    { id: "open", title: "Open CSV…", hint: "import file", run: click("btn-open") },
+    { id: "open", title: "Open…", keys: "Ctrl O", hint: "import csv file cellforge", run: click("btn-open") },
+    { id: "save", title: "Save", keys: "Ctrl S", hint: "file cellforge", run: () => saveFile() },
+    { id: "save-as", title: "Save as…", keys: "Ctrl Shift S", run: () => saveFile(true) },
     { id: "export", title: "Export CSV", hint: "download save", run: click("btn-export") },
     { id: "demo", title: "Load the 100M-row demo", run: click("btn-demo") },
   ];
@@ -875,10 +1040,17 @@ setupPalette({
 });
 
 function loadSource(next: EditableSource, name: string) {
-  workbook = new Workbook({ name: sheetNameFrom(name), source: next });
-  activeId = workbook.sheets[0].id;
+  const wb = new Workbook({ name: sheetNameFrom(name), source: next });
+  loadWorkbook(wb, wb.sheets[0].id, name);
+  void snapshotNow();
+}
+
+/** Replace the whole workbook (open, new, restore). */
+function loadWorkbook(next: Workbook, active: string, name: string) {
+  workbook = next;
+  activeId = active;
   selections.clear();
-  source = next;
+  source = workbook.get(active).source;
   currentName = name;
   attachKernelReporting(source);
   cancelSort?.();
@@ -940,7 +1112,7 @@ document.getElementById("btn-export")!.addEventListener("click", async () => {
 
 const fileInput = document.createElement("input");
 fileInput.type = "file";
-fileInput.accept = ".csv,.tsv,.txt,text/csv,text/tab-separated-values";
+fileInput.accept = ".cellforge,.csv,.tsv,.txt,text/csv,text/tab-separated-values";
 fileInput.addEventListener("change", () => {
   const file = fileInput.files?.[0];
   if (file) openFile(file);
@@ -952,6 +1124,24 @@ let cancelImport: (() => void) | null = null;
 
 async function openFile(file: File) {
   cancelImport?.();
+  if (/\.cellforge$/i.test(file.name)) {
+    try {
+      statusLeft.textContent = `Opening ${file.name}…`;
+      const packed = fromFile(await file.arrayBuffer());
+      const opened = await unpackWorkbook(packed.meta, async (n) => {
+        const data = packed.files.get(n);
+        if (data === undefined) throw new Error(`The file is missing ${n}.`);
+        return data;
+      });
+      fileHandle = null;
+      loadWorkbook(opened.workbook, opened.active, file.name.replace(/\.cellforge$/i, ""));
+      void snapshotNow();
+      statusLeft.textContent = `Opened ${file.name}`;
+    } catch (e) {
+      statusLeft.textContent = `Couldn't open ${file.name}: ${(e as Error).message}`;
+    }
+    return;
+  }
   statusLeft.textContent = `Opening ${file.name}…`;
 
   const job = importCsv(file, ({ bytes, total, rows }) => {

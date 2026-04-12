@@ -17,6 +17,7 @@
       <header class="toolbar">
         <a class="logo" href="/">cellforge</a>
         <span class="file-name" id="file-name">Untitled</span>
+        <span class="save-state" id="save-state" title="Changes are saved on this computer as you work"></span>
         <div class="toolbar-actions">
           <button id="btn-undo" type="button" title="Undo (Ctrl+Z)" disabled>Undo</button>
           <button id="btn-redo" type="button" title="Redo (Ctrl+Y)" disabled>Redo</button>
@@ -26,7 +27,8 @@
           <button id="btn-sort-desc" type="button" title="Sort rows by the selected column, Z→A / largest first">Sort Z→A</button>
           <span class="toolbar-sep"></span>
           <button id="btn-new" type="button" title="Start a new, blank workbook">New</button>
-          <button id="btn-open" type="button" title="Open a CSV file (or drag one in)">Open CSV</button>
+          <button id="btn-open" type="button" title="Open a .cellforge workbook or a CSV file (or drag one in) — Ctrl+O">Open</button>
+          <button id="btn-save" type="button" title="Save the workbook as a .cellforge file — Ctrl+S">Save</button>
           <button id="btn-export" type="button" title="Download the sheet as CSV">Export CSV</button>
           <button id="btn-demo" type="button" title="Load 100M rows of generated data">100M demo</button>
         </div>
