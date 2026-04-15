@@ -23,5 +23,7 @@
 | Ctrl + Shift + V | Paste values only |
 | Ctrl + Z / Ctrl + Y | Undo / redo |
 | Ctrl + K | Command palette: search every command |
+| Ctrl + S / Ctrl + Shift + S | Save / Save as (a .cellforge file) |
+| Ctrl + O | Open a .cellforge or CSV file |
 
 On a Mac, use **Cmd** instead of **Ctrl**.

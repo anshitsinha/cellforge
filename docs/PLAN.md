@@ -68,12 +68,13 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Crash-proof saving: action journal in OPFS, autosave, open/save via File System Access
-- [x] Workbook file format: a versioned snapshot (sheets, edits, fills, styles, heights, merges, freeze) plus the imported data, written to OPFS
-- [x] Action journal: every applied action appended to OPFS as it happens; on reload, snapshot + journal replay restores the exact state
-- [x] Autosave: snapshots on idle and compacts the journal; a 'saved' indicator in the toolbar
-- [x] Open / Save / Save as with the File System Access API (and a download fallback); recent files list
-- [ ] Crash test: kill the tab mid-edit and get everything back; tests, user guide
+### History panel: timeline, named versions, compare any two points, per-cell history
+- [ ] Column widths per sheet, kept when switching sheets and saved with the workbook
+- [ ] History panel: every change in order with its description; click one to jump back there (and forward again)
+- [ ] Named versions: name the current point ("sent to auditor"); kept in the workbook file
+- [ ] Compare any two points: which cells changed, old → new, per sheet
+- [ ] Per-cell history: every value a cell has had, from the journal
+- [ ] Tests, user guide
 
 ## Milestones
 
@@ -92,8 +93,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Merge cells and Center Across Selection; row heights, auto-fit, freeze panes
 - ✅ Fill handle with series detection; default paste mode setting
 - ✅ Command palette (Ctrl+K) listing every public action
-- 🔨 Crash-proof saving: action journal in OPFS, autosave, open/save via File System Access
-- ⬜ History panel: timeline, named versions, compare any two points, per-cell history
+- ✅ Crash-proof saving: action journal in OPFS, autosave, open/save via File System Access
+- 🔨 History panel: timeline, named versions, compare any two points, per-cell history
 - ⬜ Instant insert/delete on 100M-row sheets (segment row map; today capped at 20M rows)
 
 ### M2: Formula engine

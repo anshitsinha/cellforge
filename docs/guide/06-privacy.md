@@ -10,3 +10,11 @@ cellforge runs entirely in your browser tab.
 This is a design rule, not a setting: every planned feature, including the
 assistant, is built to work without a server. See the
 [vision](#/dev/VISION) for why.
+
+## Where your work is kept
+
+Autosave writes to the browser's private storage for this site (the
+Origin Private File System). It stays on this computer, other websites
+can't read it, and it isn't synced anywhere. Clearing this site's data in
+the browser settings deletes it, so **Save** a `.cellforge` file for
+anything you want to keep long term.
