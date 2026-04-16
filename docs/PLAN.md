@@ -69,7 +69,7 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### History panel: timeline, named versions, compare any two points, per-cell history
-- [ ] Column widths per sheet, kept when switching sheets and saved with the workbook
+- [x] Column widths per sheet, kept when switching sheets and saved with the workbook
 - [ ] History panel: every change in order with its description; click one to jump back there (and forward again)
 - [ ] Named versions: name the current point ("sent to auditor"); kept in the workbook file
 - [ ] Compare any two points: which cells changed, old → new, per sheet

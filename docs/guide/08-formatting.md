@@ -135,8 +135,10 @@ and choose **Fit row height**, to fit the row to its text, which is how a
 wrapped cell gets the room to show every line. Heights stay with their rows
 when you sort.
 
-Double-click the line between two column letters to fit the column to the
-widest value on screen.
+Drag the line between two column letters to change a column's width (with
+several whole columns selected, they all change); double-click it to fit
+the column to the widest value on screen. Widths belong to each sheet, can
+be undone, and are saved with the workbook.
 
 ## Freeze panes
 

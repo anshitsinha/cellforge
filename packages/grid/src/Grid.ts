@@ -71,7 +71,7 @@ interface Thumb {
 type Drag =
   | { kind: "select" }
   | { kind: "fill"; source: CellRange; target: CellRange }
-  | { kind: "resize"; col: number; startX: number; startWidth: number }
+  | { kind: "resize"; col: number; startX: number; startWidth: number; width?: number }
   | { kind: "rowresize"; row: number; startY: number; startHeight: number; height: number }
   | { kind: "vscroll" | "hscroll"; startPos: number; startScroll: number };
 
@@ -107,6 +107,7 @@ export class Grid {
   /** rows 0..frozenRows-1 and columns 0..frozenCols-1 stay put when scrolling */
   private frozenRows = 0;
   private frozenCols = 0;
+  private widthsKey = "";
   /** merged blocks, in real row / column numbers */
   private merges: CellRange[] = [];
   private readonly headerHeight: number;
@@ -140,6 +141,8 @@ export class Grid {
   onFill: ((source: CellRange, target: CellRange) => void) | null = null;
   /** The fill handle was double-clicked: fill down as far as the data next to it goes. */
   onFillDoubleClick: ((source: CellRange) => void) | null = null;
+  /** A column was resized by dragging its border or auto-fitted (width in px). */
+  onColumnResize: ((col: number, width: number) => void) | null = null;
   /** A row was resized by dragging its border or auto-fitted (height in px). */
   onRowResize: ((row: number, height: number) => void) | null = null;
 
@@ -211,6 +214,7 @@ export class Grid {
   setSource(source: DataSource): void {
     this.source = source;
     this.columns = new ColumnLayout(source.colCount, this.defaultColumnWidth);
+    this.widthsKey = "";
     this.scrollX = 0;
     this.scrollY = 0;
     this.active = { row: 0, col: 0 };
@@ -254,6 +258,28 @@ export class Grid {
     const clamp = (c: CellRef) => ({ row: Math.min(c.row, maxRow), col: Math.min(c.col, maxCol) });
     this.active = clamp(this.active);
     this.extent = clamp(this.extent);
+  }
+
+  /**
+   * Column widths (px) that differ from the default, by column. `key`
+   * says when they last changed, so an unchanged set costs nothing.
+   */
+  setColumnWidths(widths: ReadonlyMap<number, number>, key: string): void {
+    if (key === this.widthsKey && this.columns.count === this.source.colCount) return;
+    this.widthsKey = key;
+    const layout = new ColumnLayout(this.source.colCount, this.defaultColumnWidth);
+    for (const [c, w] of widths) if (c < layout.count) layout.setWidth(c, w);
+    // hidden columns stay zero-width and remember their real width
+    const hidden = new Map<number, number>();
+    for (const c of this.hiddenCols.keys()) {
+      if (c >= layout.count) continue;
+      hidden.set(c, layout.width(c));
+      layout.setWidth(c, 0);
+    }
+    this.hiddenCols = hidden;
+    this.columns = layout;
+    this.clampScroll();
+    this.invalidate();
   }
 
   /** Show these blocks as merged cells (each draws as its top-left cell). */
@@ -984,8 +1010,9 @@ export class Grid {
       this.clampScroll();
       drag.target = this.fillTarget(drag.source, this.cellAtClamped(x, y));
     } else if (drag.kind === "resize") {
-      const width = Math.max(MIN_COLUMN_WIDTH, drag.startWidth + e.clientX - drag.startX);
+      const width = Math.round(Math.max(MIN_COLUMN_WIDTH, drag.startWidth + e.clientX - drag.startX));
       this.columns.setWidth(drag.col, width);
+      drag.width = width;
     } else if (drag.kind === "rowresize") {
       // preview locally; the owner records the final height on release
       drag.height = Math.round(Math.min(MAX_ROW_HEIGHT, Math.max(MIN_ROW_HEIGHT, drag.startHeight + e.clientY - drag.startY)));
@@ -1013,6 +1040,7 @@ export class Grid {
     const drag = this.drag;
     this.drag = null;
     if (drag?.kind === "rowresize" && drag.height !== drag.startHeight) this.onRowResize?.(drag.row, drag.height);
+    if (drag?.kind === "resize" && drag.width !== undefined && drag.width !== drag.startWidth) this.onColumnResize?.(drag.col, drag.width);
     if (drag?.kind === "fill") {
       const { source, target } = drag;
       const same = source.top === target.top && source.bottom === target.bottom && source.left === target.left && source.right === target.right;
@@ -1159,7 +1187,9 @@ export class Grid {
     }
     const fitCol = this.resizeHandleAt(bx, by);
     if (fitCol !== null) {
-      this.columns.setWidth(fitCol, this.fitColumnWidth(fitCol));
+      const w = this.fitColumnWidth(fitCol);
+      this.columns.setWidth(fitCol, w);
+      this.onColumnResize?.(fitCol, w);
       this.clampScroll();
       this.invalidate();
       return;

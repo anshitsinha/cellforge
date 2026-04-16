@@ -891,6 +891,38 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         return { type: "rows.heightIds", params: { sheet: p.sheet, entries: ctx.blobs.put(before) } };
       },
     })
+    .register<{ at: number; count?: number; width: number | null; sheet?: string }>({
+      type: "cols.width",
+      title: "Set the width of columns in pixels (null for the default width)",
+      schema: withSheet(
+        {
+          at: s.int("first column, 0-based (A = 0)", 0),
+          count: s.int("how many columns", 1, 16_384),
+          width: s.anyOf(s.int("width in px", 10, 2000), s.null()),
+        },
+        ["at", "width"],
+      ),
+      describe: () => "column width",
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const cols = Array.from({ length: p.count ?? 1 }, (_, i) => p.at + i);
+        const changed = data.setColWidths(cols, p.width);
+        if (!changed.length) return null;
+        return { type: "cols.widthList", params: { sheet: id, entries: changed } };
+      },
+    })
+    .register<{ sheet: string; entries: [number, number | null][] }>({
+      type: "cols.widthList",
+      title: "Put column widths back",
+      internal: true,
+      schema: s.object({ sheet: s.string(), entries: s.array(s.array(s.anyOf(s.int(), s.null()))) }),
+      describe: () => "column width",
+      apply(ctx, p) {
+        const data = ctx.workbook.get(p.sheet).source;
+        return { type: "cols.widthList", params: { sheet: p.sheet, entries: data.restoreColWidths(p.entries) } };
+      },
+    })
     .register<{ rows: number; cols: number; sheet?: string }>({
       type: "view.freeze",
       title: "Freeze panes: keep the top rows and left columns on screen while scrolling (0, 0 unfreezes)",

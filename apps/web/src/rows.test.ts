@@ -491,3 +491,21 @@ describe("merged cells", () => {
     expect(sheet.merges).toEqual([R(0, 0, 0, 1)]);
   });
 });
+
+describe("column widths", () => {
+  it("are sheet data: undoable, move with column inserts and deletes", async () => {
+    const { history, sheet } = setup(4, 6);
+    await history.run({ type: "cols.width", params: { at: 1, count: 2, width: 150 } });
+    expect([...sheet.columnWidths]).toEqual([[1, 150], [2, 150]]);
+    await history.run({ type: "cols.insert", params: { at: 0, count: 1 } });
+    expect([...sheet.columnWidths].sort()).toEqual([[2, 150], [3, 150]]);
+    await history.run({ type: "cols.delete", params: { at: 2, count: 1 } });
+    expect([...sheet.columnWidths]).toEqual([[2, 150]]);
+    await history.undo();
+    expect([...sheet.columnWidths].sort()).toEqual([[2, 150], [3, 150]]);
+    await history.undo();
+    await history.undo();
+    expect(sheet.columnWidths.size).toBe(0);
+    expect(sheet.clone().columnWidths.size).toBe(0);
+  });
+});

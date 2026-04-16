@@ -147,6 +147,7 @@ describe("sheet actions", () => {
       "cells.merge",
       "cells.unmerge",
       "rows.height",
+      "cols.width",
       "view.freeze",
       "format.set",
       "format.borders",

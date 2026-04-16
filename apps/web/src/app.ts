@@ -153,6 +153,14 @@ grid.onFillDoubleClick = (r) => {
   if (end > r.bottom) void fillRange(r, { ...r, bottom: end });
 };
 
+// same for column borders: every selected whole column when dragging one of them
+grid.onColumnResize = (col, width) => {
+  const r = grid.range;
+  const wholeCols = r.top === 0 && r.bottom === source.rowCount - 1;
+  const inside = wholeCols && col >= r.left && col <= r.right;
+  void run({ type: "cols.width", params: { at: inside ? r.left : col, count: inside ? r.right - r.left + 1 : 1, width } });
+};
+
 const formatBar = setupFormatBar({
   root: document.getElementById("format-bar")!,
   grid,
@@ -261,6 +269,7 @@ function refresh() {
   grid.syncShape();
   grid.setHiddenRows(source.hiddenRowIntervals());
   grid.setHiddenColumns(source.hiddenColumns);
+  grid.setColumnWidths(source.columnWidths, `${activeId}:${source.columnWidthsVersion}:${source.colCount}`);
   grid.setRowHeights(source.rowHeightsByView());
   grid.setFrozen(source.frozen.rows, source.frozen.cols);
   grid.setMerges(source.getMerges());

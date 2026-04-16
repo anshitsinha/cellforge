@@ -173,6 +173,10 @@ export class EditableSource implements DataSource {
   /** formatting, by view column and row id (so it moves with its row) */
   styles = new SheetStyles();
 
+  /** column widths in px that differ from the default, by view column */
+  private colWidths = new Map<number, number>();
+  private widthsVersion = 0;
+
   /** row heights in px that differ from the default, by row id */
   private rowHeights = new Map<number, number>();
   private heightsView: Map<number, number> | null = null;
@@ -241,6 +245,7 @@ export class EditableSource implements DataSource {
       hiddenCols: [...this.hiddenCols],
       styles: this.styles.toState(),
       rowHeights: [...this.rowHeights],
+      colWidths: [...this.colWidths],
       frozen: { ...this.frozen },
       merges: this.merges.map((m) => ({ ...m })),
     };
@@ -267,6 +272,7 @@ export class EditableSource implements DataSource {
     s.hiddenCols = new Set(state.hiddenCols);
     s.styles = SheetStyles.fromState(state.styles);
     s.rowHeights = new Map(state.rowHeights);
+    s.colWidths = new Map(state.colWidths ?? []);
     s.frozen = { ...state.frozen };
     s.merges = state.merges.map((m) => ({ ...m }));
     s.rebuildDeps();
@@ -293,6 +299,7 @@ export class EditableSource implements DataSource {
     copy.hiddenCols = new Set(this.hiddenCols);
     copy.styles = this.styles.clone();
     copy.rowHeights = new Map(this.rowHeights);
+    copy.colWidths = new Map(this.colWidths);
     copy.frozen = { ...this.frozen };
     copy.merges = this.merges.map((m) => ({ ...m }));
     copy.rebuildDeps();
@@ -845,11 +852,13 @@ export class EditableSource implements DataSource {
     const hidden = [...this.hiddenCols].filter((c) => c >= at && c < at + count);
     for (const c of hidden) this.hiddenCols.delete(c);
     const styles = this.styles.remove(at, count);
+    const widths = [...this.colWidths].filter(([c]) => c >= at && c < at + count);
+    for (const [c] of widths) this.colWidths.delete(c);
     if (this.merges.length) this.merges = spliceMerges(this.merges, "col", at, count, 0);
     this.shiftColumns(at + count, -count);
     const map = this.spliceColMap(at, count, []);
     this.columnsChanged();
-    return { map, edits, fills, hidden, styles };
+    return { map, edits, fills, hidden, styles, widths };
   }
 
   /** Undo of deleteColumns. */
@@ -861,6 +870,8 @@ export class EditableSource implements DataSource {
     this.fills.push(...removed.fills);
     for (const c of removed.hidden ?? []) this.hiddenCols.add(c);
     this.styles.putBack(removed.styles ?? []);
+    for (const [c, w] of removed.widths ?? []) this.colWidths.set(c, w);
+    this.widthsVersion++;
     this.columnsChanged();
   }
 
@@ -875,6 +886,8 @@ export class EditableSource implements DataSource {
     for (const f of this.fills) if (f.col >= from) f.col += delta;
     this.hiddenCols = new Set([...this.hiddenCols].map((c) => (c >= from ? c + delta : c)));
     this.styles.shift(from, delta);
+    this.colWidths = new Map([...this.colWidths].map(([c, w]) => [c >= from ? c + delta : c, w]));
+    this.widthsVersion++;
   }
 
   private spliceColMap(at: number, remove: number, insert: number[]): number[] {
@@ -1021,6 +1034,40 @@ export class EditableSource implements DataSource {
     }
     this.heightsView = null;
     return before;
+  }
+
+  /** Set columns' widths in px (null: the default). Returns [col, old] for undo. */
+  setColWidths(cols: number[], width: number | null): [number, number | null][] {
+    const changed: [number, number | null][] = [];
+    for (const c of cols) {
+      if (c >= this.colCount) continue;
+      const old = this.colWidths.get(c) ?? null;
+      if (old === width) continue;
+      changed.push([c, old]);
+      if (width === null) this.colWidths.delete(c);
+      else this.colWidths.set(c, width);
+    }
+    if (changed.length) this.widthsVersion++;
+    return changed;
+  }
+
+  restoreColWidths(entries: [number, number | null][]): [number, number | null][] {
+    const before: [number, number | null][] = entries.map(([c]) => [c, this.colWidths.get(c) ?? null]);
+    for (const [c, w] of entries) {
+      if (w === null) this.colWidths.delete(c);
+      else this.colWidths.set(c, w);
+    }
+    this.widthsVersion++;
+    return before;
+  }
+
+  get columnWidths(): ReadonlyMap<number, number> {
+    return this.colWidths;
+  }
+
+  /** Changes whenever any column width does (for cheap redraw checks). */
+  get columnWidthsVersion(): number {
+    return this.widthsVersion;
   }
 
   /** Row heights by view row, for the grid. */
@@ -1542,6 +1589,8 @@ export interface SheetState {
   hiddenCols: number[];
   styles: StylesState;
   rowHeights: [number, number][];
+  /** added after v1 shipped; missing means all default */
+  colWidths?: [number, number][];
   frozen: { rows: number; cols: number };
   merges: CellRange[];
 }
@@ -1577,6 +1626,7 @@ export interface ColumnRemoval {
   /** which of the deleted columns were hidden */
   hidden?: number[];
   styles?: [number, ColumnStyles][];
+  widths?: [number, number][];
 }
 
 /** A fill's kernel, unless it reads its own column (then it must interpret). */

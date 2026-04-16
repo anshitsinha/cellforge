@@ -44,6 +44,7 @@ function look(wb: Workbook) {
       cells,
       hidden: src.hiddenRowIntervals(),
       heights: [...src.rowHeightsByView()],
+      widths: [...src.columnWidths],
       frozen: src.frozen,
       merges: src.merges,
     };
@@ -63,6 +64,7 @@ async function build() {
   await history.run({ type: "format.set", params: { range: R(0, 0, 1, 1), style: { bold: true, fill: "#ffeeaa" } } });
   await history.run({ type: "rows.height", params: { at: 2, height: 40 } });
   await history.run({ type: "view.freeze", params: { rows: 1, cols: 1 } });
+  await history.run({ type: "cols.width", params: { at: 0, width: 180 } });
   await history.run({ type: "sheet.add", params: { name: "Notes" } });
   const notes = wb.sheets[1].id;
   await history.run(setCells([{ row: 0, col: 0, input: "=Data!A1+1" }], undefined, notes));

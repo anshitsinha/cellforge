@@ -46,7 +46,6 @@ A few things to know:
   so **Save** first if you want to keep the current one.
 - If cellforge is open in two tabs, only the first one autosaves; the
   other says so next to the file name.
-- Column widths aren't saved yet.
 
 ## What's next
 
