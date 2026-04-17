@@ -18,6 +18,7 @@ import type { DataSource } from "@cellforge/grid";
 import { SyntheticSource } from "./demo";
 import { BlankSource, EditableSource, type SheetState } from "./editable";
 import { Workbook, type Sheet } from "./workbook";
+import type { Version } from "./versions";
 
 export type BaseState =
   | { kind: "blank"; rows: number; cols: number }
@@ -30,7 +31,19 @@ export interface WorkbookState {
   name: string;
   active: string;
   bases: Record<string, BaseState>;
-  sheets: { id: string; name: string; color?: string; hidden?: boolean; base: string; extra: number; state: SheetState }[];
+  sheets: SavedSheet[];
+  /** named versions (added after v1 shipped; missing means none) */
+  versions?: { name: string; at: number; sheets: SavedSheet[] }[];
+}
+
+export interface SavedSheet {
+  id: string;
+  name: string;
+  color?: string;
+  hidden?: boolean;
+  base: string;
+  extra: number;
+  state: SheetState;
 }
 
 export type FileData = Uint8Array | string;
@@ -69,9 +82,7 @@ export function packWorkbook(wb: Workbook, active: string, name: string): Packed
   const files = new Map<string, FileData>();
   const bases: Record<string, BaseState> = {};
   const sheets: WorkbookState["sheets"] = [];
-  for (const s of wb.sheets) {
-    const src = s.source;
-    const base = src.baseSource;
+  const addBase = (base: DataSource): string => {
     const bid = baseIdOf(base);
     if (!bases[bid]) {
       if (base instanceof Table) {
@@ -87,6 +98,11 @@ export function packWorkbook(wb: Workbook, active: string, name: string): Packed
       else if (base instanceof BlankSource) bases[bid] = { kind: "blank", rows: base.rowCount, cols: base.colCount };
       else throw new Error("This sheet's data can't be saved yet.");
     }
+    return bid;
+  };
+  for (const s of wb.sheets) {
+    const src = s.source;
+    const bid = addBase(src.baseSource);
     const { state, binary } = src.toState();
     if (binary.order) files.set(orderFile(s.id), bytesOf(binary.order));
     sheets.push({
@@ -99,7 +115,23 @@ export function packWorkbook(wb: Workbook, active: string, name: string): Packed
       state,
     });
   }
-  return { meta: { format: "cellforge", v: 1, name, active, bases, sheets }, files };
+  const versions = wb.versions.map((v, i) => ({
+    name: v.name,
+    at: v.at,
+    sheets: v.sheets.map((vs) => {
+      if (vs.order) files.set(`v${i}-${orderFile(vs.id)}`, bytesOf(vs.order));
+      return {
+        id: vs.id,
+        name: vs.name,
+        ...(vs.color ? { color: vs.color } : {}),
+        ...(vs.hidden ? { hidden: true } : {}),
+        base: addBase(vs.base),
+        extra: vs.extra,
+        state: vs.state,
+      };
+    }),
+  }));
+  return { meta: { format: "cellforge", v: 1, name, active, bases, sheets, ...(versions.length ? { versions } : {}) }, files };
 }
 
 /** Rebuild a workbook from its metadata, reading files as needed. */
@@ -144,6 +176,23 @@ export async function unpackWorkbook(
     sheets.push({ id: s.id, name: s.name, source, ...(s.color ? { color: s.color } : {}), ...(s.hidden ? { hidden: true } : {}) });
   }
   const workbook = Workbook.restore(sheets);
+  const versions: Version[] = [];
+  for (const [i, v] of (meta.versions ?? []).entries()) {
+    const vsheets: Version["sheets"] = [];
+    for (const s of v.sheets) {
+      const base = bases.get(s.base);
+      if (!base) throw new Error(`Version "${v.name}" is missing its data.`);
+      let order: Uint32Array | undefined;
+      if (s.state.order) {
+        const data = await read(`v${i}-${orderFile(s.id)}`);
+        if (typeof data === "string") throw new Error("A data file is damaged.");
+        order = new Uint32Array(copyBuffer(data));
+      }
+      vsheets.push({ ...s, base, ...(order ? { order } : {}) });
+    }
+    versions.push({ name: v.name, at: v.at, sheets: vsheets });
+  }
+  workbook.versions = versions;
   const active = workbook.has(meta.active) ? meta.active : workbook.sheets[0].id;
   return { workbook, active, name: meta.name };
 }

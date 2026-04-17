@@ -104,8 +104,8 @@ export class ActionRegistry<Ctx> {
 
 /** Undo/redo over actions: each entry stores the inverse that undoes it. */
 export class ActionHistory<Ctx> {
-  private done: { label: string; inverse: Action }[] = [];
-  private undone: { label: string; inverse: Action }[] = [];
+  private done: { label: string; inverse: Action; at: number }[] = [];
+  private undone: { label: string; inverse: Action; at: number }[] = [];
   private busy = false;
 
   constructor(
@@ -118,7 +118,7 @@ export class ActionHistory<Ctx> {
   async run(action: Action, origin: ActionOrigin = "user"): Promise<Applied | null> {
     const applied = await this.exclusive(() => this.registry.apply(this.ctx(), action, origin));
     if (!applied.inverse) return null;
-    this.done.push({ label: this.registry.describe(action), inverse: applied.inverse });
+    this.done.push({ label: this.registry.describe(action), inverse: applied.inverse, at: Date.now() });
     if (this.done.length > this.limit) this.done.shift();
     this.undone = [];
     return applied;
@@ -137,6 +137,17 @@ export class ActionHistory<Ctx> {
     this.undone = [];
   }
 
+  /**
+   * What can be undone (oldest first) and redone (next first), with when each
+   * change was made, for a history panel.
+   */
+  get timeline(): { done: { label: string; at: number }[]; undone: { label: string; at: number }[] } {
+    return {
+      done: this.done.map(({ label, at }) => ({ label, at })),
+      undone: [...this.undone].reverse().map(({ label, at }) => ({ label, at })),
+    };
+  }
+
   get canUndo(): boolean {
     return this.done.length > 0;
   }
@@ -150,7 +161,7 @@ export class ActionHistory<Ctx> {
     if (!entry) return null;
     try {
       const applied = await this.exclusive(() => this.registry.apply(this.ctx(), entry.inverse, origin));
-      if (applied.inverse) to.push({ label: entry.label, inverse: applied.inverse });
+      if (applied.inverse) to.push({ label: entry.label, inverse: applied.inverse, at: entry.at });
     } catch (e) {
       from.push(entry); // leave history as it was
       throw e;

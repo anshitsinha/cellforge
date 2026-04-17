@@ -794,6 +794,30 @@ export class EditableSource implements DataSource {
   }
 
   /** Row id -> current view row (-1 if not on screen). */
+  /** id -> view row (-1 when the row is deleted), for code outside this class. */
+  rowIdToView(): (id: number) => number {
+    const f = this.viewLookup();
+    const n = this.rowCount;
+    return this.order ? f : (id) => (id < n ? id : -1);
+  }
+
+  /** Up to `limit` [row id, column] pairs this sheet edited or filled. */
+  *touchedCells(limit: number): Generator<[number, number]> {
+    let n = 0;
+    for (const [id, cols] of this.edits) {
+      for (const col of cols.keys()) {
+        if (n++ >= limit) return;
+        yield [id, col];
+      }
+    }
+    for (const f of this.fills) {
+      for (let id = f.top; id <= f.bottom; id++) {
+        if (n++ >= limit) return;
+        yield [id, f.col];
+      }
+    }
+  }
+
   private viewLookup(): (id: number) => number {
     if (!this.order) return (id) => id;
     const inverse = new Int32Array(this.nextRowId).fill(-1);

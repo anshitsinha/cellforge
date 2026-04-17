@@ -260,6 +260,13 @@ function settleActiveSheet() {
     const next = workbook.visible[Math.min(workbook.visible.length - 1, 0)] ?? workbook.sheets[0];
     showSheet(next.id);
   }
+  // the sheet on screen was replaced (going back to a version): show the new one
+  const current = workbook.get(activeId).source;
+  if (current !== source) {
+    source = current;
+    attachKernelReporting(source);
+    grid.setSource(source);
+  }
 }
 
 /** Repaint and update everything that shows cell contents. */

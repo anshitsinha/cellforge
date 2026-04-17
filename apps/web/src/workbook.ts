@@ -5,6 +5,7 @@
  * just as in Excel.
  */
 import { BlankSource, EditableSource } from "./editable";
+import type { Version } from "./versions";
 
 export interface Sheet {
   id: string;
@@ -27,6 +28,18 @@ export function sheetNameProblem(name: string): string | null {
 export class Workbook {
   readonly sheets: Sheet[] = [];
   private nextId = 1;
+  /** named versions, oldest first; saved with the workbook */
+  versions: Version[] = [];
+
+  /** Swap in a whole new set of sheets (restoring a version), in place. */
+  replaceSheets(sheets: Sheet[]): void {
+    if (!sheets.length) throw new Error("A workbook needs at least one sheet.");
+    this.sheets.splice(0, this.sheets.length, ...sheets.map((s) => ({ ...s })));
+    for (const s of this.sheets) this.connect(s.source);
+    const ids = this.sheets.map((s) => Number(/^s(\d+)$/.exec(s.id)?.[1] ?? 0));
+    this.nextId = Math.max(this.nextId, Math.max(0, ...ids) + 1);
+    this.clearAll();
+  }
 
   constructor(first?: { name: string; source: EditableSource }) {
     this.add(first?.name ?? "Sheet1", first?.source ?? new EditableSource(new BlankSource()));

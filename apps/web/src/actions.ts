@@ -13,6 +13,7 @@ import { type ColChange, formatFormula, isDateFormat, moveFormula, parseFormula,
 import { type ColumnRemoval, type EditableSource, effectiveShift, type Fill, type FormulaSnapshot, isFormula, parseInput, type Stored } from "./editable";
 import { BlankSource, EditableSource as Source } from "./editable";
 import { CLEAR_ALL, type ColumnStyles, type StylePatch } from "./styles";
+import { captureVersion, versionSheets, type Version } from "./versions";
 import type { Sheet, Workbook } from "./workbook";
 
 export interface SheetCtx {
@@ -181,6 +182,14 @@ function safeParse(text: string): Node | null {
   } catch {
     return null;
   }
+}
+
+function removeVersion(ctx: SheetCtx, name: string): Action {
+  const list = ctx.workbook.versions;
+  const index = list.findIndex((v) => v.name.toLowerCase() === name.toLowerCase());
+  if (index < 0) throw new Error(`No version called "${name}".`);
+  const [v] = list.splice(index, 1);
+  return { type: "version.put", params: { version: ctx.blobs.put(v), index } };
 }
 
 /** The sheet a cell action targets, and its id for the inverse. */
@@ -751,6 +760,82 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       return { type: "cells.restore", params: restoreParams(id, before, undefined, formats) };
     },
   });
+
+  // --------------------------------------------------------- versions --
+  registry
+    .register<{ name: string }>({
+      type: "version.save",
+      title: "Name the workbook as it is now (a version you can compare with or go back to later)",
+      schema: s.object({ name: s.string("a name, e.g. 'sent to auditor'", { minLength: 1, maxLength: 80 }) }),
+      describe: (p) => `save version "${p.name}"`,
+      recordable: true,
+      apply(ctx, p) {
+        const name = p.name.trim();
+        if (ctx.workbook.versions.some((v) => v.name.toLowerCase() === name.toLowerCase())) {
+          throw new Error(`There's already a version called "${name}".`);
+        }
+        ctx.workbook.versions.push(captureVersion(ctx.workbook, name));
+        return { type: "version.remove", params: { name } };
+      },
+    })
+    .register<{ name: string }>({
+      type: "version.delete",
+      title: "Delete a named version (the workbook itself doesn't change)",
+      schema: s.object({ name: s.string("the version's name") }),
+      describe: (p) => `delete version "${p.name}"`,
+      recordable: true,
+      apply(ctx, p) {
+        return removeVersion(ctx, p.name);
+      },
+    })
+    .register<{ name: string }>({
+      type: "version.remove",
+      title: "Undo saving a version",
+      internal: true,
+      schema: s.object({ name: s.string() }),
+      describe: (p) => `save version "${p.name}"`,
+      apply(ctx, p) {
+        return removeVersion(ctx, p.name);
+      },
+    })
+    .register<{ version: string; index: number }>({
+      type: "version.put",
+      title: "Put a version back",
+      internal: true,
+      schema: s.object({ version: s.string(), index: s.int(undefined, 0) }),
+      describe: () => "version",
+      apply(ctx, p) {
+        const v = ctx.blobs.get<Version>(p.version);
+        ctx.workbook.versions.splice(Math.min(p.index, ctx.workbook.versions.length), 0, v);
+        return { type: "version.remove", params: { name: v.name } };
+      },
+    })
+    .register<{ name: string }>({
+      type: "version.restore",
+      title: "Go back to a named version: every sheet becomes what it was then (undoable)",
+      schema: s.object({ name: s.string("the version's name") }),
+      describe: (p) => `go back to "${p.name}"`,
+      recordable: true,
+      apply(ctx, p) {
+        const v = ctx.workbook.versions.find((x) => x.name.toLowerCase() === p.name.toLowerCase());
+        if (!v) throw new Error(`No version called "${p.name}".`);
+        const now = captureVersion(ctx.workbook, "before going back");
+        ctx.workbook.replaceSheets(versionSheets(v));
+        return { type: "version.swap", params: { version: ctx.blobs.put(now) } };
+      },
+    })
+    .register<{ version: string }>({
+      type: "version.swap",
+      title: "Undo going back to a version",
+      internal: true,
+      schema: s.object({ version: s.string() }),
+      describe: () => "go back to a version",
+      apply(ctx, p) {
+        const now = captureVersion(ctx.workbook, "before");
+        ctx.workbook.replaceSheets(versionSheets(ctx.blobs.get<Version>(p.version)));
+        return { type: "version.swap", params: { version: ctx.blobs.put(now) } };
+      },
+    });
 
   // ------------------------------------------------------------ merge --
   registry

@@ -144,3 +144,44 @@ describe("saving workbooks", () => {
     expect(look(loaded!.workbook)).toEqual(look(wb));
   });
 });
+
+describe("named versions", () => {
+  it("save, compare, go back, undo, and survive saving", async () => {
+    const wb = new Workbook({ name: "Ledger", source: new EditableSource(new BlankSource(10, 4)) });
+    const { history } = session(wb);
+    // B reads its own row, so the formula keeps working when rows are sorted
+    await history.run(setCells([{ row: 0, col: 0, input: "5" }, { row: 1, col: 0, input: "100" }, { row: 1, col: 1, input: "=A2*2" }]));
+    await history.run({ type: "version.save", params: { name: "sent to auditor" } });
+    await history.run(setCells([{ row: 1, col: 0, input: "150" }, { row: 2, col: 1, input: "note" }]));
+    await history.run({ type: "rows.sort", params: { col: 0, descending: true } });
+
+    const { compareWorkbooks, versionWorkbook } = await import("./versions");
+    const diff = compareWorkbooks(versionWorkbook(wb.versions[0]), wb);
+    const byCell = Object.fromEntries(diff.changes.map((c) => [c.cell, `${c.before} | ${c.after}`]));
+    // matched by row, so the sort doesn't make every cell look changed
+    expect(Object.values(byCell)).toContain("100 | 150");
+    // the 150 row sorted to the top: its formula now reads row 1
+    expect(byCell.B1).toBe("=A2*2 → 200 | =A1*2 → 300");
+    expect(Object.values(byCell)).toContain(" | note");
+    expect(diff.changes).toHaveLength(3);
+    expect(diff.notes.join(" ")).toMatch(/different order/);
+
+    // survives a save and reopen
+    const packed = packWorkbook(wb, wb.sheets[0].id, "Ledger");
+    const back = await unpackWorkbook(JSON.parse(JSON.stringify(packed.meta)), async (n) => packed.files.get(n)!);
+    expect(back.workbook.versions.map((v) => v.name)).toEqual(["sent to auditor"]);
+
+    await history.run({ type: "version.restore", params: { name: "sent to auditor" } });
+    expect(wb.sheets[0].source.getCell(1, 0)).toBe(100);
+    expect(wb.sheets[0].source.getCell(2, 1)).toBeNull();
+    await history.undo();
+    expect(wb.sheets[0].source.rowOrder).not.toBeNull();
+    expect(wb.sheets[0].source.getCell(2, 1)).toBe("note");
+
+    await expect(history.run({ type: "version.save", params: { name: "Sent To Auditor" } })).rejects.toThrow(/already/);
+    await history.run({ type: "version.delete", params: { name: "sent to auditor" } });
+    expect(wb.versions).toEqual([]);
+    await history.undo();
+    expect(wb.versions.map((v) => v.name)).toEqual(["sent to auditor"]);
+  });
+});
