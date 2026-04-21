@@ -10,6 +10,7 @@ import { download, exportCsv } from "./exporter";
 import { SheetTabs } from "./tabs";
 import { NUMBER_FORMATS, setupFormatBar } from "./formatbar";
 import { type Command, setupPalette } from "./palette";
+import { setupHistoryPanel, type TrailEntry } from "./historypanel";
 import { AutoSaver, fromFile, OpfsStore, packWorkbook, toFile, unpackWorkbook, type JournalEntry } from "./persist";
 import { sheetNameProblem, Workbook } from "./workbook";
 import { extractKeys, sortInWorker } from "./sort";
@@ -114,6 +115,7 @@ grid.onSelectionChange = () => {
   syncFormulaBar();
   updateSelectionStats();
   formatBar.sync();
+  historyPanel.render();
 };
 
 // drag a row border (or double-click it to fit): resize that row, or every
@@ -223,7 +225,10 @@ const history = new ActionHistory(registry, ctx);
 async function run(action: Action) {
   try {
     const applied = await history.run(action);
-    if (applied) journal({ op: "run", action });
+    if (applied) {
+      journal({ op: "run", action });
+      recordTrail(action);
+    }
     refresh();
     return applied;
   } catch (e) {
@@ -283,6 +288,7 @@ function refresh() {
   grid.invalidate();
   syncFormulaBar();
   formatBar.sync();
+  historyPanel.render();
   updateStatus();
   updateSelectionStats();
   undoButton.disabled = !history.canUndo;
@@ -981,6 +987,51 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// --- history panel ------------------------------------------------------------
+
+// what was typed into each cell this session, by row identity so it follows sorts
+const trail = new Map<string, TrailEntry[]>();
+function recordTrail(action: Action) {
+  if (action.type !== "cells.set") return;
+  const p = action.params as { cells: { row: number; col: number; input: string | null }[]; sheet?: string };
+  const sheetId = p.sheet ?? activeId;
+  if (!workbook.has(sheetId)) return;
+  const src = workbook.get(sheetId).source;
+  const at = Date.now();
+  for (const c of p.cells.slice(0, 500)) {
+    const key = `${sheetId}:${src.toBase(c.row)}:${c.col}`;
+    const list = trail.get(key) ?? [];
+    list.push({ at, text: c.input ?? "" });
+    if (list.length > 50) list.shift();
+    trail.set(key, list);
+  }
+}
+
+const historyPanel = setupHistoryPanel({
+  root: document.getElementById("history-panel")!,
+  workbook: () => workbook,
+  activeSheet: () => activeId,
+  selection: () => grid.selection,
+  timeline: () => history.timeline,
+  undo,
+  redo,
+  run: (a) => run(a),
+  goTo: (sheetId, row, col) => {
+    showSheet(sheetId);
+    grid.select(row, col);
+    grid.focus();
+  },
+  trail: (sheetId, rowId, col) => trail.get(`${sheetId}:${rowId}:${col}`) ?? [],
+});
+
+document.getElementById("btn-history")!.addEventListener("click", () => historyPanel.toggle());
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "h") {
+    e.preventDefault();
+    historyPanel.toggle();
+  }
+});
+
 // --- command palette (Ctrl+K) -------------------------------------------------
 
 const click = (id: string) => () => document.getElementById(id)?.click();
@@ -995,6 +1046,8 @@ function paletteCommands(): Command[] {
   const { row, col } = grid.selection;
   const list: Command[] = [
     { id: "undo", title: "Undo", keys: "Ctrl Z", run: undo },
+    { id: "history", title: "Show history and versions", keys: "Ctrl H", hint: "timeline compare changes audit", run: () => historyPanel.toggle() },
+    { id: "version-save", title: "Save a version…", hint: "name snapshot checkpoint", run: () => { if (!historyPanel.open) historyPanel.toggle(); document.querySelector<HTMLInputElement>(".hp-version-form input")?.focus(); } },
     { id: "redo", title: "Redo", keys: "Ctrl Y", run: redo },
     { id: "bold", title: "Bold", keys: "Ctrl B", run: toggle("bold") },
     { id: "italic", title: "Italic", keys: "Ctrl I", run: toggle("italic") },
@@ -1063,6 +1116,7 @@ function loadSource(next: EditableSource, name: string) {
 
 /** Replace the whole workbook (open, new, restore). */
 function loadWorkbook(next: Workbook, active: string, name: string) {
+  trail.clear();
   workbook = next;
   activeId = active;
   selections.clear();

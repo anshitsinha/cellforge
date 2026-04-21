@@ -204,6 +204,182 @@ button:disabled {
   border-radius: 2px;
 }
 
+/* --- history panel --------------------------------------------------------- */
+
+.history-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(360px, 100vw);
+  z-index: 40;
+  overflow-y: auto;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  box-shadow: -12px 0 32px rgb(0 0 0 / 0.25);
+  padding: 0 14px 24px;
+}
+
+.hp-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0 8px;
+  background: var(--panel);
+}
+
+.hp-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.hp-close {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  padding: 2px 8px;
+}
+
+.hp-section {
+  border-top: 1px solid var(--border);
+  padding: 10px 0;
+}
+
+.hp-section h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.hp-muted,
+.hp-note {
+  color: var(--muted);
+  margin: 6px 0;
+}
+
+.hp-note {
+  color: var(--text);
+}
+
+.hp-version-form {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.hp-version-form input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.hp-version {
+  display: grid;
+  gap: 6px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.hp-version small,
+.hp-cellhist small,
+.hp-step small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.hp-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.hp-buttons button,
+.hp-section > button {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.hp-changes,
+.hp-cellhist,
+.hp-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.hp-changes li {
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  gap: 6px;
+  align-items: baseline;
+  padding: 3px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.hp-cell {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  padding: 0;
+  font: 12px ui-monospace, Consolas, monospace;
+}
+
+.hp-before {
+  color: var(--muted);
+  text-decoration: line-through;
+  overflow-wrap: anywhere;
+}
+
+.hp-after {
+  overflow-wrap: anywhere;
+}
+
+.hp-arrow {
+  color: var(--muted);
+}
+
+.hp-cellhist li {
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--border);
+  overflow-wrap: anywhere;
+}
+
+.hp-cellhist .hp-now span {
+  font-weight: 600;
+}
+
+.hp-step button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-left: 2px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  padding: 4px 10px;
+}
+
+.hp-step.current button {
+  border-left-color: var(--accent);
+  font-weight: 600;
+  opacity: 1;
+}
+
+.hp-step.undone button {
+  opacity: 0.5;
+}
+
 /* --- command palette ------------------------------------------------------- */
 
 .palette-backdrop {

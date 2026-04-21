@@ -21,6 +21,7 @@
         <div class="toolbar-actions">
           <button id="btn-undo" type="button" title="Undo (Ctrl+Z)" disabled>Undo</button>
           <button id="btn-redo" type="button" title="Redo (Ctrl+Y)" disabled>Redo</button>
+          <button id="btn-history" type="button" title="Every change, named versions, compare — Ctrl+H">History</button>
           <span class="toolbar-sep"></span>
           <button id="btn-fill" type="button" title="Copy the top cell down through the selection (Ctrl+D)">Fill ↓</button>
           <button id="btn-sort-asc" type="button" title="Sort rows by the selected column, A→Z / smallest first">Sort A→Z</button>
@@ -45,6 +46,8 @@
       <main class="sheet" id="sheet"></main>
 
       <nav class="sheet-tabs" id="sheet-tabs" aria-label="Sheets"></nav>
+
+      <aside class="history-panel" id="history-panel" aria-label="History" hidden></aside>
 
       <div class="drop-overlay" id="drop-overlay" hidden>
         <p>Drop a CSV to open it</p>

@@ -68,13 +68,10 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### History panel: timeline, named versions, compare any two points, per-cell history
-- [x] Column widths per sheet, kept when switching sheets and saved with the workbook
-- [ ] History panel: every change in order with its description; click one to jump back there (and forward again)
-- [ ] Named versions: name the current point ("sent to auditor"); kept in the workbook file
-- [ ] Compare any two points: which cells changed, old → new, per sheet
-- [ ] Per-cell history: every value a cell has had, from the journal
-- [ ] Tests, user guide
+### Instant insert/delete on 100M-row sheets (segment row map; today capped at 20M rows)
+- [ ] Segment row map: the view as a list of runs of consecutive row ids, so inserting or deleting rows costs O(runs), not O(rows)
+- [ ] EditableSource uses it for insert/delete (sorted sheets keep their full order array)
+- [ ] Lift the 20M cap; randomised equivalence tests against the array version; timing on the 100M demo
 
 ## Milestones
 
@@ -94,8 +91,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Fill handle with series detection; default paste mode setting
 - ✅ Command palette (Ctrl+K) listing every public action
 - ✅ Crash-proof saving: action journal in OPFS, autosave, open/save via File System Access
-- 🔨 History panel: timeline, named versions, compare any two points, per-cell history
-- ⬜ Instant insert/delete on 100M-row sheets (segment row map; today capped at 20M rows)
+- ✅ History panel: timeline, named versions, compare any two points, per-cell history
+- 🔨 Instant insert/delete on 100M-row sheets (segment row map; today capped at 20M rows)
 
 ### M2: Formula engine
 - ⬜ Function registry + generated reference and autocomplete with argument hints

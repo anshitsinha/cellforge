@@ -56,3 +56,4 @@ A few things to know:
 - [Privacy](#/guide/06-privacy)
 - [Formatting](#/guide/08-formatting)
 - [Command palette](#/guide/09-command-palette)
+- [History and versions](#/guide/10-history)
