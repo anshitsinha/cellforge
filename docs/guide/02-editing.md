@@ -58,7 +58,9 @@ Formulas everywhere adjust the way Excel's do:
 Undo puts the rows or columns back with their data, and every formula exactly
 as it was. Column widths move with their columns. A sheet can have up to
 16,384 columns, like Excel.
-For now, inserting and deleting rows works on sheets of up to 20 million rows.
+Inserting and deleting rows is instant at any size, even on 100 million rows.
+One exception for now: on a *sorted* sheet of more than 20 million rows,
+undo the sort first.
 
 ## Hide and unhide rows and columns
 

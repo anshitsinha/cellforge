@@ -509,3 +509,27 @@ describe("column widths", () => {
     expect(sheet.clone().columnWidths.size).toBe(0);
   });
 });
+
+describe("inserting and deleting rows at 100M", () => {
+  it("is instant, exact, undoable and saves compactly", async () => {
+    const { history, sheet, type } = setup(100_000_000, 3);
+    await type([["A1", "top"], ["B1", "=A2"]]);
+    const t = performance.now();
+    await history.run({ type: "rows.insert", params: { at: 50_000_000, count: 3 } });
+    await history.run({ type: "rows.delete", params: { at: 10, count: 1_000_000 } });
+    await history.run({ type: "rows.insert", params: { at: 1, count: 1 } });
+    expect(performance.now() - t).toBeLessThan(1000);
+    expect(sheet.rowCount).toBe(100_000_000 + 3 - 1_000_000 + 1);
+    expect(sheet.getEditText(0, 1)).toBe("=A3"); // the formula followed its row
+    const { state, binary } = sheet.toState();
+    expect(state.order).toBe("runs");
+    expect(binary.order).toBeUndefined();
+    expect(JSON.stringify(state).length).toBeLessThan(5000);
+    await history.undo();
+    await history.undo();
+    await history.undo();
+    expect(sheet.rowCount).toBe(100_000_000);
+    expect(sheet.rowOrder).toBeNull();
+    expect(sheet.getEditText(0, 1)).toBe("=A2");
+  });
+});

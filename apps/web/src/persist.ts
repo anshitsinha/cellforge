@@ -354,7 +354,7 @@ export class AutoSaver {
     const orders = new Map<string, Uint32Array>();
     for (const s of wb.sheets) {
       const order = s.source.rowOrder;
-      if (order) orders.set(orderFile(s.id), order);
+      if (order?.isArray) orders.set(orderFile(s.id), order.toArray());
     }
     this.pending = 0;
     return this.enqueue(async () => {

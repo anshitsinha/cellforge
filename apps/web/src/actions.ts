@@ -14,6 +14,7 @@ import { type ColumnRemoval, type EditableSource, effectiveShift, type Fill, typ
 import { BlankSource, EditableSource as Source } from "./editable";
 import { CLEAR_ALL, type ColumnStyles, type StylePatch } from "./styles";
 import { captureVersion, versionSheets, type Version } from "./versions";
+import { type IdRuns, type RowMap, runsLength } from "./rowmap";
 import type { Sheet, Workbook } from "./workbook";
 
 export interface SheetCtx {
@@ -412,7 +413,7 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         const viewOrder = await ctx.sortRows(data, p.col, !!p.descending);
         if (!viewOrder) return null; // cancelled
         // the worker sorts view rows; map them through the order we started from
-        data.setRowOrder(before ? viewOrder.map((v) => before[v]) : viewOrder);
+        data.setRowOrder(before ? before.compose(viewOrder) : viewOrder);
         return { type: "rows.order", params: { sheet: id, order: before ? ctx.blobs.put(before) : null } };
       },
     })
@@ -425,7 +426,7 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       apply(ctx, p) {
         const { id, data } = target(ctx, p.sheet);
         const current = data.rowOrder;
-        data.setRowOrder(p.order ? ctx.blobs.get<Uint32Array>(p.order) : null);
+        data.setRowOrder(p.order ? ctx.blobs.get<RowMap | Uint32Array>(p.order) : null);
         return { type: "rows.order", params: { sheet: id, order: current ? ctx.blobs.put(current) : null } };
       },
     });
@@ -443,8 +444,8 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         const { id, data } = target(ctx, p.sheet);
         const count = p.count ?? 1;
         if (p.at > data.rowCount) throw new Error(`Row ${p.at + 1} is past the end of the sheet.`);
-        if (!data.rowOrder && data.rowCount > MAX_RESTRUCTURE_ROWS) {
-          throw new Error(`Inserting or deleting rows on sheets over ${MAX_RESTRUCTURE_ROWS.toLocaleString()} rows isn't supported yet.`);
+        if (data.rowOrder?.isArray && data.rowCount > MAX_RESTRUCTURE_ROWS) {
+          throw new Error(`Inserting or deleting rows in a sorted sheet over ${MAX_RESTRUCTURE_ROWS.toLocaleString()} rows isn't supported yet; undo the sort first.`);
         }
 
         const formulas = adjustEverywhere(ctx, id, { at: p.at, count, insert: true });
@@ -463,8 +464,8 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         const count = p.count ?? 1;
         if (p.at + count > data.rowCount) throw new Error("Those rows are past the end of the sheet.");
         if (count >= data.rowCount) throw new Error("A sheet needs at least one row.");
-        if (!data.rowOrder && data.rowCount > MAX_RESTRUCTURE_ROWS) {
-          throw new Error(`Inserting or deleting rows on sheets over ${MAX_RESTRUCTURE_ROWS.toLocaleString()} rows isn't supported yet.`);
+        if (data.rowOrder?.isArray && data.rowCount > MAX_RESTRUCTURE_ROWS) {
+          throw new Error(`Inserting or deleting rows in a sorted sheet over ${MAX_RESTRUCTURE_ROWS.toLocaleString()} rows isn't supported yet; undo the sort first.`);
         }
 
         const formulas = adjustEverywhere(ctx, id, { at: p.at, count, insert: false });
@@ -488,12 +489,12 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         const data = ctx.workbook.get(p.sheet).source;
         const before = snapshotFormulas(ctx);
         const removed = data.deleteRows(p.at, p.remove);
-        const inserted = p.insert ? ctx.blobs.get<number[]>(p.insert) : [];
+        const inserted = p.insert ? ctx.blobs.get<IdRuns>(p.insert) : [];
         if (inserted.length) data.restoreRows(p.at, inserted);
         restoreFormulas(ctx, ctx.blobs.get(p.formulas));
         return {
           type: "rows.splice",
-          params: { sheet: p.sheet, at: p.at, remove: inserted.length, insert: removed.length ? ctx.blobs.put(removed) : null, formulas: ctx.blobs.put(before) },
+          params: { sheet: p.sheet, at: p.at, remove: runsLength(inserted), insert: removed.length ? ctx.blobs.put(removed) : null, formulas: ctx.blobs.put(before) },
         };
       },
     });

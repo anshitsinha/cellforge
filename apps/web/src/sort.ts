@@ -53,7 +53,7 @@ export async function extractKeys(
     // fast path: untouched numeric column straight out of the Float64Array
     const values = column.values;
     for (let r = 0; r < n; r++) {
-      const v = values[order ? order[r] : r];
+      const v = values[order ? order.get(r) : r];
       if (Number.isNaN(v)) kinds[r] = KIND_BLANK;
       else {
         keys[r] = v;
@@ -67,7 +67,7 @@ export async function extractKeys(
     // fast path: rank the dictionary once, then each row is a lookup
     const rank = rankStrings(column.dict);
     for (let r = 0; r < n; r++) {
-      const code = column.codes[order ? order[r] : r];
+      const code = column.codes[order ? order.get(r) : r];
       if (code === 0) kinds[r] = KIND_BLANK;
       else {
         keys[r] = rank[code - 1];
@@ -131,7 +131,7 @@ function rankStrings(strings: string[]): Float64Array {
 /** Convert a sorted list of view rows into a base-row order, in place. */
 export function toBaseOrder(source: EditableSource, viewOrder: Uint32Array): Uint32Array {
   const current = source.rowOrder;
-  if (current) for (let i = 0; i < viewOrder.length; i++) viewOrder[i] = current[viewOrder[i]];
+  if (current) for (let i = 0; i < viewOrder.length; i++) viewOrder[i] = current.get(viewOrder[i]);
   return viewOrder;
 }
 

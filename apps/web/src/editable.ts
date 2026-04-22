@@ -23,6 +23,7 @@ import { formatCell, spliceMerges, type CellRange, type CellStyle, type CellValu
 import { formatGeneral, formatValue as formatWithCode, isDateFormat } from "@cellforge/core";
 import { DepIndex, type Rect } from "./deps";
 import { SheetStyles, type ColumnStyles, type StylesState } from "./styles";
+import { type IdRuns, RowMap, runsLength } from "./rowmap";
 
 /** Something whose cached result depends on other cells. */
 type Dep = { kind: "cell"; row: number; col: number } | { kind: "fill"; fill: Fill };
@@ -155,7 +156,7 @@ export class EditableSource implements DataSource {
   // deleted). Ids below base.rowCount are rows of the original data; inserted
   // rows get fresh ids from nextRowId. A deleted row's id just leaves the
   // view, so its edits are still here when an undo puts it back.
-  private order: Uint32Array | null = null;
+  private order: RowMap | null = null;
   private nextRowId: number;
 
   // view column -> column of the imported data, or -1 for a column that isn't
@@ -238,7 +239,8 @@ export class EditableSource implements DataSource {
       v: 1,
       edits,
       fills: this.fills.map((f) => ({ col: f.col, top: f.top, bottom: f.bottom, origin: f.origin, template: storedToState(f.template) })),
-      order: this.order ? "order" : null,
+      order: this.order ? (this.order.isArray ? "order" : "runs") : null,
+      ...(this.order && !this.order.isArray ? { orderRuns: this.order.idRuns } : {}),
       nextRowId: this.nextRowId,
       colMap: this.colMap ? Array.from(this.colMap) : null,
       hiddenRows: [...this.hiddenRowIds],
@@ -249,14 +251,19 @@ export class EditableSource implements DataSource {
       frozen: { ...this.frozen },
       merges: this.merges.map((m) => ({ ...m })),
     };
-    return { state, binary: this.order ? { order: this.order } : {} };
+    return { state, binary: this.order?.isArray ? { order: this.order.toArray() } : {} };
   }
 
   /** A sheet rebuilt from toState's output over the same base data. */
   static fromState(base: DataSource, extraColumns: number, state: SheetState, binary: { order?: Uint32Array }): EditableSource {
     const s = new EditableSource(base, extraColumns);
     for (const [id, col, v] of state.edits) s.putEdit(id, col, storedFromState(v));
-    s.order = state.order && binary.order ? binary.order : null;
+    s.order =
+      state.order === "runs" && state.orderRuns
+        ? RowMap.fromRuns(state.orderRuns)
+        : state.order === "order" && binary.order
+          ? RowMap.fromArray(binary.order)
+          : null;
     s.nextRowId = state.nextRowId;
     s.colMap = state.colMap ? Int32Array.from(state.colMap) : null;
     for (const f of state.fills) {
@@ -292,7 +299,7 @@ export class EditableSource implements DataSource {
     // kernels are pure functions of the template, so they can be shared;
     // cached chunks can't (they belong to this sheet's data)
     copy.fills = this.fills.map((f) => ({ ...f, chunks: new Map(), computing: false }));
-    copy.order = this.order ? this.order.slice() : null;
+    copy.order = this.order; // immutable: every change makes a new map
     copy.nextRowId = this.nextRowId;
     copy.colMap = this.colMap ? this.colMap.slice() : null;
     copy.hiddenRowIds = new Set(this.hiddenRowIds);
@@ -603,34 +610,36 @@ export class EditableSource implements DataSource {
   // inserting and deleting rows
 
   /** Insert `count` empty rows before view row `at`. Returns their ids. */
-  insertRows(at: number, count: number): number[] {
-    const ids = Array.from({ length: count }, () => this.nextRowId++);
+  insertRows(at: number, count: number): IdRuns {
+    const ids: IdRuns = [[this.nextRowId, count]];
+    this.nextRowId += count;
     this.spliceRows(at, 0, ids);
     return ids;
   }
 
   /** Remove view rows at..at+count-1. Returns their ids (to put them back). */
-  deleteRows(at: number, count: number): number[] {
+  deleteRows(at: number, count: number): IdRuns {
     return this.spliceRows(at, count, []);
   }
 
   /** Put previously removed rows back at `at` (undo of a delete). */
-  restoreRows(at: number, ids: number[]): void {
+  restoreRows(at: number, ids: IdRuns): void {
     this.spliceRows(at, 0, ids);
   }
 
-  private spliceRows(at: number, remove: number, insert: number[]): number[] {
+  /**
+   * Replace view rows at..at+remove-1 with the rows `insert`. The row map
+   * is runs of ids, so this costs the number of runs, not of rows: instant
+   * on 100M rows unless the sheet is sorted.
+   */
+  private spliceRows(at: number, remove: number, insert: IdRuns): IdRuns {
     const n = this.rowCount;
     if (at < 0 || at + remove > n) throw new Error("rows out of range");
-    if (this.merges.length) this.merges = spliceMerges(this.merges, "row", at, remove, insert.length);
-    const current = this.order ?? identityOrder(n);
-    const next = new Uint32Array(n - remove + insert.length);
-    next.set(current.subarray(0, at));
-    next.set(insert, at);
-    next.set(current.subarray(at + remove), at + insert.length);
-    const removed = Array.from(current.subarray(at, at + remove));
+    if (this.merges.length) this.merges = spliceMerges(this.merges, "row", at, remove, runsLength(insert));
+    const current = this.order ?? RowMap.identity(n);
+    const { map, removed } = current.splice(at, remove, insert);
     // back to the identity (e.g. an insert was undone): fast paths come back
-    this.order = isIdentity(next, this.base.rowCount) ? null : next;
+    this.order = map.isIdentity(this.base.rowCount) ? null : map;
     this.hiddenIntervalsCache = null;
     this.heightsView = null;
     this.rebuildDeps();
@@ -773,7 +782,7 @@ export class EditableSource implements DataSource {
       throw new Error("Can't insert or delete rows here: a filled formula on a sorted sheet would need too many rewrites. Undo the sort first.");
     }
     for (let v = lo; v <= hi && cuts.length; v++) {
-      const id = order[v];
+      const id = order.get(v);
       if (id < fill.top || id > fill.bottom || this.edits.get(id)?.has(fill.col)) continue;
       const moved = self ? mapRow(change, v) : v;
       if (moved === null) continue;
@@ -820,9 +829,7 @@ export class EditableSource implements DataSource {
 
   private viewLookup(): (id: number) => number {
     if (!this.order) return (id) => id;
-    const inverse = new Int32Array(this.nextRowId).fill(-1);
-    this.order.forEach((id, v) => (inverse[id] = v));
-    return (id) => (id < inverse.length ? inverse[id] : -1);
+    return this.order.inverse(this.nextRowId);
   }
 
   /** Raw edit write/remove, keeping counts right; callers rebuild and invalidate. */
@@ -1111,14 +1118,15 @@ export class EditableSource implements DataSource {
     return this.hiddenCols;
   }
 
-  get rowOrder(): Uint32Array | null {
+  get rowOrder(): RowMap | null {
     return this.order;
   }
 
   /** Replace the view -> base row mapping. null restores the original order. */
-  setRowOrder(order: Uint32Array | null): void {
+  setRowOrder(order: RowMap | Uint32Array | null): void {
     if (order && order.length !== this.rowCount) throw new Error("row order has the wrong length");
-    this.order = order;
+    const map = order instanceof Uint32Array ? RowMap.fromArray(order) : order;
+    this.order = map && !map.isIdentity(this.base.rowCount) ? map : null;
     this.hiddenIntervalsCache = null;
     this.heightsView = null;
     this.rebuildDeps();
@@ -1141,7 +1149,7 @@ export class EditableSource implements DataSource {
   rowIdIntervals(top: number, bottom: number): [number, number][] {
     if (!this.order) return [[top, bottom]];
     const ids: number[] = [];
-    for (let v = top; v <= bottom; v++) ids.push(this.order[v]);
+    for (let v = top; v <= bottom; v++) ids.push(this.order.get(v));
     ids.sort((a, b) => a - b);
     const out: [number, number][] = [];
     for (const id of ids) {
@@ -1153,7 +1161,7 @@ export class EditableSource implements DataSource {
   }
 
   toBase(row: number): number {
-    return this.order ? this.order[row] : row;
+    return this.order ? this.order.get(row) : row;
   }
 
   /**
@@ -1169,11 +1177,7 @@ export class EditableSource implements DataSource {
     // edits are keyed by row id, so map back to view rows if sorted or
     // restructured; edits on deleted rows (not in the view) don't count
     let toView: (b: number) => number = (b) => b;
-    if (this.order) {
-      const inverse = new Int32Array(this.nextRowId).fill(-1);
-      this.order.forEach((b, v) => (inverse[b] = v));
-      toView = (b) => inverse[b];
-    }
+    if (this.order) toView = this.order.inverse(this.nextRowId);
 
     for (const [b, rowEdits] of this.edits) {
       for (const [c, v] of rowEdits) {
@@ -1605,8 +1609,9 @@ export interface SheetState {
   v: 1;
   edits: [number, number, StoredState][];
   fills: { col: number; top: number; bottom: number; origin: number; template: StoredState }[];
-  /** "order" when the row order is saved as a binary attachment */
-  order: "order" | null;
+  /** "order": one id per row, in a binary attachment; "runs": orderRuns */
+  order: "order" | "runs" | null;
+  orderRuns?: IdRuns;
   nextRowId: number;
   colMap: number[] | null;
   hiddenRows: number[];
@@ -1624,18 +1629,6 @@ export interface FormulaSnapshot {
   fills: Fill[];
   /** merged blocks move with structural changes too */
   merges?: CellRange[];
-}
-
-function identityOrder(n: number): Uint32Array {
-  const a = new Uint32Array(n);
-  for (let i = 0; i < n; i++) a[i] = i;
-  return a;
-}
-
-function isIdentity(order: Uint32Array, baseRows: number): boolean {
-  if (order.length !== baseRows) return false;
-  for (let i = 0; i < order.length; i++) if (order[i] !== i) return false;
-  return true;
 }
 
 function cloneAst(node: Node): Node {

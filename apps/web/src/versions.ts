@@ -113,7 +113,9 @@ export function compareWorkbooks(older: Workbook, newer: Workbook, limit = 2000)
     const posB = rowPositions(b);
     if (a.rowCount !== b.rowCount) notes.push(`Sheet "${ns.name}" went from ${a.rowCount.toLocaleString()} to ${b.rowCount.toLocaleString()} rows.`);
     if (a.colCount !== b.colCount) notes.push(`Sheet "${ns.name}" went from ${a.colCount} to ${b.colCount} columns.`);
-    if (a.rowOrder !== b.rowOrder && (a.rowOrder || b.rowOrder) && a.rowCount === b.rowCount) notes.push(`Rows on "${ns.name}" are in a different order (sorted).`);
+    const sortedA = !!a.rowOrder?.isArray;
+    const sortedB = !!b.rowOrder?.isArray;
+    if ((sortedA || sortedB) && !sameOrder(a, b)) notes.push(`Rows on "${ns.name}" are in a different order (sorted).`);
     const cells = new Set<string>();
     for (const src of [a, b]) for (const [id, col] of src.touchedCells(200_000)) cells.add(`${id}:${col}`);
     for (const key of cells) {
@@ -134,6 +136,13 @@ export function compareWorkbooks(older: Workbook, newer: Workbook, limit = 2000)
   for (const os of older.sheets) if (!newer.sheets.some((s) => s.id === os.id)) notes.push(`Sheet "${os.name}" was deleted.`);
   changes.sort((x, y) => (x.sheet === y.sheet ? x.row - y.row || x.col - y.col : x.sheet < y.sheet ? -1 : 1));
   return { changes, notes, truncated };
+}
+
+/** Same rows in the same order (a sort that changed nothing counts as the same). */
+function sameOrder(a: EditableSource, b: EditableSource): boolean {
+  if (a.rowCount !== b.rowCount) return false;
+  for (let v = 0; v < a.rowCount; v++) if (a.toBase(v) !== b.toBase(v)) return false;
+  return true;
 }
 
 function rowPositions(src: EditableSource): (id: number) => number {
