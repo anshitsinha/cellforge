@@ -1,3 +1,5 @@
+import { functionReference } from "./functions";
+
 /**
  * Every markdown file under docs/ becomes a page. Guide pages are ordered by
  * their numeric prefix; developer pages put the development guide first.
@@ -28,6 +30,7 @@ export const pages: Page[] = [
   ...Object.entries(guideFiles)
     .map(([path, markdown]) => ({ section: "guide" as const, slug: stem(path), title: titleOf(markdown, stem(path)), markdown }))
     .sort((a, b) => a.slug.localeCompare(b.slug)),
+  { section: "guide" as const, slug: "functions", title: "Function reference", markdown: functionReference() },
   ...Object.entries(devFiles)
     .map(([path, markdown]) => ({ section: "dev" as const, slug: stem(path), title: titleOf(markdown, stem(path)), markdown }))
     .sort((a, b) => {
