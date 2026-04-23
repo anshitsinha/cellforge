@@ -5,3 +5,4 @@ export { compileFill, readsOtherSheets, type ColumnInput, type CompiledFill, typ
 export { FormulaSyntaxError, columnIndex, parseFormula } from "./parser";
 export { adjustForColChange, adjustForRowChange, breakpoints, mapCol, mapRow, type ColChange, type RowChange } from "./adjust";
 export { moveFormula } from "./move";
+export { EXAMPLE_CELLS, FUNCTION_INFO, signature, type FunctionArg, type FunctionCategory, type FunctionInfo } from "./functions";

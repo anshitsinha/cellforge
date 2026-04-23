@@ -341,13 +341,32 @@ export const FUNCTIONS: Record<string, Fn> = {
     return n;
   },
   SUMIF: (args) => {
-    // SUMIF(range, criterion) - the 3-arg form needs paired iteration over two
-    // ranges, which eachInRange doesn't do yet
-    if (args.length !== 2 || args[0].kind !== "range") return errors.value;
+    if (args.length < 2 || args.length > 3 || args[0].kind !== "range") return errors.value;
     const test = criterion(scalarArg(args[1]));
+    const checked = args[0];
+    if (args.length === 2) {
+      let sum = 0;
+      checked.ctx.eachInRange(checked.range, (v) => {
+        if (typeof v === "number" && test(v)) sum += v;
+      });
+      return tidy(sum);
+    }
+    const target = args[2];
+    if (target.kind !== "range") return errors.value;
+    // Excel: the sum range takes the checked range's shape from its top-left
+    const r = checked.range;
+    const shaped = {
+      top: target.range.top,
+      left: target.range.left,
+      bottom: r.bottom === Infinity ? Infinity : target.range.top + (r.bottom - r.top),
+      right: target.range.left + (r.right - r.left),
+    };
+    const hits: boolean[] = [];
+    checked.ctx.eachInRange(r, (v) => hits.push(test(v)));
     let sum = 0;
-    args[0].ctx.eachInRange(args[0].range, (v) => {
-      if (typeof v === "number" && test(v)) sum += v;
+    let i = 0;
+    target.ctx.eachInRange(shaped, (v) => {
+      if (hits[i++] && typeof v === "number") sum += v;
     });
     return tidy(sum);
   },
