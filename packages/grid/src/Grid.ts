@@ -484,6 +484,11 @@ export class Grid {
     this.canvas.focus();
   }
 
+  /** The in-cell editor's input, e.g. to attach formula autocomplete. */
+  get editorInput(): HTMLInputElement {
+    return this.editor.input;
+  }
+
   get isEditing(): boolean {
     return this.editor.isEditing;
   }

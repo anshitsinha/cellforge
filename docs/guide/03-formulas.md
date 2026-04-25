@@ -9,18 +9,7 @@ Start a cell with `=` to calculate: `=A1*B1`, `=SUM(C:C)`, `=IF(D2>100, "big", "
 | `A1` | one cell; adjusts when filled down or copied |
 | `A1:B9` | a rectangle of cells |
 | `C:C` | the whole column C, however many rows |
-| `$A$1` | always this cell (`# Formulas
-
-Start a cell with `=` to calculate: `=A1*B1`, `=SUM(C:C)`, `=IF(D2>100, "big", "small")`.
-
-## References
-
-| You write | It means |
-| --- | --- |
-| `A1` | one cell; adjusts when filled down or copied |
-| `A1:B9` | a rectangle of cells |
-| `C:C` | the whole column C, however many rows |
- locks the column and/or row) |
+| `$A$1` | always this cell (`$` locks the column and/or row) |
 | `Data!B4` | cell B4 on the sheet called Data |
 | `'Bank Jan'!A1:A9` | a range on a sheet whose name has spaces or symbols (in quotes) |
 | `Data!C:C` | a whole column on another sheet |
@@ -33,18 +22,20 @@ formulas that refer to it are updated for you. If you delete it, they show
 
 `+ - * / ^` for maths, `&` to join text, and `= <> < > <= >=` to compare.
 
-## Functions available today
+## Functions
 
-| Category | Functions |
-| --- | --- |
-| Totals | `SUM` `AVERAGE` `MIN` `MAX` `COUNT` `COUNTA` |
-| Conditional | `COUNTIF` `SUMIF` `IF` `IFERROR` |
-| Logic | `AND` `OR` `NOT` |
-| Maths | `ABS` `SQRT` `INT` `ROUND` `MOD` `POWER` |
-| Text | `LEN` `UPPER` `LOWER` `TRIM` `CONCAT` |
+The [function reference](#/guide/functions) lists every function with its
+arguments and worked examples. More arrive with every release; around 150
+of the most used Excel functions are planned for milestone M2.
 
-The full library of around 500 Excel and Google Sheets functions is planned
-for milestone M2; see [progress](#/progress).
+While you type a formula, cellforge helps:
+
+- after `=` and a few letters it suggests matching functions; use the arrow
+  keys and **Tab** (or click) to insert one with its opening bracket;
+- inside a function's brackets it shows its arguments, with the one you're
+  on in bold and a line on what it expects.
+
+This works in the cell and in the formula bar.
 
 ## Errors
 

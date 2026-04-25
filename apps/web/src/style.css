@@ -204,6 +204,60 @@ button:disabled {
   border-radius: 2px;
 }
 
+/* --- formula assist -------------------------------------------------------- */
+
+.fx-assist {
+  position: fixed;
+  z-index: 60;
+  max-width: 380px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.3);
+  padding: 4px;
+  font-size: 12px;
+}
+
+.fx-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.fx-item span {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fx-item.selected {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.fx-tip {
+  color: var(--muted);
+  font-size: 11px;
+  padding: 2px 8px 0;
+}
+
+.fx-sig {
+  font: 12px ui-monospace, Consolas, monospace;
+  padding: 4px 8px;
+}
+
+.fx-sig b {
+  color: var(--accent);
+}
+
+.fx-desc {
+  color: var(--muted);
+  padding: 0 8px 4px;
+}
+
 /* --- history panel --------------------------------------------------------- */
 
 .history-panel {

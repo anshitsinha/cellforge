@@ -9,6 +9,7 @@ import { BlankSource, EditableSource, isFormula, type Fill } from "./editable";
 import { download, exportCsv } from "./exporter";
 import { SheetTabs } from "./tabs";
 import { NUMBER_FORMATS, setupFormatBar } from "./formatbar";
+import { attachFormulaAssist } from "./formulaassist";
 import { type Command, setupPalette } from "./palette";
 import { setupHistoryPanel, type TrailEntry } from "./historypanel";
 import { AutoSaver, fromFile, OpfsStore, packWorkbook, toFile, unpackWorkbook, type JournalEntry } from "./persist";
@@ -162,6 +163,10 @@ grid.onColumnResize = (col, width) => {
   const inside = wholeCols && col >= r.left && col <= r.right;
   void run({ type: "cols.width", params: { at: inside ? r.left : col, count: inside ? r.right - r.left + 1 : 1, width } });
 };
+
+// function suggestions and argument hints in the formula bar and the cell editor
+attachFormulaAssist(formulaInput);
+attachFormulaAssist(grid.editorInput);
 
 const formatBar = setupFormatBar({
   root: document.getElementById("format-bar")!,
