@@ -68,14 +68,16 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Instant insert/delete on 100M-row sheets (segment row map; today capped at 20M rows)
-- [ ] Segment row map: the view as a list of runs of consecutive row ids, so inserting or deleting rows costs O(runs), not O(rows)
-- [ ] EditableSource uses it for insert/delete (sorted sheets keep their full order array)
-- [ ] Lift the 20M cap; randomised equivalence tests against the array version; timing on the 100M demo
+### Excel type system and coercion; dates as serials (incl. the 1900 bug)
+- [ ] Booleans as real values (TRUE/FALSE typed, shown, compared and counted as Excel does)
+- [ ] Coercion rules: text that looks like a number in arithmetic, booleans as 1/0, empty as 0 or "", comparisons across types (numbers < text < booleans)
+- [ ] Date and time functions on serials: DATE, TIME, YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, WEEKDAY, TODAY, NOW, EDATE, EOMONTH, DATEVALUE
+- [ ] Error propagation and the error-checking functions: ISERROR, ISNUMBER, ISTEXT, ISBLANK, ISNA, NA
+- [ ] Reference entries, examples-as-tests, user guide
 
 ## Milestones
 
-### M1: Spreadsheet core 🔨
+### M1: Spreadsheet core ✅
 - ✅ `actions` package: registry, schemas, apply/invert, history, blob store
 - ✅ Port edits, paste, clear, fill and sort onto actions
 - ✅ Fix: formulas keep same-row references after sorting (Excel semantics)
@@ -92,11 +94,11 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Command palette (Ctrl+K) listing every public action
 - ✅ Crash-proof saving: action journal in OPFS, autosave, open/save via File System Access
 - ✅ History panel: timeline, named versions, compare any two points, per-cell history
-- 🔨 Instant insert/delete on 100M-row sheets (segment row map; today capped at 20M rows)
+- ✅ Instant insert/delete on 100M-row sheets (segment row map)
 
-### M2: Formula engine
-- ⬜ Function registry + generated reference and autocomplete with argument hints
-- ⬜ Excel type system and coercion; dates as serials (incl. the 1900 bug)
+### M2: Formula engine 🔨
+- ✅ Function registry + generated reference and autocomplete with argument hints
+- 🔨 Excel type system and coercion; dates as serials (incl. the 1900 bug)
 - ⬜ The ~150 functions that cover real use: lookup (XLOOKUP, INDEX/MATCH),
   maths, statistics, text, dates, financial, logic, information
 - ⬜ Dynamic arrays and spill, `LET`, `LAMBDA`
