@@ -1,4 +1,5 @@
 import { CellError, errors, type Node, type RangeRef } from "./ast";
+import { dateToSerial, parseTyped, serialToParts } from "../numfmt";
 
 // exported so the compiler can call the exact same implementations
 export { roundHalfAway };
@@ -39,7 +40,10 @@ function toNumber(v: Scalar): number | CellError {
   const trimmed = v.trim();
   if (trimmed === "") return 0;
   const n = Number(trimmed);
-  return Number.isNaN(n) ? errors.value : n;
+  if (!Number.isNaN(n)) return n;
+  // "10%", "$1,200", "2024-01-15", "1:30 PM": Excel reads these as numbers too
+  const typed = parseTyped(trimmed);
+  return typed ? typed.value : errors.value;
 }
 
 function toText(v: Scalar): string | CellError {
@@ -76,14 +80,23 @@ function roundHalfAway(n: number, digits: number): number {
   return (Math.sign(n) * Math.round(Math.abs(n) * f)) / f;
 }
 
-function compare(a: Scalar, b: Scalar): number {
-  // numbers compare numerically, everything else case-insensitively as text.
-  // (Excel orders number < text < boolean across types; not bothering yet.)
-  const na = typeof a === "number" || a === null ? (a ?? 0) : null;
-  const nb = typeof b === "number" || b === null ? (b ?? 0) : null;
-  if (na !== null && nb !== null) return na - nb;
-  const sa = String(toText(a)).toLowerCase();
-  const sb = String(toText(b)).toLowerCase();
+/**
+ * Excel's comparison: numbers by value, text case-insensitively, TRUE >
+ * FALSE, and across types numbers < text < booleans (so 1 = "1" is FALSE).
+ * An empty cell takes the other side's type: 0, "" or FALSE.
+ */
+export function compare(a: Scalar, b: Scalar): number {
+  if (a === null && b === null) return 0;
+  if (a === null) a = typeof b === "number" ? 0 : typeof b === "boolean" ? false : "";
+  if (b === null) b = typeof a === "number" ? 0 : typeof a === "boolean" ? false : "";
+  const rank = (v: Scalar) => (typeof v === "number" ? 0 : typeof v === "string" ? 1 : 2);
+  const ra = rank(a);
+  const rb = rank(b);
+  if (ra !== rb) return ra - rb;
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  if (typeof a === "boolean" && typeof b === "boolean") return Number(a) - Number(b);
+  const sa = String(a).toLowerCase();
+  const sb = String(b).toLowerCase();
   return sa < sb ? -1 : sa > sb ? 1 : 0;
 }
 
@@ -249,6 +262,19 @@ function numericFold(args: Arg[], ctx: EvalContext): { nums: number; sum: number
   return { nums, sum, min, max, err };
 }
 
+/** Excel wildcard text (* ? and ~ to escape) as a whole-string, case-insensitive regex. */
+function wildcard(pattern: string): RegExp {
+  let re = "";
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i];
+    if (ch === "~" && i + 1 < pattern.length) re += pattern[++i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    else if (ch === "*") re += "[\\s\\S]*";
+    else if (ch === "?") re += "[\\s\\S]";
+    else re += ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp(`^${re}$`, "i");
+}
+
 /** Parse a COUNTIF/SUMIF criterion like ">10", "<>x", "apple" or 5. */
 function criterion(c: Scalar): (v: Scalar) => boolean {
   if (typeof c === "number" || typeof c === "boolean") return (v) => v === c;
@@ -258,11 +284,17 @@ function criterion(c: Scalar): (v: Scalar) => boolean {
   const rhsText = m[2];
   const rhsNum = rhsText.trim() !== "" && !Number.isNaN(Number(rhsText)) ? Number(rhsText) : null;
   const rhs: Scalar = rhsNum ?? rhsText;
+  const wild = rhsNum === null && /[*?]/.test(rhsText) ? wildcard(rhsText) : null;
   return (v) => {
     if (v === null && op === "=" && rhsText === "") return true;
     if (v === null || isError(v)) return op === "<>";
     // a numeric criterion only matches numbers, a text one matches text
     if (rhsNum !== null && typeof v !== "number") return op === "<>";
+    // * any run, ? one character, ~ escapes them (text matches only)
+    if (wild && (op === "=" || op === "<>")) {
+      const hit = typeof v === "string" && wild.test(v);
+      return op === "=" ? hit : !hit;
+    }
     const c2 = compare(v, rhs);
     switch (op) {
       case "=":
@@ -297,6 +329,34 @@ function textFn(f: (s: string) => Scalar): Fn {
     const s = toText(scalarArg(args[0]));
     return isError(s) ? s : f(s);
   };
+}
+
+/** YEAR, MONTH... : one part of a date serial. */
+function datePart(pick: (p: ReturnType<typeof serialToParts>) => number): Fn {
+  return (args) => {
+    if (args.length !== 1) return errors.value;
+    const n = toNumber(scalarArg(args[0]));
+    if (isError(n)) return n;
+    if (n < 0) return errors.num;
+    return pick(serialToParts(n));
+  };
+}
+
+/** EDATE / EOMONTH: a date some months away (EOMONTH: that month's last day). */
+function monthShift(args: Arg[], endOfMonth: boolean): Scalar {
+  if (args.length !== 2) return errors.value;
+  const start = toNumber(scalarArg(args[0]));
+  const months = toNumber(scalarArg(args[1]));
+  if (isError(start)) return start;
+  if (isError(months)) return months;
+  if (start < 0) return errors.num;
+  const p = serialToParts(start);
+  const total = p.y * 12 + (p.m - 1) + Math.trunc(months);
+  const y = Math.floor(total / 12);
+  const m = (((total % 12) + 12) % 12) + 1;
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const serial = dateToSerial(y, m, endOfMonth ? last : Math.min(p.d, last));
+  return serial < 0 ? errors.num : serial;
 }
 
 export const FUNCTIONS: Record<string, Fn> = {
@@ -432,6 +492,79 @@ export const FUNCTIONS: Record<string, Fn> = {
     return tidy(a - b * Math.floor(a / b));
   },
   POWER: (args) => binary("^", scalarArg(args[0]), scalarArg(args[1])),
+
+  // ------------------------------------------------------------ dates
+  DATE: (args) => {
+    if (args.length !== 3) return errors.value;
+    const [y0, m, d] = args.map((a) => toNumber(scalarArg(a)));
+    for (const x of [y0, m, d]) if (isError(x)) return x;
+    let y = Math.trunc(y0 as number);
+    if (y < 0 || y > 9999) return errors.num;
+    if (y < 1900) y += 1900; // Excel: DATE(24, 1, 1) is 1924
+    const serial = dateToSerial(y, Math.trunc(m as number), Math.trunc(d as number));
+    return serial < 0 ? errors.num : serial;
+  },
+  TIME: (args) => {
+    if (args.length !== 3) return errors.value;
+    const [h, m, sec] = args.map((a) => toNumber(scalarArg(a)));
+    for (const x of [h, m, sec]) if (isError(x)) return x;
+    const total = Math.trunc(h as number) * 3600 + Math.trunc(m as number) * 60 + Math.trunc(sec as number);
+    if (total < 0) return errors.num;
+    return (total % 86_400) / 86_400;
+  },
+  YEAR: datePart((p) => p.y),
+  MONTH: datePart((p) => p.m),
+  DAY: datePart((p) => p.d),
+  HOUR: datePart((p) => p.h),
+  MINUTE: datePart((p) => p.mi),
+  SECOND: datePart((p) => p.s + (p.ms >= 500 ? 1 : 0)),
+  WEEKDAY: (args) => {
+    if (args.length < 1 || args.length > 2) return errors.value;
+    const n = toNumber(scalarArg(args[0]));
+    if (isError(n)) return n;
+    if (n < 0) return errors.num;
+    const type = args.length === 2 ? toNumber(scalarArg(args[1])) : 1;
+    if (isError(type)) return type;
+    const wd = serialToParts(n).wd; // 0 = Sunday
+    if (type === 1) return wd + 1;
+    if (type === 2) return ((wd + 6) % 7) + 1;
+    if (type === 3) return (wd + 6) % 7;
+    return errors.num;
+  },
+  TODAY: (args) => {
+    if (args.length) return errors.value;
+    const now = new Date();
+    return dateToSerial(now.getFullYear(), now.getMonth() + 1, now.getDate());
+  },
+  NOW: (args) => {
+    if (args.length) return errors.value;
+    const now = new Date();
+    return dateToSerial(now.getFullYear(), now.getMonth() + 1, now.getDate(), now.getHours(), now.getMinutes(), now.getSeconds());
+  },
+  EDATE: (args) => monthShift(args, false),
+  EOMONTH: (args) => monthShift(args, true),
+  DATEVALUE: (args) => {
+    if (args.length !== 1) return errors.value;
+    const v = scalarArg(args[0]);
+    if (isError(v)) return v;
+    if (typeof v !== "string") return errors.value;
+    const typed = parseTyped(v);
+    if (!typed || !/[dy]|m{3}/i.test(typed.format)) return errors.value;
+    return Math.floor(typed.value);
+  },
+
+  // ------------------------------------------------------ information
+  ISERROR: (args) => (args.length === 1 ? isError(scalarArg(args[0])) : errors.value),
+  ISNA: (args) => {
+    if (args.length !== 1) return errors.value;
+    const v = scalarArg(args[0]);
+    return isError(v) && v.code === "#N/A";
+  },
+  ISNUMBER: (args) => (args.length === 1 ? typeof scalarArg(args[0]) === "number" : errors.value),
+  ISTEXT: (args) => (args.length === 1 ? typeof scalarArg(args[0]) === "string" : errors.value),
+  ISLOGICAL: (args) => (args.length === 1 ? typeof scalarArg(args[0]) === "boolean" : errors.value),
+  ISBLANK: (args) => (args.length === 1 ? scalarArg(args[0]) === null : errors.value),
+  NA: (args) => (args.length ? errors.value : errors.na),
   LEN: textFn((s) => s.length),
   UPPER: textFn((s) => s.toUpperCase()),
   LOWER: textFn((s) => s.toLowerCase()),

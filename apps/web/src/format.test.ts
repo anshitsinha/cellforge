@@ -228,3 +228,16 @@ describe("cells.paste", () => {
     expect([0, 1, 2, 3].map((r) => sheet.getCell(r, 0))).toEqual([1, 1, 2, 3]);
   });
 });
+
+describe("TRUE and FALSE", () => {
+  it("typed TRUE is a real boolean: shown as TRUE, counted as logical, round-trips", async () => {
+    const { sheet, type } = setup();
+    await type([[0, 0, "true"], [1, 0, "=ISLOGICAL(A1)"], [2, 0, "=A1+1"], [3, 0, "=COUNT(A1)"]]);
+    expect(sheet.getCell(0, 0)).toBe("TRUE");
+    expect(sheet.getEditText(0, 0)).toBe("TRUE");
+    expect(sheet.getCell(1, 0)).toBe("TRUE");
+    expect(sheet.getCell(2, 0)).toBe(2);
+    expect(sheet.getCell(3, 0)).toBe(0); // COUNT ignores booleans in ranges
+    expect(sheet.toState().state.edits.find(([, c, v]) => c === 0 && v === true)).toBeTruthy();
+  });
+});

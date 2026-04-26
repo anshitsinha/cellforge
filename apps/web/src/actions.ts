@@ -29,7 +29,7 @@ export interface SheetCtx {
 }
 
 /** A stored value as plain JSON (undo entries and recipes must serialise). */
-export type StoredJson = null | number | string | { formula: string; shift?: number };
+export type StoredJson = null | number | string | boolean | { formula: string; shift?: number };
 
 /**
  * `row` is where the value is shown now: a formula is stored with the
@@ -83,6 +83,7 @@ const storedSchema = s.anyOf(
   s.null(),
   s.number(),
   s.string(),
+  s.bool(),
   s.object({ formula: s.string(), shift: s.int() }, ["formula"]),
 );
 

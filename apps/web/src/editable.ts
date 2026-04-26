@@ -63,7 +63,8 @@ export function effectiveShift(f: Formula, row: number): number {
 }
 
 /** What can live in a cell: a plain value or a formula. */
-export type Stored = CellValue | Formula;
+/** What a cell holds: a value (TRUE/FALSE are real booleans, as in Excel) or a formula. */
+export type Stored = CellValue | boolean | Formula;
 
 export function isFormula(v: Stored | undefined): v is Formula {
   return typeof v === "object" && v !== null && v.kind === "formula";
@@ -1494,6 +1495,7 @@ export function parseInput(text: string): Stored {
     }
     return { kind: "formula", text: trimmed, ast };
   }
+  if (/^(true|false)$/i.test(trimmed)) return trimmed.toUpperCase() === "TRUE";
   // Number("") and Number(" ") are 0, and Number("0x1f") is 31 - neither of
   // which we want, hence the regex instead of just Number(trimmed).
   if (/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(trimmed)) {
@@ -1579,7 +1581,7 @@ function sheetNames(node: Node): string[] {
 }
 
 /** A stored value as plain data: formulas by their canonical text plus shift and anchor. */
-export type StoredState = CellValue | { f: string; shift?: number; anchor?: number };
+export type StoredState = CellValue | boolean | { f: string; shift?: number; anchor?: number };
 
 function storedToState(v: Stored): StoredState {
   if (!isFormula(v)) return v;

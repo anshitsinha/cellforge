@@ -69,11 +69,11 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Excel type system and coercion; dates as serials (incl. the 1900 bug)
-- [ ] Booleans as real values (TRUE/FALSE typed, shown, compared and counted as Excel does)
-- [ ] Coercion rules: text that looks like a number in arithmetic, booleans as 1/0, empty as 0 or "", comparisons across types (numbers < text < booleans)
-- [ ] Date and time functions on serials: DATE, TIME, YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, WEEKDAY, TODAY, NOW, EDATE, EOMONTH, DATEVALUE
-- [ ] Error propagation and the error-checking functions: ISERROR, ISNUMBER, ISTEXT, ISBLANK, ISNA, NA
-- [ ] Reference entries, examples-as-tests, user guide
+- [x] Booleans as real values (TRUE/FALSE typed, shown, compared and counted as Excel does)
+- [x] Coercion rules: text that looks like a number in arithmetic, booleans as 1/0, empty as 0 or "", comparisons across types (numbers < text < booleans)
+- [x] Date and time functions on serials: DATE, TIME, YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, WEEKDAY, TODAY, NOW, EDATE, EOMONTH, DATEVALUE
+- [x] Error propagation and the error-checking functions: ISERROR, ISNUMBER, ISTEXT, ISBLANK, ISNA, NA
+- [x] Reference entries, examples-as-tests, user guide
 
 ## Milestones
 

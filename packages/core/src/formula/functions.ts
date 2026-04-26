@@ -32,6 +32,7 @@ export interface FunctionInfo {
  *   A1:A5 = 10, 20, 30, "apple", (empty)
  *   B1:B5 = "North", "South", "North", "East", "South"
  *   C1    = "  padded  text "
+ *   D1    = 45306 (15 January 2024 as a date serial), D2 = "2024-03-31" (text)
  */
 export const EXAMPLE_CELLS: Record<string, string | number> = {
   A1: 10,
@@ -44,6 +45,8 @@ export const EXAMPLE_CELLS: Record<string, string | number> = {
   B4: "East",
   B5: "South",
   C1: "  padded  text ",
+  D1: 45306,
+  D2: "2024-03-31",
 };
 
 const num = (name: string, description: string, extra: Partial<FunctionArg> = {}): FunctionArg => ({ name, description, ...extra });
@@ -255,6 +258,443 @@ const LIST: FunctionInfo[] = [
     args: [num("text1", "a text, cell or range"), num("text2", "more", { optional: true, repeats: true })],
     examples: [['=CONCAT(B1, "-", A1)', "North-10"]],
   },
+  {
+      name: "DATE",
+      category: "Date and time",
+      summary: "A date from year, month and day. Months and days past the end roll over (month 14 is February next year).",
+      args: [
+        {
+          name: "year",
+          description: "the year; 0-1899 means 1900-3799, as in Excel"
+        },
+        {
+          name: "month",
+          description: "1-12, or more or less to roll over"
+        },
+        {
+          name: "day",
+          description: "the day of the month, or more or less to roll over"
+        }
+      ],
+      examples: [
+        [
+          "=DATE(2024, 1, 15)",
+          45306
+        ],
+        [
+          "=DATE(2024, 14, 1)",
+          45689
+        ],
+        [
+          "=DATE(2024, 3, 0)",
+          45351
+        ]
+      ]
+    },
+    {
+      name: "TIME",
+      category: "Date and time",
+      summary: "A time of day as a fraction of a day (12:00 is 0.5).",
+      args: [
+        {
+          name: "hour",
+          description: "0-23"
+        },
+        {
+          name: "minute",
+          description: "0-59"
+        },
+        {
+          name: "second",
+          description: "0-59"
+        }
+      ],
+      examples: [
+        [
+          "=TIME(12, 0, 0)",
+          0.5
+        ],
+        [
+          "=TIME(18, 0, 0)",
+          0.75
+        ]
+      ]
+    },
+    {
+      name: "YEAR",
+      category: "Date and time",
+      summary: "The year of a date.",
+      args: [
+        {
+          name: "date",
+          description: "a date (serial number) or date text"
+        }
+      ],
+      examples: [
+        [
+          "=YEAR(D1)",
+          2024
+        ],
+        [
+          "=YEAR(\"2024-03-31\")",
+          2024
+        ]
+      ]
+    },
+    {
+      name: "MONTH",
+      category: "Date and time",
+      summary: "The month of a date, 1-12.",
+      args: [
+        {
+          name: "date",
+          description: "a date"
+        }
+      ],
+      examples: [
+        [
+          "=MONTH(D1)",
+          1
+        ],
+        [
+          "=MONTH(D2)",
+          3
+        ]
+      ]
+    },
+    {
+      name: "DAY",
+      category: "Date and time",
+      summary: "The day of the month of a date.",
+      args: [
+        {
+          name: "date",
+          description: "a date"
+        }
+      ],
+      examples: [
+        [
+          "=DAY(D1)",
+          15
+        ]
+      ]
+    },
+    {
+      name: "HOUR",
+      category: "Date and time",
+      summary: "The hour of a time, 0-23.",
+      args: [
+        {
+          name: "time",
+          description: "a time or date-time"
+        }
+      ],
+      examples: [
+        [
+          "=HOUR(0.75)",
+          18
+        ]
+      ]
+    },
+    {
+      name: "MINUTE",
+      category: "Date and time",
+      summary: "The minutes of a time, 0-59.",
+      args: [
+        {
+          name: "time",
+          description: "a time or date-time"
+        }
+      ],
+      examples: [
+        [
+          "=MINUTE(\"1:45 PM\")",
+          45
+        ]
+      ]
+    },
+    {
+      name: "SECOND",
+      category: "Date and time",
+      summary: "The seconds of a time, 0-59.",
+      args: [
+        {
+          name: "time",
+          description: "a time or date-time"
+        }
+      ],
+      examples: [
+        [
+          "=SECOND(TIME(1, 2, 3))",
+          3
+        ]
+      ]
+    },
+    {
+      name: "WEEKDAY",
+      category: "Date and time",
+      summary: "The day of the week as a number.",
+      args: [
+        {
+          name: "date",
+          description: "a date"
+        },
+        {
+          name: "type",
+          description: "1 (default): Sunday = 1 … Saturday = 7; 2: Monday = 1 … Sunday = 7; 3: Monday = 0 … Sunday = 6",
+          optional: true
+        }
+      ],
+      examples: [
+        [
+          "=WEEKDAY(D1)",
+          2
+        ],
+        [
+          "=WEEKDAY(D1, 2)",
+          1
+        ]
+      ]
+    },
+    {
+      name: "TODAY",
+      category: "Date and time",
+      summary: "Today's date.",
+      args: [],
+      examples: [
+        [
+          "=TODAY()-TODAY()",
+          0
+        ],
+        [
+          "=YEAR(TODAY())>=2024",
+          true
+        ]
+      ],
+      notes: "Updates when the sheet recalculates (any edit), not every second."
+    },
+    {
+      name: "NOW",
+      category: "Date and time",
+      summary: "The date and time now.",
+      args: [],
+      examples: [
+        [
+          "=NOW()>=TODAY()",
+          true
+        ]
+      ],
+      notes: "Updates when the sheet recalculates, not continuously."
+    },
+    {
+      name: "EDATE",
+      category: "Date and time",
+      summary: "The date a number of months before or after another, keeping the day (or the month's last day if it's shorter).",
+      args: [
+        {
+          name: "start_date",
+          description: "a date"
+        },
+        {
+          name: "months",
+          description: "months to add; negative goes back"
+        }
+      ],
+      examples: [
+        [
+          "=EDATE(D1, 1)",
+          45337
+        ],
+        [
+          "=EDATE(\"2024-01-31\", 1)",
+          45351
+        ]
+      ]
+    },
+    {
+      name: "EOMONTH",
+      category: "Date and time",
+      summary: "The last day of the month some months before or after a date. Handy for month-end cut-offs.",
+      args: [
+        {
+          name: "start_date",
+          description: "a date"
+        },
+        {
+          name: "months",
+          description: "0 for the same month, -1 for the month before"
+        }
+      ],
+      examples: [
+        [
+          "=EOMONTH(D1, 0)",
+          45322
+        ],
+        [
+          "=EOMONTH(D1, -1)",
+          45291
+        ]
+      ]
+    },
+    {
+      name: "DATEVALUE",
+      category: "Date and time",
+      summary: "The date serial of a date written as text.",
+      args: [
+        {
+          name: "date_text",
+          description: "e.g. \"2024-01-15\", \"1/15/2024\" or \"15-Jan-2024\""
+        }
+      ],
+      examples: [
+        [
+          "=DATEVALUE(\"2024-01-15\")",
+          45306
+        ],
+        [
+          "=DATEVALUE(\"not a date\")",
+          "#VALUE!"
+        ]
+      ]
+    },
+    {
+      name: "ISERROR",
+      category: "Information",
+      summary: "TRUE if the value is any error (#N/A, #DIV/0!, #REF!…).",
+      args: [
+        {
+          name: "value",
+          description: "a value, cell or formula"
+        }
+      ],
+      examples: [
+        [
+          "=ISERROR(1/0)",
+          true
+        ],
+        [
+          "=ISERROR(A1)",
+          false
+        ]
+      ]
+    },
+    {
+      name: "ISNA",
+      category: "Information",
+      summary: "TRUE if the value is #N/A, the 'not found' error from lookups.",
+      args: [
+        {
+          name: "value",
+          description: "a value, cell or formula"
+        }
+      ],
+      examples: [
+        [
+          "=ISNA(NA())",
+          true
+        ],
+        [
+          "=ISNA(1/0)",
+          false
+        ]
+      ]
+    },
+    {
+      name: "ISNUMBER",
+      category: "Information",
+      summary: "TRUE if the value is a number (dates are numbers too).",
+      args: [
+        {
+          name: "value",
+          description: "a value, cell or formula"
+        }
+      ],
+      examples: [
+        [
+          "=ISNUMBER(A1)",
+          true
+        ],
+        [
+          "=ISNUMBER(A4)",
+          false
+        ]
+      ]
+    },
+    {
+      name: "ISTEXT",
+      category: "Information",
+      summary: "TRUE if the value is text.",
+      args: [
+        {
+          name: "value",
+          description: "a value, cell or formula"
+        }
+      ],
+      examples: [
+        [
+          "=ISTEXT(A4)",
+          true
+        ],
+        [
+          "=ISTEXT(A1)",
+          false
+        ]
+      ]
+    },
+    {
+      name: "ISLOGICAL",
+      category: "Information",
+      summary: "TRUE if the value is TRUE or FALSE.",
+      args: [
+        {
+          name: "value",
+          description: "a value, cell or formula"
+        }
+      ],
+      examples: [
+        [
+          "=ISLOGICAL(A1>5)",
+          true
+        ],
+        [
+          "=ISLOGICAL(A1)",
+          false
+        ]
+      ]
+    },
+    {
+      name: "ISBLANK",
+      category: "Information",
+      summary: "TRUE if the cell is completely empty (a formula that shows \"\" is not blank).",
+      args: [
+        {
+          name: "value",
+          description: "a value, cell or formula"
+        }
+      ],
+      examples: [
+        [
+          "=ISBLANK(A5)",
+          true
+        ],
+        [
+          "=ISBLANK(A1)",
+          false
+        ]
+      ]
+    },
+    {
+      name: "NA",
+      category: "Information",
+      summary: "The #N/A error, to mark a value as missing on purpose.",
+      args: [],
+      examples: [
+        [
+          "=ISNA(NA())",
+          true
+        ]
+      ]
+    },
 ];
 
 export const FUNCTION_INFO: Readonly<Record<string, FunctionInfo>> = Object.fromEntries(LIST.map((f) => [f.name, f]));
