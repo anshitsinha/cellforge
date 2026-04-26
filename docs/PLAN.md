@@ -68,12 +68,15 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Excel type system and coercion; dates as serials (incl. the 1900 bug)
-- [x] Booleans as real values (TRUE/FALSE typed, shown, compared and counted as Excel does)
-- [x] Coercion rules: text that looks like a number in arithmetic, booleans as 1/0, empty as 0 or "", comparisons across types (numbers < text < booleans)
-- [x] Date and time functions on serials: DATE, TIME, YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, WEEKDAY, TODAY, NOW, EDATE, EOMONTH, DATEVALUE
-- [x] Error propagation and the error-checking functions: ISERROR, ISNUMBER, ISTEXT, ISBLANK, ISNA, NA
-- [x] Reference entries, examples-as-tests, user guide
+### The ~150 functions that cover real use: lookup (XLOOKUP, INDEX/MATCH), maths, statistics, text, dates, financial, logic, information
+- [ ] Lookup: VLOOKUP, HLOOKUP, XLOOKUP, INDEX, MATCH, XMATCH, CHOOSE, ROWS, COLUMNS
+- [ ] Maths and conditional totals: SUMIFS, COUNTIFS, AVERAGEIF(S), MAXIFS, MINIFS, SUMPRODUCT, PRODUCT, ROUNDUP/DOWN, CEILING, FLOOR, MROUND, TRUNC, SIGN, EXP, LN, LOG, PI, QUOTIENT…
+- [ ] Statistics: MEDIAN, MODE, STDEV, VAR, LARGE, SMALL, RANK, PERCENTILE, QUARTILE, COUNTBLANK, CORREL
+- [ ] Text: LEFT, RIGHT, MID, FIND, SEARCH, SUBSTITUTE, REPLACE, TEXT, VALUE, TEXTJOIN, PROPER, EXACT, CLEAN, REPT, TEXTBEFORE/AFTER…
+- [ ] Logic: IFS, SWITCH, XOR, IFNA
+- [ ] Financial: PMT, PV, FV, NPER, RATE, NPV, IRR, XNPV, XIRR, SLN
+- [ ] Dates: DAYS, DATEDIF, NETWORKDAYS, WORKDAY, YEARFRAC, WEEKNUM, ISOWEEKNUM, DAYS360
+- [ ] Every function in the reference with examples-as-tests checked against Excel
 
 ## Milestones
 
@@ -98,8 +101,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 
 ### M2: Formula engine 🔨
 - ✅ Function registry + generated reference and autocomplete with argument hints
-- 🔨 Excel type system and coercion; dates as serials (incl. the 1900 bug)
-- ⬜ The ~150 functions that cover real use: lookup (XLOOKUP, INDEX/MATCH),
+- ✅ Excel type system and coercion; dates as serials (incl. the 1900 bug)
+- 🔨 The ~150 functions that cover real use: lookup (XLOOKUP, INDEX/MATCH),
   maths, statistics, text, dates, financial, logic, information
 - ⬜ Dynamic arrays and spill, `LET`, `LAMBDA`
 - ⬜ Named ranges; tables with structured references that grow with new rows
