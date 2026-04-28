@@ -10,7 +10,12 @@ describe("formula assist", () => {
   it("suggests function names while typing them", () => {
     const a = at("=SU|");
     expect(a?.kind).toBe("names");
-    if (a?.kind === "names") expect(a.matches.map((f) => f.name)).toEqual(["SUM", "SUMIF"]);
+    if (a?.kind === "names") {
+      const names = a.matches.map((f) => f.name);
+      expect(names[0]).toBe("SUM");
+      expect(names).toContain("SUMIFS");
+      expect(names.every((n) => n.startsWith("SU"))).toBe(true);
+    }
     expect(at("=1+co|")?.kind).toBe("names");
   });
 
