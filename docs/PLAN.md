@@ -69,7 +69,7 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### The ~150 functions that cover real use: lookup (XLOOKUP, INDEX/MATCH), maths, statistics, text, dates, financial, logic, information
-- [ ] Lookup: VLOOKUP, HLOOKUP, XLOOKUP, INDEX, MATCH, XMATCH, CHOOSE, ROWS, COLUMNS
+- [x] Lookup: VLOOKUP, HLOOKUP, XLOOKUP, INDEX, MATCH, XMATCH, CHOOSE, ROWS, COLUMNS
 - [ ] Maths and conditional totals: SUMIFS, COUNTIFS, AVERAGEIF(S), MAXIFS, MINIFS, SUMPRODUCT, PRODUCT, ROUNDUP/DOWN, CEILING, FLOOR, MROUND, TRUNC, SIGN, EXP, LN, LOG, PI, QUOTIENT…
 - [ ] Statistics: MEDIAN, MODE, STDEV, VAR, LARGE, SMALL, RANK, PERCENTILE, QUARTILE, COUNTBLANK, CORREL
 - [ ] Text: LEFT, RIGHT, MID, FIND, SEARCH, SUBSTITUTE, REPLACE, TEXT, VALUE, TEXTJOIN, PROPER, EXACT, CLEAN, REPT, TEXTBEFORE/AFTER…

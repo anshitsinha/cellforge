@@ -1,3 +1,6 @@
+import { LIBRARY_INFO } from "./lib/define";
+import "./lib/lookup";
+
 /**
  * What every function is for, its arguments and worked examples. This is
  * the single source for the function reference in the docs, the
@@ -697,7 +700,7 @@ const LIST: FunctionInfo[] = [
     },
 ];
 
-export const FUNCTION_INFO: Readonly<Record<string, FunctionInfo>> = Object.fromEntries(LIST.map((f) => [f.name, f]));
+export const FUNCTION_INFO: Readonly<Record<string, FunctionInfo>> = Object.fromEntries([...LIST, ...LIBRARY_INFO].map((f) => [f.name, f]));
 
 /** "SUMIF(range, criteria, [sum_range])" */
 export function signature(f: FunctionInfo): string {

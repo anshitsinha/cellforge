@@ -17,6 +17,9 @@ export interface EvalContext {
   eachInRange(range: RangeRef, visit: (v: Scalar) => void): void;
   /** Another sheet's context, by name (case-insensitive); null if there's no such sheet. */
   sheet?(name: string): EvalContext | null;
+  /** How many rows the sheet has, so whole-column lookups (A:B) know where to stop. */
+  rowCount?: number;
+  colCount?: number;
 }
 
 /** The context a reference reads from: its own sheet's, or the one it names. */
@@ -25,14 +28,14 @@ function contextFor(node: { sheet?: string }, ctx: EvalContext): EvalContext | n
   return ctx.sheet?.(node.sheet) ?? null;
 }
 
-type Arg = { kind: "value"; value: Scalar } | { kind: "range"; range: RangeRef; ctx: EvalContext };
+export type Arg = { kind: "value"; value: Scalar } | { kind: "range"; range: RangeRef; ctx: EvalContext };
 
 // ---------------------------------------------------------------------------
 // coercion helpers
 
-const isError = (v: unknown): v is CellError => v instanceof CellError;
+export const isError = (v: unknown): v is CellError => v instanceof CellError;
 
-function toNumber(v: Scalar): number | CellError {
+export function toNumber(v: Scalar): number | CellError {
   if (v === null) return 0;
   if (typeof v === "number") return v;
   if (typeof v === "boolean") return v ? 1 : 0;
@@ -46,14 +49,14 @@ function toNumber(v: Scalar): number | CellError {
   return typed ? typed.value : errors.value;
 }
 
-function toText(v: Scalar): string | CellError {
+export function toText(v: Scalar): string | CellError {
   if (v === null) return "";
   if (typeof v === "boolean") return v ? "TRUE" : "FALSE";
   if (isError(v)) return v;
   return String(v);
 }
 
-function toBool(v: Scalar): boolean | CellError {
+export function toBool(v: Scalar): boolean | CellError {
   if (typeof v === "boolean") return v;
   if (v === null) return false;
   if (typeof v === "number") return v !== 0;
@@ -70,7 +73,7 @@ function toBool(v: Scalar): boolean | CellError {
  * the maths unrounded is also what lets the compiled kernels (compile.ts)
  * produce bit-identical results to this interpreter.
  */
-function tidy(n: number): number | CellError {
+export function tidy(n: number): number | CellError {
   return Number.isFinite(n) ? n : errors.num;
 }
 
@@ -118,6 +121,8 @@ export function evaluate(node: Node, ctx: EvalContext, rowShift = 0): Scalar {
       return node.value;
     case "error":
       return new CellError(node.code);
+    case "missing":
+      return null;
     case "ref": {
       const row = node.absRow ? node.row : node.row + rowShift;
       const target = contextFor(node, ctx);
@@ -216,14 +221,14 @@ function binary(op: string, a: Scalar, b: Scalar): Scalar {
 // ---------------------------------------------------------------------------
 // functions
 
-type Fn = (args: Arg[], ctx: EvalContext) => Scalar;
+export type Fn = (args: Arg[], ctx: EvalContext) => Scalar;
 
 /**
  * Walk every value an argument list contains - ranges expanded, scalars as-is.
  * `fromRange` lets aggregates apply Excel's rule that text inside a range is
  * ignored but text passed directly ("=SUM("abc")") is an error.
  */
-function eachValue(args: Arg[], _ctx: EvalContext, visit: (v: Scalar, fromRange: boolean) => void) {
+export function eachValue(args: Arg[], _ctx: EvalContext, visit: (v: Scalar, fromRange: boolean) => void) {
   for (const arg of args) {
     if (arg.kind === "range") arg.ctx.eachInRange(arg.range, (v) => visit(v, true));
     else visit(arg.value, false);
@@ -231,7 +236,7 @@ function eachValue(args: Arg[], _ctx: EvalContext, visit: (v: Scalar, fromRange:
 }
 
 /** Shared implementation for SUM/AVERAGE/MIN/MAX/COUNT. */
-function numericFold(args: Arg[], ctx: EvalContext): { nums: number; sum: number; min: number; max: number; err: CellError | null } {
+export function numericFold(args: Arg[], ctx: EvalContext): { nums: number; sum: number; min: number; max: number; err: CellError | null } {
   let nums = 0;
   let sum = 0;
   let min = Infinity;
@@ -276,7 +281,7 @@ function wildcard(pattern: string): RegExp {
 }
 
 /** Parse a COUNTIF/SUMIF criterion like ">10", "<>x", "apple" or 5. */
-function criterion(c: Scalar): (v: Scalar) => boolean {
+export function criterion(c: Scalar): (v: Scalar) => boolean {
   if (typeof c === "number" || typeof c === "boolean") return (v) => v === c;
   const s = String(toText(c));
   const m = /^(<=|>=|<>|<|>|=)?(.*)$/.exec(s)!;
@@ -313,7 +318,7 @@ function criterion(c: Scalar): (v: Scalar) => boolean {
   };
 }
 
-const scalarArg = (a: Arg | undefined): Scalar => (a && a.kind === "value" ? a.value : errors.value);
+export const scalarArg = (a: Arg | undefined): Scalar => (a && a.kind === "value" ? a.value : errors.value);
 
 function mathFn(f: (n: number) => number): Fn {
   return (args) => {

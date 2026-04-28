@@ -58,6 +58,8 @@ function print(node: Node, shift: number): string {
       return String(node.value);
     case "string":
       return `"${node.value.replace(/"/g, '""')}"`;
+    case "missing":
+      return "";
     case "boolean":
       return node.value ? "TRUE" : "FALSE";
     case "error":

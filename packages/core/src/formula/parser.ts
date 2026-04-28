@@ -260,7 +260,8 @@ export function parseFormula(src: string): Node {
           const args: Node[] = [];
           if (!isOp(")")) {
             do {
-              args.push(comparison());
+              // an empty argument (two commas, or a comma before the bracket)
+              args.push(isOp(",") || isOp(")") ? { type: "missing" } : comparison());
             } while (isOp(",") && ++pos);
           }
           expectOp(")");

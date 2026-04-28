@@ -1426,12 +1426,15 @@ export class EditableSource implements DataSource {
     return result;
   }
 
-  private readonly ctx: EvalContext = {
-    cell: (row, col) =>
-      row < this.rowCount && col < this.colCount ? this.value(row, col) : errors.ref,
-    eachInRange: (range, visit) => this.eachInRange(range, visit),
-    sheet: (name) => this.resolveSheet?.(name)?.evalContext ?? null,
-  };
+  private readonly ctx: EvalContext = Object.defineProperties(
+    {
+      cell: (row: number, col: number) => (row < this.rowCount && col < this.colCount ? this.value(row, col) : errors.ref),
+      eachInRange: (range: RangeRef, visit: (v: Scalar) => void) => this.eachInRange(range, visit),
+      sheet: (name: string) => this.resolveSheet?.(name)?.evalContext ?? null,
+    } as EvalContext,
+    // live sizes, for lookups over whole columns
+    { rowCount: { get: () => this.rowCount }, colCount: { get: () => this.colCount } },
+  );
 
   private eachInRange(range: RangeRef, visit: (v: Scalar) => void): void {
     const bottom = Math.min(range.bottom, this.rowCount - 1);
