@@ -10,7 +10,13 @@ export type Assist =
   | { kind: "args"; fn: FunctionInfo; index: number }
   | null;
 
-const NAMES = Object.values(FUNCTION_INFO).sort((a, b) => a.name.localeCompare(b.name));
+// the functions people use most come first, then shorter names, then A-Z
+const COMMON = ["SUM", "IF", "XLOOKUP", "VLOOKUP", "SUMIFS", "COUNTIFS", "SUMIF", "COUNTIF", "AVERAGE", "INDEX", "MATCH", "ROUND", "IFERROR", "COUNT", "COUNTA", "MAX", "MIN", "TEXT", "LEFT", "RIGHT", "MID", "TRIM", "LEN", "DATE", "TODAY", "EOMONTH", "AND", "OR", "CONCAT", "TEXTJOIN", "SUMPRODUCT", "AVERAGEIFS"];
+const rank = (n: string) => {
+  const i = COMMON.indexOf(n);
+  return i < 0 ? COMMON.length : i;
+};
+const NAMES = Object.values(FUNCTION_INFO).sort((a, b) => rank(a.name) - rank(b.name) || a.name.length - b.name.length || a.name.localeCompare(b.name));
 
 /** Is position `i` of `text` inside a "string literal"? */
 function inString(text: string, i: number): boolean {

@@ -2,6 +2,7 @@ import { LIBRARY_INFO } from "./lib/define";
 import "./lib/lookup";
 import "./lib/maths";
 import "./lib/stats";
+import "./lib/text";
 
 /**
  * What every function is for, its arguments and worked examples. This is
