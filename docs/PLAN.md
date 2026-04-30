@@ -73,9 +73,9 @@ tracker shows this expanded, with the first unticked step as the current one.
 - [x] Maths and conditional totals: SUMIFS, COUNTIFS, AVERAGEIF(S), MAXIFS, MINIFS, SUMPRODUCT, PRODUCT, ROUNDUP/DOWN, CEILING, FLOOR, MROUND, TRUNC, SIGN, EXP, LN, LOG, PI, QUOTIENT…
 - [x] Statistics: MEDIAN, MODE, STDEV, VAR, LARGE, SMALL, RANK, PERCENTILE, QUARTILE, COUNTBLANK, CORREL
 - [x] Text: LEFT, RIGHT, MID, FIND, SEARCH, SUBSTITUTE, REPLACE, TEXT, VALUE, TEXTJOIN, PROPER, EXACT, CLEAN, REPT, TEXTBEFORE/AFTER…
-- [ ] Logic: IFS, SWITCH, XOR, IFNA
-- [ ] Financial: PMT, PV, FV, NPER, RATE, NPV, IRR, XNPV, XIRR, SLN
-- [ ] Dates: DAYS, DATEDIF, NETWORKDAYS, WORKDAY, YEARFRAC, WEEKNUM, ISOWEEKNUM, DAYS360
+- [x] Logic: IFS, SWITCH, XOR, IFNA
+- [x] Financial: PMT, PV, FV, NPER, RATE, NPV, IRR, XNPV, XIRR, SLN
+- [x] Dates: DAYS, DATEDIF, NETWORKDAYS, WORKDAY, YEARFRAC, WEEKNUM, ISOWEEKNUM, DAYS360
 - [ ] Every function in the reference with examples-as-tests checked against Excel
 
 ## Milestones

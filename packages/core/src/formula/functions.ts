@@ -3,6 +3,9 @@ import "./lib/lookup";
 import "./lib/maths";
 import "./lib/stats";
 import "./lib/text";
+import "./lib/logic";
+import "./lib/financial";
+import "./lib/dates";
 
 /**
  * What every function is for, its arguments and worked examples. This is
@@ -39,6 +42,8 @@ export interface FunctionInfo {
  *   B1:B5 = "North", "South", "North", "East", "South"
  *   C1    = "  padded  text "
  *   D1    = 45306 (15 January 2024 as a date serial), D2 = "2024-03-31" (text)
+ *   E1:E5 / F1:F5 = cash flows and their dates, G1:G6 = yearly cash flows
+ *   (Microsoft's own XIRR, XNPV and IRR examples, so results match its docs)
  */
 export const EXAMPLE_CELLS: Record<string, string | number> = {
   A1: 10,
@@ -53,6 +58,11 @@ export const EXAMPLE_CELLS: Record<string, string | number> = {
   C1: "  padded  text ",
   D1: 45306,
   D2: "2024-03-31",
+  // cash flows and dates from Microsoft's XIRR / XNPV documentation
+  E1: -10000, E2: 2750, E3: 4250, E4: 3250, E5: 2750,
+  F1: 39448, F2: 39508, F3: 39751, F4: 39859, F5: 39904,
+  // and from its IRR documentation
+  G1: -70000, G2: 12000, G3: 15000, G4: 18000, G5: 21000, G6: 26000,
 };
 
 const num = (name: string, description: string, extra: Partial<FunctionArg> = {}): FunctionArg => ({ name, description, ...extra });
