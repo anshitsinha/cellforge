@@ -25,8 +25,10 @@ formulas that refer to it are updated for you. If you delete it, they show
 ## Functions
 
 The [function reference](#/guide/functions) lists every function with its
-arguments and worked examples. More arrive with every release; around 150
-of the most used Excel functions are planned for milestone M2.
+arguments and worked examples: about 150 of the Excel functions people
+actually use, from lookups (XLOOKUP, INDEX/MATCH) and conditional totals
+(SUMIFS, COUNTIFS) to text, dates, statistics and finance (NPV, XIRR).
+Each one gives the same answers as Excel, checked by the test suite.
 
 While you type a formula, cellforge helps:
 
