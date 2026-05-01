@@ -67,7 +67,7 @@ function print(node: Node, shift: number): string {
     case "ref": {
       const row = node.absRow ? node.row : node.row + shift;
       if (row < 0) return "#REF!";
-      return `${sheetPrefix(node.sheet)}${node.absCol ? "$" : ""}${letters(node.col)}${node.absRow ? "$" : ""}${row + 1}`;
+      return `${sheetPrefix(node.sheet)}${node.absCol ? "$" : ""}${letters(node.col)}${node.absRow ? "$" : ""}${row + 1}${node.spill ? "#" : ""}`;
     }
     case "range": {
       const r = shiftRange(node, shift);
@@ -91,7 +91,15 @@ function print(node: Node, shift: number): string {
       return `${left}${node.op}${right}`;
     }
     case "call":
+      if (node.name === "__INVOKE") {
+        const [fn, ...rest] = node.args;
+        return `${print(fn, shift)}(${rest.map((a) => print(a, shift)).join(", ")})`;
+      }
       return `${node.name}(${node.args.map((a) => print(a, shift)).join(", ")})`;
+    case "array":
+      return `{${node.rows.map((r) => r.map((a) => print(a, shift)).join(",")).join(";")}}`;
+    case "name":
+      return node.name;
   }
 }
 

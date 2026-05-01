@@ -1,5 +1,5 @@
 import "./bench.css";
-import { compileFill, evaluate, parseFormula, type EvalContext, type Scalar } from "@cellforge/core";
+import { compileFill, evaluate, firstOf, parseFormula, type EvalContext, type Scalar } from "@cellforge/core";
 import { compileWgsl, GpuRunner } from "@cellforge/gpu";
 
 /**
@@ -115,7 +115,7 @@ async function run(n: number, runs: number, withInterp: boolean) {
       };
       const out: Scalar[] = new Array(interpRows);
       const times = await timeIt(runs, () => {
-        for (let v = 0; v < interpRows; v++) out[v] = evaluate(ast, ctx, v);
+        for (let v = 0; v < interpRows; v++) out[v] = firstOf(evaluate(ast, ctx, v));
       });
       interpOut = out;
       const ms = median(times);

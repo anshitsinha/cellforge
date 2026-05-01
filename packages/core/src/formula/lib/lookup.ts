@@ -21,7 +21,11 @@ const width = (r: RangeRef) => Math.max(0, r.right - r.left + 1);
 
 /** A 1-D view of a range (a single row or column) as get(i) / length. */
 function line(a: Arg): { get: (i: number) => Scalar; length: number } | CellError {
-  if (a.kind !== "range") return { get: () => a.value, length: 1 };
+  if (a.kind === "array") {
+    if (a.array.cols === 1 || a.array.rows === 1) return { get: (i) => a.array.data[i], length: a.array.data.length };
+    return errors.value;
+  }
+  if (a.kind !== "range") return { get: () => scalarArg(a), length: 1 };
   const r = bounds(a);
   if (width(r) === 1) return { get: (i) => a.ctx.cell(r.top + i, r.left), length: height(r) };
   if (height(r) === 1) return { get: (i) => a.ctx.cell(r.top, r.left + i), length: width(r) };

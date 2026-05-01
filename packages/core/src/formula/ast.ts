@@ -14,7 +14,8 @@ export type Node =
   | { type: "number"; value: number }
   | { type: "string"; value: string }
   | { type: "boolean"; value: boolean }
-  | { type: "ref"; row: number; col: number; absRow?: boolean; absCol?: boolean; sheet?: string }
+  /** spill: A1# — the whole array that the formula in A1 spilled */
+  | { type: "ref"; row: number; col: number; absRow?: boolean; absCol?: boolean; sheet?: string; spill?: boolean }
   | {
       type: "range";
       range: RangeRef;
@@ -28,6 +29,10 @@ export type Node =
   | { type: "unary"; op: "-" | "+" | "%"; arg: Node }
   | { type: "binary"; op: BinaryOp; left: Node; right: Node }
   | { type: "call"; name: string; args: Node[] }
+  /** an array constant: {1,2;3,4} (rows of constants) */
+  | { type: "array"; rows: Node[][] }
+  /** a name: a LET variable or LAMBDA parameter */
+  | { type: "name"; name: string }
   /** an argument left empty, as in XLOOKUP(a, b, c, , 0) */
   | { type: "missing" }
   /** an error written into the formula, e.g. #REF! where a deleted cell was */
@@ -43,7 +48,7 @@ export class CellError {
   }
 }
 
-export type ErrorCode = "#DIV/0!" | "#VALUE!" | "#NAME?" | "#REF!" | "#NUM!" | "#CYCLE!" | "#ERROR!" | "#N/A";
+export type ErrorCode = "#DIV/0!" | "#VALUE!" | "#NAME?" | "#REF!" | "#NUM!" | "#CYCLE!" | "#ERROR!" | "#N/A" | "#SPILL!" | "#CALC!";
 
 export const errors = {
   div0: new CellError("#DIV/0!"),
@@ -54,4 +59,8 @@ export const errors = {
   cycle: new CellError("#CYCLE!"),
   syntax: new CellError("#ERROR!"),
   na: new CellError("#N/A"),
+  /** an array result has no room to spill */
+  spill: new CellError("#SPILL!"),
+  /** an array came out empty (FILTER with nothing left) */
+  calc: new CellError("#CALC!"),
 };

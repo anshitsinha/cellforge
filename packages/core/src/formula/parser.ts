@@ -17,7 +17,7 @@ import type { BinaryOp, ErrorCode, Node } from "./ast";
 type Token =
   | { t: "num"; v: number }
   | { t: "str"; v: string }
-  | { t: "ref"; row: number; col: number; absRow: boolean; absCol: boolean }
+  | { t: "ref"; row: number; col: number; absRow: boolean; absCol: boolean; spill?: boolean }
   | { t: "ident"; v: string }
   | { t: "sheet"; v: string }
   | { t: "err"; v: ErrorCode }
@@ -30,10 +30,10 @@ const REF = /^(\$?)([A-Za-z]{1,3})(\$?)(\d+)/;
 // a sheet prefix: Sheet2!  or  'Bank Jan'!  (a quote inside is written '')
 const SHEET_PLAIN = /^([A-Za-z_][A-Za-z0-9_.]*)!/;
 // error literals, as Excel writes them inside formulas (=A1+#REF!)
-const ERROR_LITERAL = /^(#REF!|#DIV\/0!|#VALUE!|#NAME\?|#NUM!|#N\/A)/i;
+const ERROR_LITERAL = /^(#REF!|#DIV\/0!|#VALUE!|#NAME\?|#NUM!|#N\/A|#SPILL!|#CALC!)/i;
 const NUMBER = /^(\d+\.?\d*|\.\d+)(e[-+]?\d+)?/i;
 const IDENT = /^[A-Za-z_][A-Za-z0-9_.]*/;
-const OPS = ["<>", "<=", ">=", "+", "-", "*", "/", "^", "&", "=", "<", ">", "(", ")", ",", ":", "%"];
+const OPS = ["<>", "<=", ">=", "+", "-", "*", "/", "^", "&", "=", "<", ">", "(", ")", ",", ":", "%", "{", "}", ";"];
 
 export function columnIndex(letters: string): number {
   let n = 0;
@@ -128,8 +128,9 @@ function tokenize(src: string): Token[] {
         row: Number(m[4]) - 1,
         absCol: m[1] === "$",
         absRow: m[3] === "$",
+        spill: rest[m[0].length] === "#",
       });
-      i += m[0].length;
+      i += m[0].length + (rest[m[0].length] === "#" ? 1 : 0);
       continue;
     }
 
@@ -252,7 +253,7 @@ export function parseFormula(src: string): Node {
             absRight: r.absCol,
           };
         }
-        return { type: "ref", row: tok.row, col: tok.col, absRow: tok.absRow, absCol: tok.absCol };
+        return { type: "ref", row: tok.row, col: tok.col, absRow: tok.absRow, absCol: tok.absCol, ...(tok.spill ? { spill: true } : {}) };
       }
       case "ident": {
         if (isOp("(")) {
@@ -265,7 +266,20 @@ export function parseFormula(src: string): Node {
             } while (isOp(",") && ++pos);
           }
           expectOp(")");
-          return { type: "call", name: tok.v, args };
+          let call: Node = { type: "call", name: tok.v, args };
+          // LAMBDA(x, x+1)(5): calling what a call returned
+          while (isOp("(")) {
+            pos++;
+            const more: Node[] = [];
+            if (!isOp(")")) {
+              do {
+                more.push(isOp(",") || isOp(")") ? { type: "missing" } : comparison());
+              } while (isOp(",") && ++pos);
+            }
+            expectOp(")");
+            call = { type: "call", name: "__INVOKE", args: [call, ...more] };
+          }
+          return call;
         }
         if (tok.v === "TRUE" || tok.v === "FALSE") return { type: "boolean", value: tok.v === "TRUE" };
         // whole-column range like A:A or B:D
@@ -283,9 +297,26 @@ export function parseFormula(src: string): Node {
             range: { top: 0, bottom: Infinity, left: Math.min(a, b), right: Math.max(a, b) },
           };
         }
-        throw new FormulaSyntaxError(`Unknown name '${tok.v}'`);
+        // anything else is a name: a LET variable or LAMBDA parameter
+        return { type: "name", name: tok.v.toUpperCase() };
       }
       case "op":
+        if (tok.v === "{") {
+          // array constant: {1,2,3} is a row, {1;2;3} a column, {1,2;3,4} a 2x2
+          const rows: Node[][] = [[]];
+          if (!isOp("}")) {
+            for (;;) {
+              rows[rows.length - 1].push(comparison());
+              if (isOp(",")) pos++;
+              else if (isOp(";")) {
+                pos++;
+                rows.push([]);
+              } else break;
+            }
+          }
+          expectOp("}");
+          return { type: "array", rows };
+        }
         if (tok.v === "(") {
           const inner = comparison();
           expectOp(")");

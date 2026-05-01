@@ -4,7 +4,9 @@ import { dateToSerial, parseTyped, serialToParts } from "../numfmt";
 // exported so the compiler can call the exact same implementations
 export { roundHalfAway };
 
-export type Scalar = number | string | boolean | null | CellError;
+import { CellArray, firstOf, Lambda, lift2, type Scalar, type Value } from "./arrays";
+export type { Scalar, Value };
+export { CellArray, Lambda, firstOf };
 
 /** Where a formula gets its inputs from. Implemented by the sheet. */
 export interface EvalContext {
@@ -17,6 +19,8 @@ export interface EvalContext {
   eachInRange(range: RangeRef, visit: (v: Scalar) => void): void;
   /** Another sheet's context, by name (case-insensitive); null if there's no such sheet. */
   sheet?(name: string): EvalContext | null;
+  /** The array the formula at (row, col) spilled (for A1#), or null if it didn't. */
+  spilled?(row: number, col: number): CellArray | null;
   /** How many rows the sheet has, so whole-column lookups (A:B) know where to stop. */
   rowCount?: number;
   colCount?: number;
@@ -28,7 +32,11 @@ function contextFor(node: { sheet?: string }, ctx: EvalContext): EvalContext | n
   return ctx.sheet?.(node.sheet) ?? null;
 }
 
-export type Arg = { kind: "value"; value: Scalar } | { kind: "range"; range: RangeRef; ctx: EvalContext };
+export type Arg =
+  | { kind: "value"; value: Scalar }
+  | { kind: "range"; range: RangeRef; ctx: EvalContext }
+  | { kind: "array"; array: CellArray }
+  | { kind: "lambda"; fn: Lambda };
 
 // ---------------------------------------------------------------------------
 // coercion helpers
@@ -106,14 +114,83 @@ export function compare(a: Scalar, b: Scalar): number {
 // ---------------------------------------------------------------------------
 // evaluation
 
+/** Variables in scope: LET names and LAMBDA parameters (upper case). */
+export type Env = ReadonlyMap<string, Value>;
+
+/** Largest array a range or formula may produce (keeps a stray A:A*2 from eating memory). */
+const MAX_ARRAY_CELLS = 2_000_000;
+
+/** A range's values as an array (whole columns stop at the sheet's last row). */
+export function rangeArray(range: RangeRef, ctx: EvalContext): CellArray | CellError {
+  const bottom = Math.min(range.bottom, (ctx.rowCount ?? 1_048_576) - 1);
+  const right = Math.min(range.right, (ctx.colCount ?? 16_384) - 1);
+  const rows = Math.max(0, bottom - range.top + 1);
+  const cols = Math.max(0, right - range.left + 1);
+  if (rows * cols > MAX_ARRAY_CELLS) return errors.value;
+  const data: Scalar[] = [];
+  ctx.eachInRange({ top: range.top, left: range.left, bottom, right }, (v) => data.push(v));
+  // eachInRange visits row by row; pad if the sheet reported fewer cells
+  while (data.length < rows * cols) data.push(null);
+  return new CellArray(rows, cols, data);
+}
+
+/**
+ * Functions that take single values, so given arrays they work cell by cell
+ * and return an array (=UPPER(A1:A3), =ROUND(B2:B9*1.2, 2), =IF(A1:A5>0, "y", "n")).
+ */
+export const LIFTED = new Set(
+  (
+    "ABS SQRT INT ROUND ROUNDUP ROUNDDOWN TRUNC MOD POWER SIGN EXP LN LOG LOG10 EVEN ODD FACT CEILING FLOOR MROUND QUOTIENT " +
+    "LEN UPPER LOWER TRIM PROPER LEFT RIGHT MID FIND SEARCH SUBSTITUTE REPLACE TEXT VALUE NUMBERVALUE EXACT CLEAN REPT CHAR CODE " +
+    "TEXTBEFORE TEXTAFTER IF IFERROR IFNA IFS SWITCH NOT ISERROR ISNA ISNUMBER ISTEXT ISLOGICAL ISBLANK " +
+    "DATE TIME YEAR MONTH DAY HOUR MINUTE SECOND WEEKDAY EDATE EOMONTH DATEVALUE DAYS WEEKNUM ISOWEEKNUM DATEDIF YEARFRAC DAYS360"
+  ).split(" "),
+);
+
+/** Turn evaluated values into function arguments. */
+function toArg(v: Value): Arg {
+  if (v instanceof CellArray) return { kind: "array", array: v };
+  if (v instanceof Lambda) return { kind: "lambda", fn: v };
+  return { kind: "value", value: v };
+}
+
+/** Run a LAMBDA with these argument values. */
+export function callLambda(fn: Lambda, values: Value[], ctx: EvalContext): Value {
+  if (values.length > fn.params.length) return errors.value;
+  const env = new Map(fn.env);
+  fn.params.forEach((p, i) => env.set(p, i < values.length ? values[i] : null));
+  return evaluate(fn.body, ctx, fn.shift, env);
+}
+
+/** A function applied cell by cell over the arrays among its arguments. */
+function lifted(fn: Fn, args: Arg[], ctx: EvalContext): Value {
+  let rows = 1;
+  let cols = 1;
+  for (const a of args) {
+    if (a.kind === "array") {
+      rows = Math.max(rows, a.array.rows);
+      cols = Math.max(cols, a.array.cols);
+    }
+  }
+  const data: Scalar[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cellArgs: Arg[] = args.map((a) => (a.kind === "array" ? { kind: "value", value: a.array.get(r, c) } : a));
+      data.push(firstOf(fn(cellArgs, ctx)));
+    }
+  }
+  return new CellArray(rows, cols, data);
+}
+
 /**
  * Evaluate a formula.
  *
  * `rowShift` evaluates it as if it had been filled down that many rows:
  * relative row references move, `$`-anchored ones don't. That's how one
  * template AST serves every row of a filled range without being copied.
+ * `env` holds LET names and LAMBDA parameters in scope.
  */
-export function evaluate(node: Node, ctx: EvalContext, rowShift = 0): Scalar {
+export function evaluate(node: Node, ctx: EvalContext, rowShift = 0, env?: Env): Value {
   switch (node.type) {
     case "number":
     case "string":
@@ -123,44 +200,197 @@ export function evaluate(node: Node, ctx: EvalContext, rowShift = 0): Scalar {
       return new CellError(node.code);
     case "missing":
       return null;
+    case "name": {
+      const v = env?.get(node.name);
+      return v === undefined ? errors.name : v;
+    }
     case "ref": {
       const row = node.absRow ? node.row : node.row + rowShift;
       const target = contextFor(node, ctx);
-      return row < 0 || !target ? errors.ref : target.cell(row, node.col);
+      if (row < 0 || !target) return errors.ref;
+      if (node.spill) return target.spilled?.(row, node.col) ?? errors.ref;
+      return target.cell(row, node.col);
     }
-    case "range":
-      // a bare range outside a function (=A1:A3) - Excel would spill it; we
-      // just don't support that
-      return errors.value;
+    case "range": {
+      // a range on its own (=A1:A3, =A1:A3*2) is an array that spills
+      const range = shiftRange(node, rowShift);
+      const target = contextFor(node, ctx);
+      if (!range || !target) return errors.ref;
+      return rangeArray(range, target);
+    }
+    case "array": {
+      const rows: Scalar[][] = node.rows.map((r) => r.map((e) => firstOf(evaluate(e, ctx, rowShift, env))));
+      return CellArray.of(rows);
+    }
     case "unary": {
-      const n = toNumber(evaluate(node.arg, ctx, rowShift));
-      if (isError(n)) return n;
-      if (node.op === "-") return -n;
-      if (node.op === "%") return tidy(n / 100);
-      return n;
+      const v = evaluate(node.arg, ctx, rowShift, env);
+      const one = (x: Scalar): Scalar => {
+        const n = toNumber(x);
+        if (isError(n)) return n;
+        if (node.op === "-") return -n;
+        if (node.op === "%") return tidy(n / 100);
+        return n;
+      };
+      if (v instanceof Lambda) return errors.value;
+      return v instanceof CellArray ? v.map(one) : one(v);
     }
     case "binary":
-      return binary(node.op, evaluate(node.left, ctx, rowShift), evaluate(node.right, ctx, rowShift));
+      return lift2(evaluate(node.left, ctx, rowShift, env), evaluate(node.right, ctx, rowShift, env), (a, b) => binary(node.op, a, b));
     case "call": {
+      const special = SPECIAL[node.name];
+      if (special) return special(node.args, ctx, rowShift, env);
       const fn = FUNCTIONS[node.name];
-      if (!fn) return errors.name;
+      if (!fn) {
+        // a LAMBDA kept in a LET name: =LET(sq, LAMBDA(n, n*n), sq(4))
+        const bound = env?.get(node.name);
+        if (bound instanceof Lambda) return callLambda(bound, node.args.map((a) => evaluate(a, ctx, rowShift, env)), ctx);
+        return errors.name;
+      }
+      const lift = LIFTED.has(node.name);
       const args: Arg[] = [];
       for (const a of node.args) {
-        if (a.type === "range") {
+        if (a.type === "range" && !lift) {
           const range = shiftRange(a, rowShift);
           const target = contextFor(a, ctx);
           if (!range || !target) return errors.ref;
           args.push({ kind: "range", range, ctx: target });
         } else {
-          args.push({ kind: "value", value: evaluate(a, ctx, rowShift) });
+          args.push(toArg(evaluate(a, ctx, rowShift, env)));
         }
       }
+      if (lift && args.some((a) => a.kind === "array")) return lifted(fn, args, ctx);
       return fn(args, ctx);
     }
   }
 }
 
-/** Apply a fill-down shift to a range node. null if it'd go above row 1. */
+type Special = (args: Node[], ctx: EvalContext, rowShift: number, env: Env | undefined) => Value;
+
+/** Lambda arguments: a LAMBDA written inline or a name holding one. */
+function lambdaOf(v: Value): Lambda | null {
+  return v instanceof Lambda ? v : null;
+}
+
+/** An argument as an array (a single value becomes 1x1). */
+function arrayOf(node: Node, ctx: EvalContext, rowShift: number, env: Env | undefined): CellArray | CellError {
+  const v = evaluate(node, ctx, rowShift, env);
+  if (v instanceof Lambda) return errors.value;
+  if (v instanceof CellArray) return v;
+  return new CellArray(1, 1, [v]);
+}
+
+/** Functions that control when (or whether) their arguments are evaluated. */
+const SPECIAL: Record<string, Special> = {
+  LET: (args, ctx, rowShift, env) => {
+    if (args.length < 3 || args.length % 2 === 0) return errors.value;
+    const scope = new Map(env ?? []);
+    for (let i = 0; i < args.length - 1; i += 2) {
+      const name = args[i];
+      if (name.type !== "name") return errors.value;
+      scope.set(name.name, evaluate(args[i + 1], ctx, rowShift, scope));
+    }
+    return evaluate(args[args.length - 1], ctx, rowShift, scope);
+  },
+  LAMBDA: (args, _ctx, rowShift, env) => {
+    if (!args.length) return errors.value;
+    const params = args.slice(0, -1);
+    if (!params.every((p) => p.type === "name")) return errors.value;
+    return new Lambda(
+      params.map((p) => (p as { name: string }).name),
+      args[args.length - 1],
+      env ?? new Map(),
+      rowShift,
+    );
+  },
+  __INVOKE: (args, ctx, rowShift, env) => {
+    const fn = lambdaOf(evaluate(args[0], ctx, rowShift, env));
+    if (!fn) return errors.value;
+    return callLambda(
+      fn,
+      args.slice(1).map((a) => evaluate(a, ctx, rowShift, env)),
+      ctx,
+    );
+  },
+  MAP: (args, ctx, rowShift, env) => {
+    if (args.length < 2) return errors.value;
+    const fn = lambdaOf(evaluate(args[args.length - 1], ctx, rowShift, env));
+    if (!fn) return errors.value;
+    const arrays: CellArray[] = [];
+    for (const a of args.slice(0, -1)) {
+      const arr = arrayOf(a, ctx, rowShift, env);
+      if (isError(arr)) return arr;
+      arrays.push(arr);
+    }
+    const rows = Math.max(...arrays.map((a) => a.rows));
+    const cols = Math.max(...arrays.map((a) => a.cols));
+    const data: Scalar[] = [];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) data.push(firstOf(callLambda(fn, arrays.map((a) => a.get(r, c)), ctx)));
+    return new CellArray(rows, cols, data);
+  },
+  REDUCE: (args, ctx, rowShift, env) => {
+    if (args.length !== 3) return errors.value;
+    let acc = evaluate(args[0], ctx, rowShift, env);
+    const arr = arrayOf(args[1], ctx, rowShift, env);
+    const fn = lambdaOf(evaluate(args[2], ctx, rowShift, env));
+    if (isError(arr)) return arr;
+    if (!fn) return errors.value;
+    for (const v of arr.data) acc = callLambda(fn, [acc, v], ctx);
+    return acc;
+  },
+  SCAN: (args, ctx, rowShift, env) => {
+    if (args.length !== 3) return errors.value;
+    let acc = evaluate(args[0], ctx, rowShift, env);
+    const arr = arrayOf(args[1], ctx, rowShift, env);
+    const fn = lambdaOf(evaluate(args[2], ctx, rowShift, env));
+    if (isError(arr)) return arr;
+    if (!fn) return errors.value;
+    return new CellArray(
+      arr.rows,
+      arr.cols,
+      arr.data.map((v) => {
+        acc = callLambda(fn, [acc, v], ctx);
+        return firstOf(acc);
+      }),
+    );
+  },
+  BYROW: (args, ctx, rowShift, env) => {
+    if (args.length !== 2) return errors.value;
+    const arr = arrayOf(args[0], ctx, rowShift, env);
+    const fn = lambdaOf(evaluate(args[1], ctx, rowShift, env));
+    if (isError(arr)) return arr;
+    if (!fn) return errors.value;
+    return CellArray.column(Array.from({ length: arr.rows }, (_, r) => firstOf(callLambda(fn, [new CellArray(1, arr.cols, arr.row(r))], ctx))));
+  },
+  BYCOL: (args, ctx, rowShift, env) => {
+    if (args.length !== 2) return errors.value;
+    const arr = arrayOf(args[0], ctx, rowShift, env);
+    const fn = lambdaOf(evaluate(args[1], ctx, rowShift, env));
+    if (isError(arr)) return arr;
+    if (!fn) return errors.value;
+    return new CellArray(1, arr.cols, Array.from({ length: arr.cols }, (_, c) => firstOf(callLambda(fn, [CellArray.column(arr.column(c))], ctx))));
+  },
+  MAKEARRAY: (args, ctx, rowShift, env) => {
+    if (args.length !== 3) return errors.value;
+    const rows = toNumber(firstOf(evaluate(args[0], ctx, rowShift, env)));
+    const cols = toNumber(firstOf(evaluate(args[1], ctx, rowShift, env)));
+    const fn = lambdaOf(evaluate(args[2], ctx, rowShift, env));
+    if (isError(rows)) return rows;
+    if (isError(cols)) return cols;
+    if (!fn) return errors.value;
+    const r = Math.trunc(rows);
+    const c = Math.trunc(cols);
+    if (r < 1 || c < 1 || r * c > MAX_ARRAY_CELLS) return errors.value;
+    const data: Scalar[] = [];
+    for (let i = 1; i <= r; i++) for (let j = 1; j <= c; j++) data.push(firstOf(callLambda(fn, [i, j], ctx)));
+    return new CellArray(r, c, data);
+  },
+};
+
+/** Names handled by SPECIAL, for the reference and autocomplete checks. */
+export const SPECIAL_NAMES = Object.keys(SPECIAL).filter((n) => !n.startsWith("__"));
+
+
+/** A range moved down by a fill shift ($-anchored edges stay). */
 export function shiftRange(node: Extract<Node, { type: "range" }>, shift: number): RangeRef | null {
   if (shift === 0) return node.range;
   const { top, bottom, left, right } = node.range;
@@ -221,7 +451,7 @@ function binary(op: string, a: Scalar, b: Scalar): Scalar {
 // ---------------------------------------------------------------------------
 // functions
 
-export type Fn = (args: Arg[], ctx: EvalContext) => Scalar;
+export type Fn = (args: Arg[], ctx: EvalContext) => Value;
 
 /**
  * Walk every value an argument list contains - ranges expanded, scalars as-is.
@@ -231,8 +461,21 @@ export type Fn = (args: Arg[], ctx: EvalContext) => Scalar;
 export function eachValue(args: Arg[], _ctx: EvalContext, visit: (v: Scalar, fromRange: boolean) => void) {
   for (const arg of args) {
     if (arg.kind === "range") arg.ctx.eachInRange(arg.range, (v) => visit(v, true));
+    else if (arg.kind === "array") for (const v of arg.array.data) visit(v, true);
+    else if (arg.kind === "lambda") visit(errors.value, false);
     else visit(arg.value, false);
   }
+}
+
+/** Every value in one argument: a range's cells, an array's items, or the value itself. */
+export function argValues(a: Arg): Scalar[] {
+  if (a.kind === "value") return [a.value];
+  if (a.kind === "array") return a.array.data;
+  if (a.kind === "lambda") return [errors.value];
+  const out: Scalar[] = [];
+  const bottom = Math.min(a.range.bottom, (a.ctx.rowCount ?? 1_048_576) - 1);
+  a.ctx.eachInRange({ ...a.range, bottom }, (v) => out.push(v));
+  return out;
 }
 
 /** Shared implementation for SUM/AVERAGE/MIN/MAX/COUNT. */
@@ -318,7 +561,9 @@ export function criterion(c: Scalar): (v: Scalar) => boolean {
   };
 }
 
-export const scalarArg = (a: Arg | undefined): Scalar => (a && a.kind === "value" ? a.value : errors.value);
+/** A single value argument; a 1x1 array counts, anything bigger is #VALUE!. */
+export const scalarArg = (a: Arg | undefined): Scalar =>
+  !a ? errors.value : a.kind === "value" ? a.value : a.kind === "array" && a.array.data.length === 1 ? a.array.data[0] : errors.value;
 
 function mathFn(f: (n: number) => number): Fn {
   return (args) => {

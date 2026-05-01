@@ -202,7 +202,12 @@ define(
         if (shape && (s[0] !== shape[0] || s[1] !== shape[1])) return errors.value;
         shape = s;
         vals = valuesOf(a);
-      } else vals = [a.value];
+      } else if (a.kind === "array") {
+        const s = [a.array.rows, a.array.cols] as const;
+        if (shape && (s[0] !== shape[0] || s[1] !== shape[1])) return errors.value;
+        shape = s;
+        vals = a.array.data;
+      } else vals = [scalarArg(a)];
       const nums: number[] = [];
       for (const v of vals) {
         if (isError(v)) return v;

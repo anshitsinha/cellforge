@@ -69,8 +69,8 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Dynamic arrays and spill, `LET`, `LAMBDA`
-- [ ] Array values in the evaluator: ranges and array results flow through functions and operators (=A1:A3*2)
-- [ ] Spill: a formula returning an array fills the cells below/right; #SPILL! when blocked; the # reference (A1#)
+- [x] Array values in the evaluator: ranges and array results flow through functions and operators (=A1:A3*2)
+- [x] Spill: a formula returning an array fills the cells below/right; #SPILL! when blocked; the # reference (A1#)
 - [ ] Array functions: FILTER, SORT, SORTBY, UNIQUE, SEQUENCE, TRANSPOSE; INDEX/XLOOKUP returning rows or columns
 - [ ] LET (named intermediate values) and LAMBDA with MAP, REDUCE, BYROW, BYCOL
 - [ ] Reference entries, tests against Excel, user guide

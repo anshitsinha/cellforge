@@ -5,6 +5,7 @@ import {
   breakpoints,
   CellError,
   compileFill,
+  LIFTED,
   mapRow,
   type RowChange,
   errors,
@@ -20,7 +21,7 @@ import {
   type Scalar,
 } from "@cellforge/core";
 import { formatCell, spliceMerges, type CellRange, type CellStyle, type CellValue, type DataSource } from "@cellforge/grid";
-import { formatGeneral, formatValue as formatWithCode, isDateFormat } from "@cellforge/core";
+import { CellArray, formatGeneral, formatValue as formatWithCode, isDateFormat, Lambda, type FormulaValue } from "@cellforge/core";
 import { DepIndex, type Rect } from "./deps";
 import { SheetStyles, type ColumnStyles, type StylesState } from "./styles";
 import { type IdRuns, RowMap, runsLength } from "./rowmap";
@@ -190,6 +191,16 @@ export class EditableSource implements DataSource {
   merges: CellRange[] = [];
 
   private cache = new Map<number, Scalar>();
+
+  // dynamic arrays: formulas whose result is an array spill into the cells
+  // below and right of them. Only formulas that can return arrays are
+  // tracked, so ordinary sheets pay nothing for this.
+  private spillFormulas = 0;
+  /** anchor key -> the array it produced (spilled or not) */
+  private arrays = new Map<number, CellArray>();
+  /** anchor key -> the area it spilled into (absent when #SPILL!) */
+  private spills = new Map<number, { row: number; col: number; rows: number; cols: number }>();
+  private spillsScanned = false;
 
   // Dependency index: which formulas read which rectangles, so an edit only
   // drops the results that depend on it. Kept while unsorted (view rows ==
@@ -370,6 +381,10 @@ export class EditableSource implements DataSource {
       const fill = this.fillAt(b, col);
       if (fill && isFormula(fill.template)) return formulaText(fill.template, row - fill.origin);
     }
+    if (stored === undefined && this.spillFormulas > 0) {
+      const area = this.spillAreaAt(row, col);
+      if (area && (area.row !== row || area.col !== col)) return "";
+    }
     const value = this.getCell(row, col);
     const code = this.getStyle(row, col)?.numFmt;
     if (typeof value === "number" && code) {
@@ -413,35 +428,15 @@ export class EditableSource implements DataSource {
 
   setCell(row: number, col: number, value: Stored): void {
     if (isFormula(value)) value = { ...value, anchor: row };
-    const b = this.toBase(row);
-    let rowEdits = this.edits.get(b);
-    if (!rowEdits) {
-      rowEdits = new Map();
-      this.edits.set(b, rowEdits);
-    }
-    const prev = rowEdits.get(col);
-    if (prev === undefined && !rowEdits.has(col)) {
-      this.count++;
-      this.editsPerColumn.set(col, (this.editsPerColumn.get(col) ?? 0) + 1);
-    }
-    if (isFormula(prev)) this.formulas--;
-    if (isFormula(value)) this.formulas++;
-    rowEdits.set(col, value);
+    this.putEdit(this.toBase(row), col, value);
     this.cellChanged(row, col, value);
   }
 
   /** Forget an edit entirely, so the cell shows the underlying data again. */
   revertCell(row: number, col: number): void {
     const b = this.toBase(row);
-    const rowEdits = this.edits.get(b);
-    if (!rowEdits?.has(col)) return;
-    if (isFormula(rowEdits.get(col))) this.formulas--;
-    rowEdits.delete(col);
-    if (rowEdits.size === 0) this.edits.delete(b);
-    this.count--;
-    const n = this.editsPerColumn.get(col)! - 1;
-    if (n === 0) this.editsPerColumn.delete(col);
-    else this.editsPerColumn.set(col, n);
+    if (!this.edits.get(b)?.has(col)) return;
+    this.dropEdit(b, col);
     this.cellChanged(row, col, undefined);
   }
 
@@ -842,15 +837,25 @@ export class EditableSource implements DataSource {
       this.count++;
       this.editsPerColumn.set(col, (this.editsPerColumn.get(col) ?? 0) + 1);
     }
-    if (isFormula(prev)) this.formulas--;
-    if (isFormula(value)) this.formulas++;
+    if (isFormula(prev)) {
+      this.formulas--;
+      if (prev.ast && maySpill(prev.ast)) this.spillFormulas--;
+    }
+    if (isFormula(value)) {
+      this.formulas++;
+      if (value.ast && maySpill(value.ast)) this.spillFormulas++;
+    }
     row.set(col, value);
   }
 
   private dropEdit(id: number, col: number): void {
     const row = this.edits.get(id);
     if (!row?.has(col)) return;
-    if (isFormula(row.get(col))) this.formulas--;
+    const prev = row.get(col);
+    if (isFormula(prev)) {
+      this.formulas--;
+      if (prev.ast && maySpill(prev.ast)) this.spillFormulas--;
+    }
     row.delete(col);
     if (row.size === 0) this.edits.delete(id);
     this.count--;
@@ -1210,6 +1215,9 @@ export class EditableSource implements DataSource {
    */
   clearCaches(): void {
     this.cache.clear();
+    this.arrays.clear();
+    this.spills.clear();
+    this.spillsScanned = false;
     for (const f of this.fills) f.chunks.clear();
     this.chunkCount = 0;
   }
@@ -1281,7 +1289,7 @@ export class EditableSource implements DataSource {
   }
 
   private cellChanged(row: number, col: number, value: Stored | undefined): void {
-    if (this.order) {
+    if (this.order || this.spillFormulas > 0 || this.spills.size > 0) {
       this.invalidate();
       return;
     }
@@ -1391,10 +1399,15 @@ export class EditableSource implements DataSource {
     const b = this.toBase(row);
     const stored = this.edits.get(b)?.get(col);
     if (stored !== undefined) {
+      if (stored === null && this.spillFormulas > 0) return this.spilledValue(row, col);
       return isFormula(stored) ? this.evalFormula(row, col, stored, effectiveShift(stored, row)) : stored;
     }
     const fill = this.fillAt(b, col);
-    if (!fill) return this.baseValue(b, col);
+    if (!fill) {
+      const base = this.baseValue(b, col);
+      if (base === null && this.spillFormulas > 0) return this.spilledValue(row, col);
+      return base;
+    }
     if (!isFormula(fill.template)) return fill.template;
 
     // compiled fast path: finite kernel output is exactly the interpreter's
@@ -1402,6 +1415,81 @@ export class EditableSource implements DataSource {
     const x = this.kernelValue(fill, b);
     if (x - x === 0) return x;
     return this.evalFormula(row, col, fill.template, row - fill.origin);
+  }
+
+  /**
+   * An array result at (row, col): the top-left value shows there and the
+   * rest spills below and right, unless something is in the way (#SPILL!).
+   */
+  private placeArray(row: number, col: number, a: CellArray): Scalar {
+    const k = key(row, col);
+    this.arrays.set(k, a);
+    if (a.rows === 0 || a.cols === 0) return errors.calc;
+    if (a.rows === 1 && a.cols === 1) return a.data[0];
+    if (row + a.rows > this.rowCount || col + a.cols > this.colCount) return errors.spill;
+    for (let r = row; r < row + a.rows; r++) {
+      for (let c = col; c < col + a.cols; c++) {
+        if ((r !== row || c !== col) && this.hasOwnContent(r, c)) return errors.spill;
+      }
+    }
+    // another array already spilling over this area: the later one is blocked
+    for (const [other, area] of this.spills) {
+      if (other === k) continue;
+      if (area.row < row + a.rows && row < area.row + area.rows && area.col < col + a.cols && col < area.col + area.cols) return errors.spill;
+    }
+    this.spills.set(k, { row, col, rows: a.rows, cols: a.cols });
+    return a.data[0];
+  }
+
+  /** Whether a cell has anything of its own (so a spill can't cover it). */
+  private hasOwnContent(row: number, col: number): boolean {
+    const b = this.toBase(row);
+    const stored = this.edits.get(b)?.get(col);
+    if (stored !== undefined) return stored !== null;
+    if (this.fillAt(b, col)) return true;
+    return this.baseValue(b, col) !== null;
+  }
+
+  /** Evaluate every formula that can spill, so the spill areas are known. */
+  private scanSpills(): void {
+    if (this.spillsScanned) return;
+    this.spillsScanned = true;
+    const viewOf = this.viewLookup();
+    for (const [id, cols] of this.edits) {
+      const v = viewOf(id);
+      if (v < 0) continue;
+      for (const [col, stored] of cols) {
+        if (isFormula(stored) && stored.ast && maySpill(stored.ast)) this.value(v, col);
+      }
+    }
+  }
+
+  /** The value an empty cell shows because an array spills over it (or null). */
+  private spilledValue(row: number, col: number): Scalar {
+    this.scanSpills();
+    for (const [k, area] of this.spills) {
+      if (row >= area.row && row < area.row + area.rows && col >= area.col && col < area.col + area.cols) {
+        return this.arrays.get(k)!.get(row - area.row, col - area.col);
+      }
+    }
+    return null;
+  }
+
+  /** For A1#: the array the formula at (row, col) spilled. */
+  spilledArray(row: number, col: number): CellArray | null {
+    this.value(row, col);
+    const k = key(row, col);
+    return this.spills.has(k) ? this.arrays.get(k)! : null;
+  }
+
+  /** The spill area covering a cell, if it's spilled into (not the anchor itself). */
+  spillAreaAt(row: number, col: number): { row: number; col: number; rows: number; cols: number } | null {
+    if (this.spillFormulas === 0) return null;
+    this.scanSpills();
+    for (const area of this.spills.values()) {
+      if (row >= area.row && row < area.row + area.rows && col >= area.col && col < area.col + area.cols) return area;
+    }
+    return null;
   }
 
   private evalFormula(row: number, col: number, f: Formula, shift: number): Scalar {
@@ -1413,7 +1501,8 @@ export class EditableSource implements DataSource {
     this.inProgress.add(k);
     let result: Scalar;
     try {
-      result = f.ast ? evaluate(f.ast, this.ctx, shift) : errors.syntax;
+      const v: FormulaValue = f.ast ? evaluate(f.ast, this.ctx, shift) : errors.syntax;
+      result = v instanceof CellArray ? this.placeArray(row, col, v) : v instanceof Lambda ? errors.calc : v;
     } catch (e) {
       // very long dependency chains (a running total filled down 100k rows)
       // recurse once per row and can blow the stack
@@ -1431,6 +1520,7 @@ export class EditableSource implements DataSource {
       cell: (row: number, col: number) => (row < this.rowCount && col < this.colCount ? this.value(row, col) : errors.ref),
       eachInRange: (range: RangeRef, visit: (v: Scalar) => void) => this.eachInRange(range, visit),
       sheet: (name: string) => this.resolveSheet?.(name)?.evalContext ?? null,
+      spilled: (row: number, col: number) => this.spilledArray(row, col),
     } as EvalContext,
     // live sizes, for lookups over whole columns
     { rowCount: { get: () => this.rowCount }, colCount: { get: () => this.colCount } },
@@ -1655,4 +1745,34 @@ export interface ColumnRemoval {
 function compileOwn(ast: Node, origin: number, col: number): CompiledFill | null {
   const kernel = compileFill(ast, origin);
   return kernel?.columns.some((c) => c.col === col) ? null : kernel;
+}
+
+const ARRAY_FUNCTIONS = new Set(
+  "FILTER SORT SORTBY UNIQUE SEQUENCE TRANSPOSE MAP SCAN BYROW BYCOL MAKEARRAY RANDARRAY HSTACK VSTACK TAKE DROP TOCOL TOROW CHOOSECOLS CHOOSEROWS EXPAND WRAPROWS WRAPCOLS LET LAMBDA __INVOKE INDEX XLOOKUP".split(" "),
+);
+
+/**
+ * Can this formula return an array? A range used outside a function that
+ * folds it (=A1:A3*2, but not =SUM(A1:A3)), an array constant, a spill
+ * reference (A1#), or a function that returns arrays.
+ */
+function maySpill(node: Node, folded = false): boolean {
+  switch (node.type) {
+    case "range":
+      return !folded;
+    case "array":
+      return true;
+    case "ref":
+      return !!node.spill;
+    case "unary":
+      return maySpill(node.arg, false);
+    case "binary":
+      return maySpill(node.left, false) || maySpill(node.right, false);
+    case "call":
+      if (ARRAY_FUNCTIONS.has(node.name)) return true;
+      // functions that take single values map over a range (=UPPER(A1:A9)) and spill
+      return node.args.some((a) => maySpill(a, !LIFTED.has(node.name)));
+    default:
+      return false;
+  }
 }

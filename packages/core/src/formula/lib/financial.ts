@@ -4,7 +4,7 @@
  * positive.
  */
 import { CellError, errors } from "../ast";
-import { isError, scalarArg, tidy, toNumber, type Arg, type EvalContext, type Scalar } from "../evaluate";
+import { argValues, isError, scalarArg, tidy, toNumber, type Arg, type EvalContext, type Scalar } from "../evaluate";
 import { define } from "./define";
 
 function nums(args: Arg[], from: number, count: number, defaults: number[] = []): number[] | CellError {
@@ -36,9 +36,11 @@ function cashflows(args: Arg[], ctx: EvalContext): number[] | CellError {
       });
       if (err) return err;
     } else {
-      const n = toNumber(a.value);
-      if (isError(n)) return n;
-      out.push(n);
+      for (const v of argValues(a)) {
+        const n = toNumber(v);
+        if (isError(n)) return n;
+        out.push(n);
+      }
     }
   }
   void ctx;
@@ -236,11 +238,7 @@ define(
 
 function datedFlows(args: Arg[]): { cf: number[]; days: number[] } | CellError {
   const read = (a: Arg | undefined): Scalar[] => {
-    if (!a) return [];
-    if (a.kind === "value") return [a.value];
-    const out: Scalar[] = [];
-    a.ctx.eachInRange(a.range, (v) => out.push(v));
-    return out;
+    return a ? argValues(a) : [];
   };
   const v = read(args[0]);
   const d = read(args[1]);

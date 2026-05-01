@@ -1,6 +1,6 @@
 /** More date functions: DAYS, DATEDIF, NETWORKDAYS, WORKDAY, YEARFRAC, WEEKNUM, ISOWEEKNUM, DAYS360. */
 import { CellError, errors } from "../ast";
-import { isError, scalarArg, tidy, toNumber, type Arg, type Scalar } from "../evaluate";
+import { argValues, isError, scalarArg, tidy, toNumber, type Arg, type Scalar } from "../evaluate";
 import { dateToSerial, serialToParts } from "../../numfmt";
 import { define } from "./define";
 
@@ -23,15 +23,11 @@ function holidays(a: Arg | undefined): Set<number> | CellError {
     out.add(Math.floor(n));
     return null;
   };
-  if (a.kind === "value") {
-    const e = add(a.value);
-    return e ?? out;
+  for (const v of argValues(a)) {
+    const e = add(v);
+    if (e) return e;
   }
-  let err: CellError | null = null;
-  a.ctx.eachInRange(a.range, (v) => {
-    if (!err) err = add(v);
-  });
-  return err ?? out;
+  return out;
 }
 
 const isWeekend = (serial: number) => {
