@@ -39,6 +39,48 @@ While you type a formula, cellforge helps:
 
 This works in the cell and in the formula bar.
 
+## Formulas that fill several cells (dynamic arrays)
+
+A formula can return a whole block of values. It shows in its own cell and
+**spills** into the cells below and to the right, exactly as in current Excel:
+
+| Formula | Spills |
+| --- | --- |
+| `=A2:A100*1.2` | every amount with 20% added |
+| `=UPPER(B2:B100)` | every name in capitals (functions that take one value work cell by cell) |
+| `=FILTER(A2:C500, C2:C500>1000)` | only the rows over 1,000 |
+| `=SORT(A2:C500, 3, -1)` | the rows sorted by the third column, largest first |
+| `=UNIQUE(B2:B500)` | each supplier once |
+| `=SEQUENCE(12)` | 1 to 12 |
+| `={1,2,3;4,5,6}` | a 2-row, 3-column array written by hand |
+
+Click a spilled cell and the formula bar is empty: the formula lives in the
+first cell only. If something is already in the way, the formula shows
+**#SPILL!** until you clear those cells. To use the whole spilled block in
+another formula, add **#** to its first cell: `=SUM(E2#)`.
+
+Also available: SORTBY, TRANSPOSE, TAKE, DROP, VSTACK, HSTACK, TOCOL, TOROW,
+CHOOSECOLS and CHOOSEROWS, and INDEX with a row or column of 0 for a whole
+column or row.
+
+## Naming things inside a formula: LET and LAMBDA
+
+**LET** gives names to parts of a long formula, so it reads clearly and
+each part is worked out once:
+
+```
+=LET(net, B2-C2, rate, net/B2, IF(rate>0.1, "check", "ok"))
+```
+
+**LAMBDA** makes your own function. Keep it in a LET name, call it right
+away, or hand it to **MAP** (every value), **REDUCE** (fold to one value),
+**SCAN** (running results), **BYROW**, **BYCOL** or **MAKEARRAY**:
+
+```
+=MAP(B2:B100, C2:C100, LAMBDA(net, vat, net + vat))
+=REDUCE(0, D2:D100, LAMBDA(total, x, total + ROUND(x, 2)))
+```
+
 ## Numbers, text, TRUE/FALSE and dates
 
 A cell holds a number, text, TRUE or FALSE, or nothing. These follow Excel's

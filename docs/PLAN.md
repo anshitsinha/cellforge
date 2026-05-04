@@ -68,12 +68,11 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Dynamic arrays and spill, `LET`, `LAMBDA`
-- [x] Array values in the evaluator: ranges and array results flow through functions and operators (=A1:A3*2)
-- [x] Spill: a formula returning an array fills the cells below/right; #SPILL! when blocked; the # reference (A1#)
-- [ ] Array functions: FILTER, SORT, SORTBY, UNIQUE, SEQUENCE, TRANSPOSE; INDEX/XLOOKUP returning rows or columns
-- [ ] LET (named intermediate values) and LAMBDA with MAP, REDUCE, BYROW, BYCOL
-- [ ] Reference entries, tests against Excel, user guide
+### Named ranges; tables with structured references that grow with new rows
+- [ ] Named ranges and named constants: define, use in formulas (=SUM(Revenue)), rename and delete with formulas following; scope workbook or sheet
+- [ ] Tables: turn a range into a table with a name and header row; banded style; grows when rows are added below
+- [ ] Structured references: Table1[Amount], Table1[@Amount], Table1[#Totals]; adjust when columns are renamed
+- [ ] Name manager panel and palette entries; tests; user guide
 
 ## Milestones
 
@@ -101,8 +100,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Excel type system and coercion; dates as serials (incl. the 1900 bug)
 - ✅ The ~150 functions that cover real use: lookup (XLOOKUP, INDEX/MATCH),
   maths, statistics, text, dates, financial, logic, information
-- 🔨 Dynamic arrays and spill, `LET`, `LAMBDA`
-- ⬜ Named ranges; tables with structured references that grow with new rows
+- ✅ Dynamic arrays and spill, `LET`, `LAMBDA`
+- 🔨 Named ranges; tables with structured references that grow with new rows
 - ⬜ Lookups that warn about type and whitespace mismatches instead of a silent `#N/A`
 - ⬜ Formula auditing: trace precedents/dependents, step-by-step evaluation,
   precise broken-reference locator, hard-coded-number lint

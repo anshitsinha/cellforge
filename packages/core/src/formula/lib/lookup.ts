@@ -4,6 +4,7 @@
  * would return several cells gives #VALUE! until dynamic arrays arrive).
  */
 import { CellError, errors, type RangeRef } from "../ast";
+import { CellArray } from "../arrays";
 import { compare, isError, scalarArg, toBool, toNumber, type Arg, type Scalar } from "../evaluate";
 import { define } from "./define";
 
@@ -14,6 +15,14 @@ function bounds(a: RangeArg): RangeRef {
   const rows = a.ctx.rowCount ?? 1_048_576;
   const cols = a.ctx.colCount ?? 16_384;
   return { top: a.range.top, left: a.range.left, bottom: Math.min(a.range.bottom, rows - 1), right: Math.min(a.range.right, cols - 1) };
+}
+
+/** A range or array as rows x cols with random access. */
+function grid(a: Arg): { rows: number; cols: number; get: (r: number, c: number) => Scalar } | null {
+  if (a.kind === "array") return { rows: a.array.rows, cols: a.array.cols, get: (r, c) => a.array.data[r * a.array.cols + c] };
+  if (a.kind !== "range") return null;
+  const b = bounds(a);
+  return { rows: height(b), cols: width(b), get: (r, c) => a.ctx.cell(b.top + r, b.left + c) };
 }
 
 const height = (r: RangeRef) => Math.max(0, r.bottom - r.top + 1);
@@ -316,20 +325,25 @@ define(
   (args) => {
     if (args.length < 2 || args.length > 3) return errors.value;
     const a = args[0];
-    if (a.kind !== "range") return args.length === 2 ? scalarArg(a) : errors.value;
-    const r = bounds(a);
+    const g = grid(a);
+    if (!g) return args.length === 2 ? scalarArg(a) : errors.value;
     let row = int(args[1]);
     let col = args.length === 3 ? int(args[2]) : 1;
     if (isError(row)) return row;
     if (isError(col)) return col;
     // one row and one position: the position is the column
-    if (args.length === 2 && height(r) === 1 && width(r) > 1) {
+    if (args.length === 2 && g.rows === 1 && g.cols > 1) {
       col = row;
       row = 1;
     }
-    if (row < 1 || col < 1) return errors.value; // 0 = whole row/column needs dynamic arrays
-    if (row > height(r) || col > width(r)) return errors.ref;
-    return a.ctx.cell(r.top + row - 1, r.left + col - 1);
+    if (row < 0 || col < 0 || row > g.rows || col > g.cols) return errors.ref;
+    // 0 means the whole row or column (it spills)
+    if (row === 0 || col === 0) {
+      const rs = row === 0 ? Array.from({ length: g.rows }, (_, i) => i) : [row - 1];
+      const cs = col === 0 ? Array.from({ length: g.cols }, (_, i) => i) : [col - 1];
+      return new CellArray(rs.length, cs.length, rs.flatMap((r) => cs.map((c) => g.get(r, c))));
+    }
+    return g.get(row - 1, col - 1);
   },
 );
 
@@ -362,7 +376,7 @@ define(
     args: [{ name: "range", description: "a range" }],
     examples: [["=ROWS(A1:B5)", 5]],
   },
-  (args) => (args.length === 1 && args[0].kind === "range" ? height(bounds(args[0])) : args.length === 1 ? 1 : errors.value),
+  (args) => (args.length !== 1 ? errors.value : (grid(args[0])?.rows ?? 1)),
 );
 
 define(
@@ -373,5 +387,5 @@ define(
     args: [{ name: "range", description: "a range" }],
     examples: [["=COLUMNS(A1:C5)", 3]],
   },
-  (args) => (args.length === 1 && args[0].kind === "range" ? width(bounds(args[0])) : args.length === 1 ? 1 : errors.value),
+  (args) => (args.length !== 1 ? errors.value : (grid(args[0])?.cols ?? 1)),
 );

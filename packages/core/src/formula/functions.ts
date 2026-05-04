@@ -1,4 +1,5 @@
 import { LIBRARY_INFO } from "./lib/define";
+import { SPECIAL_INFO } from "./lib/special-info";
 import "./lib/lookup";
 import "./lib/maths";
 import "./lib/stats";
@@ -6,6 +7,7 @@ import "./lib/text";
 import "./lib/logic";
 import "./lib/financial";
 import "./lib/dates";
+import "./lib/arrayfns";
 
 /**
  * What every function is for, its arguments and worked examples. This is
@@ -713,7 +715,7 @@ const LIST: FunctionInfo[] = [
     },
 ];
 
-export const FUNCTION_INFO: Readonly<Record<string, FunctionInfo>> = Object.fromEntries([...LIST, ...LIBRARY_INFO].map((f) => [f.name, f]));
+export const FUNCTION_INFO: Readonly<Record<string, FunctionInfo>> = Object.fromEntries([...LIST, ...LIBRARY_INFO, ...SPECIAL_INFO].map((f) => [f.name, f]));
 
 /** "SUMIF(range, criteria, [sum_range])" */
 export function signature(f: FunctionInfo): string {

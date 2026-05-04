@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CellError, EXAMPLE_CELLS, FUNCTION_INFO, FUNCTIONS, evaluate, parseFormula, signature, type EvalContext, type Scalar } from "../src/formula";
+import { CellError, EXAMPLE_CELLS, FUNCTION_INFO, FUNCTIONS, SPECIAL_NAMES, evaluate, firstOf, parseFormula, signature, type EvalContext, type Scalar } from "../src/formula";
 
 const cellAt = (row: number, col: number): Scalar => {
   const ref = `${String.fromCharCode(65 + col)}${row + 1}`;
@@ -16,14 +16,14 @@ const shown = (v: Scalar) => (v instanceof CellError ? v.code : v);
 
 describe("the function reference", () => {
   it("documents every function, and only real ones", () => {
-    expect(Object.keys(FUNCTION_INFO).sort()).toEqual(Object.keys(FUNCTIONS).sort());
+    expect(Object.keys(FUNCTION_INFO).sort()).toEqual([...Object.keys(FUNCTIONS), ...SPECIAL_NAMES].sort());
   });
 
   for (const f of Object.values(FUNCTION_INFO)) {
     it(`${f.name}: every example gives what it says`, () => {
       expect(f.examples.length).toBeGreaterThan(0);
       for (const [formula, want] of f.examples) {
-        expect(shown(evaluate(parseFormula(formula), ctx, 0)), formula).toEqual(want);
+        expect(shown(firstOf(evaluate(parseFormula(formula), ctx, 0))), formula).toEqual(want);
       }
     });
   }
