@@ -1224,6 +1224,8 @@ export class EditableSource implements DataSource {
 
   /** True if any formula here reads the sheet called `name`. */
   refersTo(name: string): boolean {
+    // formulas with names or arrays may read any sheet
+    if (this.spillFormulas > 0) return true;
     const lower = name.toLowerCase();
     if (!this.order) return this.foreign.has(lower);
     // sorted: no index; scan the formulas (only happens on other sheets' edits)
@@ -1368,6 +1370,8 @@ export class EditableSource implements DataSource {
 
   /** Finds another sheet by name for cross-sheet references. Set by the workbook. */
   resolveSheet: ((name: string) => EditableSource | null) | null = null;
+  /** The workbook's defined names (set by the workbook). */
+  resolveName: ((name: string) => Node | null) | null = null;
 
   /** What formulas on other sheets read this sheet through. */
   get evalContext(): EvalContext {
@@ -1521,6 +1525,7 @@ export class EditableSource implements DataSource {
       eachInRange: (range: RangeRef, visit: (v: Scalar) => void) => this.eachInRange(range, visit),
       sheet: (name: string) => this.resolveSheet?.(name)?.evalContext ?? null,
       spilled: (row: number, col: number) => this.spilledArray(row, col),
+      nameDef: (name: string) => this.resolveName?.(name) ?? null,
     } as EvalContext,
     // live sizes, for lookups over whole columns
     { rowCount: { get: () => this.rowCount }, colCount: { get: () => this.colCount } },
@@ -1764,6 +1769,9 @@ function maySpill(node: Node, folded = false): boolean {
       return true;
     case "ref":
       return !!node.spill;
+    case "name":
+      // a defined name can point anywhere, so recompute such formulas fully
+      return true;
     case "unary":
       return maySpill(node.arg, false);
     case "binary":

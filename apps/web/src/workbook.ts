@@ -6,6 +6,23 @@
  */
 import { BlankSource, EditableSource } from "./editable";
 import type { Version } from "./versions";
+import { formatFormula, parseFormula, type Node } from "@cellforge/core";
+
+/** A defined name: Revenue = 'Sales'!$C$2:$C$500, or a constant like VatRate = 0.2. */
+export interface NameDef {
+  name: string;
+  /** what it refers to, as a formula without the "=" */
+  formula: string;
+  comment?: string;
+}
+
+/** Excel's rules for names: letter or _ first, then letters, digits, _ and .; not a cell address. */
+export function nameProblem(name: string): string | null {
+  if (!/^[A-Za-z_\\][A-Za-z0-9_.]{0,254}$/.test(name)) return "A name starts with a letter or _ and has only letters, digits, _ and dots.";
+  if (/^[A-Za-z]{1,3}\d+$/.test(name) || /^[Rr]\d*[Cc]\d*$/.test(name)) return "A name can't look like a cell address.";
+  if (/^(TRUE|FALSE)$/i.test(name)) return "TRUE and FALSE can't be names.";
+  return null;
+}
 
 export interface Sheet {
   id: string;
@@ -30,6 +47,54 @@ export class Workbook {
   private nextId = 1;
   /** named versions, oldest first; saved with the workbook */
   versions: Version[] = [];
+
+  /** defined names, by upper-case name */
+  private names = new Map<string, NameDef & { ast: Node | null }>();
+
+  get definedNames(): NameDef[] {
+    return [...this.names.values()].map(({ name, formula, comment }) => ({ name, formula, ...(comment ? { comment } : {}) }));
+  }
+
+  getName(name: string): NameDef | undefined {
+    const n = this.names.get(name.toUpperCase());
+    return n && { name: n.name, formula: n.formula, ...(n.comment ? { comment: n.comment } : {}) };
+  }
+
+  /** Add or replace a name. Throws for a bad name or formula. */
+  setName(def: NameDef): void {
+    const problem = nameProblem(def.name);
+    if (problem) throw new Error(problem);
+    const text = def.formula.trim().replace(/^=/, "");
+    let ast: Node | null;
+    try {
+      ast = parseFormula("=" + text);
+    } catch (e) {
+      throw new Error(`${def.name} doesn't refer to anything valid: ${(e as Error).message}`);
+    }
+    this.names.set(def.name.toUpperCase(), { name: def.name, formula: text, ast, ...(def.comment ? { comment: def.comment } : {}) });
+    this.clearAll();
+  }
+
+  deleteName(name: string): void {
+    this.names.delete(name.toUpperCase());
+    this.clearAll();
+  }
+
+  /** Rewrite every name's definition (structural changes, sheet renames). */
+  mapNames(f: (ast: Node) => Node): void {
+    for (const [k, n] of this.names) {
+      if (!n.ast) continue;
+      const ast = f(n.ast);
+      this.names.set(k, { ...n, ast, formula: formatFormula(ast).replace(/^=/, "") });
+    }
+  }
+
+  /** Replace all names at once (undo). */
+  restoreNames(defs: NameDef[]): void {
+    this.names.clear();
+    for (const d of defs) this.names.set(d.name.toUpperCase(), { ...d, ast: safeParse(d.formula) });
+    this.clearAll();
+  }
 
   /** Swap in a whole new set of sheets (restoring a version), in place. */
   replaceSheets(sheets: Sheet[]): void {
@@ -131,7 +196,10 @@ export class Workbook {
     const old = sheet.name;
     sheet.name = name;
     // formulas that pointed at the old name follow the sheet (as in Excel)
-    if (old !== name) for (const s of this.sheets) s.source.renameSheetRefs(old, name);
+    if (old !== name) {
+      for (const s of this.sheets) s.source.renameSheetRefs(old, name);
+      this.mapNames((ast) => renameSheetIn(ast, old, name));
+    }
     this.clearAll();
     return old;
   }
@@ -161,6 +229,7 @@ export class Workbook {
    */
   private connect(source: EditableSource): void {
     source.resolveSheet = (name) => this.byName(name)?.source ?? null;
+    source.resolveName = (name) => this.names.get(name.toUpperCase())?.ast ?? null;
     source.onChange = () => this.propagate(source);
   }
 
@@ -190,5 +259,30 @@ export class Workbook {
 
   get visible(): Sheet[] {
     return this.sheets.filter((s) => !s.hidden);
+  }
+}
+
+function safeParse(text: string): Node | null {
+  try {
+    return parseFormula("=" + text);
+  } catch {
+    return null;
+  }
+}
+/** A copy of an AST with references to sheet `from` pointing at `to`. */
+function renameSheetIn(node: Node, from: string, to: string): Node {
+  const lower = from.toLowerCase();
+  switch (node.type) {
+    case "ref":
+    case "range":
+      return node.sheet !== undefined && node.sheet.toLowerCase() === lower ? { ...node, sheet: to } : node;
+    case "unary":
+      return { ...node, arg: renameSheetIn(node.arg, from, to) };
+    case "binary":
+      return { ...node, left: renameSheetIn(node.left, from, to), right: renameSheetIn(node.right, from, to) };
+    case "call":
+      return { ...node, args: node.args.map((a) => renameSheetIn(a, from, to)) };
+    default:
+      return node;
   }
 }

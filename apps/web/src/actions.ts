@@ -9,13 +9,13 @@
  */
 import { type Action, ActionRegistry, type BlobStore, type JsonSchema, s } from "@cellforge/actions";
 import { type CellStyle, columnLetter, expandToMerges, intersects } from "@cellforge/grid";
-import { type ColChange, formatFormula, isDateFormat, moveFormula, parseFormula, parseTyped, seriesOf, type Node, type RowChange, type SeriesValue } from "@cellforge/core";
+import { adjustForColChange, adjustForRowChange, type ColChange, formatFormula, isDateFormat, moveFormula, parseFormula, parseTyped, seriesOf, type Node, type RowChange, type SeriesValue } from "@cellforge/core";
 import { type ColumnRemoval, type EditableSource, effectiveShift, type Fill, type FormulaSnapshot, isFormula, parseInput, type Stored } from "./editable";
 import { BlankSource, EditableSource as Source } from "./editable";
 import { CLEAR_ALL, type ColumnStyles, type StylePatch } from "./styles";
 import { captureVersion, versionSheets, type Version } from "./versions";
 import { type IdRuns, type RowMap, runsLength } from "./rowmap";
-import type { Sheet, Workbook } from "./workbook";
+import type { NameDef, Sheet, Workbook } from "./workbook";
 
 export interface SheetCtx {
   workbook: Workbook;
@@ -763,6 +763,53 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
     },
   });
 
+  // ------------------------------------------------------------ names --
+  registry
+    .register<{ name: string; refersTo: string; comment?: string }>({
+      type: "names.define",
+      title: "Give a range or a constant a name to use in formulas (=SUM(Revenue)); replaces a name that already exists",
+      schema: s.object(
+        {
+          name: s.string("e.g. Revenue or VatRate"),
+          refersTo: s.string("what it means, e.g. 'Sales'!$C$2:$C$500 or 0.2"),
+          comment: s.string("a note about it"),
+        },
+        ["name", "refersTo"],
+      ),
+      describe: (p) => `name ${p.name}`,
+      recordable: true,
+      apply(ctx, p) {
+        const before = ctx.workbook.definedNames;
+        ctx.workbook.setName({ name: p.name, formula: p.refersTo, ...(p.comment ? { comment: p.comment } : {}) });
+        return { type: "names.restore", params: { names: before } };
+      },
+    })
+    .register<{ name: string }>({
+      type: "names.delete",
+      title: "Delete a defined name (formulas using it show #NAME?)",
+      schema: s.object({ name: s.string() }),
+      describe: (p) => `delete name ${p.name}`,
+      recordable: true,
+      apply(ctx, p) {
+        if (!ctx.workbook.getName(p.name)) throw new Error(`There's no name called ${p.name}.`);
+        const before = ctx.workbook.definedNames;
+        ctx.workbook.deleteName(p.name);
+        return { type: "names.restore", params: { names: before } };
+      },
+    })
+    .register<{ names: NameDef[] }>({
+      type: "names.restore",
+      title: "Put the defined names back",
+      internal: true,
+      schema: s.object({ names: s.array(s.object({ name: s.string(), formula: s.string(), comment: s.string() }, ["name", "formula"])) }),
+      describe: () => "names",
+      apply(ctx, p) {
+        const before = ctx.workbook.definedNames;
+        ctx.workbook.restoreNames(p.names);
+        return { type: "names.restore", params: { names: before } };
+      },
+    });
+
   // --------------------------------------------------------- versions --
   registry
     .register<{ name: string }>({
@@ -1218,20 +1265,27 @@ export function setCells(cells: { row: number; col: number; input: string | null
  */
 const MAX_RESTRUCTURE_ROWS = 20_000_000;
 
-type Snapshots = Map<string, FormulaSnapshot>;
+type Snapshots = { sheets: Map<string, FormulaSnapshot>; names: NameDef[] };
 
-/** Every sheet's formulas, so a structural change can be undone exactly. */
+/** Every sheet's formulas and the defined names, so a structural change can be undone exactly. */
 function snapshotFormulas(ctx: SheetCtx): Snapshots {
-  const out: Snapshots = new Map();
-  for (const sheet of ctx.workbook.sheets) out.set(sheet.id, sheet.source.formulaSnapshot());
-  return out;
+  const sheets = new Map<string, FormulaSnapshot>();
+  for (const sheet of ctx.workbook.sheets) sheets.set(sheet.id, sheet.source.formulaSnapshot());
+  return { sheets, names: ctx.workbook.definedNames };
 }
 
 function restoreFormulas(ctx: SheetCtx, snaps: Snapshots): void {
   for (const sheet of ctx.workbook.sheets) {
-    const snap = snaps.get(sheet.id);
+    const snap = snaps.sheets.get(sheet.id);
     if (snap) sheet.source.restoreFormulas(snap);
   }
+  ctx.workbook.restoreNames(snaps.names);
+}
+
+/** Names on the changed sheet follow inserted and deleted rows/columns too. */
+function adjustNames(ctx: SheetCtx, sheetName: string, f: (ast: Node, applies: (s: string | undefined) => boolean) => Node): void {
+  const lower = sheetName.toLowerCase();
+  ctx.workbook.mapNames((ast) => f(ast, (s) => s !== undefined && s.toLowerCase() === lower));
 }
 
 /**
@@ -1244,6 +1298,7 @@ function adjustEverywhere(ctx: SheetCtx, id: string, change: RowChange): Snapsho
   const name = ctx.workbook.get(id).name;
   try {
     for (const sheet of ctx.workbook.sheets) sheet.source.adjustForRows(change, sheet.id === id, name);
+    adjustNames(ctx, name, (ast, applies) => adjustForRowChange(ast, change, 0, 0, applies));
   } catch (e) {
     restoreFormulas(ctx, snaps);
     throw e;
@@ -1256,5 +1311,6 @@ function adjustColumnsEverywhere(ctx: SheetCtx, id: string, change: ColChange): 
   const snaps = snapshotFormulas(ctx);
   const name = ctx.workbook.get(id).name;
   for (const sheet of ctx.workbook.sheets) sheet.source.adjustForColumns(change, sheet.id === id, name);
+  adjustNames(ctx, name, (ast, applies) => adjustForColChange(ast, change, applies));
   return snaps;
 }

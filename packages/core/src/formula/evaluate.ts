@@ -21,6 +21,8 @@ export interface EvalContext {
   sheet?(name: string): EvalContext | null;
   /** The array the formula at (row, col) spilled (for A1#), or null if it didn't. */
   spilled?(row: number, col: number): CellArray | null;
+  /** A named range or constant's definition (already parsed), or null. */
+  nameDef?(name: string): Node | null;
   /** How many rows the sheet has, so whole-column lookups (A:B) know where to stop. */
   rowCount?: number;
   colCount?: number;
@@ -114,6 +116,8 @@ export function compare(a: Scalar, b: Scalar): number {
 // ---------------------------------------------------------------------------
 // evaluation
 
+let nameDepth = 0;
+
 /** Variables in scope: LET names and LAMBDA parameters (upper case). */
 export type Env = ReadonlyMap<string, Value>;
 
@@ -202,7 +206,19 @@ export function evaluate(node: Node, ctx: EvalContext, rowShift = 0, env?: Env):
       return null;
     case "name": {
       const v = env?.get(node.name);
-      return v === undefined ? errors.name : v;
+      if (v !== undefined) return v;
+      // a defined name: evaluate its definition (absolute, so no shift)
+      const def = ctx.nameDef?.(node.name);
+      if (!def) return errors.name;
+      if (++nameDepth > 64) {
+        nameDepth = 0;
+        return errors.cycle;
+      }
+      try {
+        return evaluate(def, ctx, 0);
+      } finally {
+        nameDepth = Math.max(0, nameDepth - 1);
+      }
     }
     case "ref": {
       const row = node.absRow ? node.row : node.row + rowShift;
@@ -248,9 +264,19 @@ export function evaluate(node: Node, ctx: EvalContext, rowShift = 0, env?: Env):
       }
       const lift = LIFTED.has(node.name);
       const args: Arg[] = [];
-      for (const a of node.args) {
+      for (const a0 of node.args) {
+        // a defined name that is a range acts as that range (=COUNTIF(Region, "North"))
+        let a = a0;
+        let shift = rowShift;
+        if (a.type === "name" && !env?.has(a.name)) {
+          const def = ctx.nameDef?.(a.name);
+          if (def && (def.type === "range" || def.type === "ref")) {
+            a = def.type === "ref" ? { type: "range", range: { top: def.row, bottom: def.row, left: def.col, right: def.col }, sheet: def.sheet, absTop: true, absBottom: true, absLeft: true, absRight: true } : def;
+            shift = 0;
+          }
+        }
         if (a.type === "range" && !lift) {
-          const range = shiftRange(a, rowShift);
+          const range = shiftRange(a, shift);
           const target = contextFor(a, ctx);
           if (!range || !target) return errors.ref;
           args.push({ kind: "range", range, ctx: target });
