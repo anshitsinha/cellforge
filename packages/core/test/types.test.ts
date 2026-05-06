@@ -48,3 +48,29 @@ describe("Excel's type rules", () => {
     expect(ev('=COUNTIF(B1:B5, "SOUTH")')).toBe(1);
   });
 });
+
+describe("lookups explain a near miss", () => {
+  const data: Record<string, Scalar> = { A1: "1001", A2: "1002", B1: "North ", B2: "South", C1: 7 };
+  const at2 = (r: number, c: number) => data[`${String.fromCharCode(65 + c)}${r + 1}`] ?? null;
+  const ctx2: EvalContext = {
+    cell: at2,
+    rowCount: 2,
+    colCount: 3,
+    eachInRange: (range, visit) => {
+      for (let r = range.top; r <= Math.min(range.bottom, 1); r++) for (let c = range.left; c <= range.right; c++) visit(at2(r, c));
+    },
+  };
+  const ev2 = (f: string) => evaluate(parseFormula(f), ctx2, 0) as CellError;
+  it("numbers stored as text, extra spaces, and text keys against numbers", () => {
+    const a = ev2("=VLOOKUP(1002, A1:B2, 2, FALSE)");
+    expect(a.code).toBe("#N/A");
+    expect(a.hint?.message).toMatch(/stored as text/);
+    expect(a.hint?.fix?.kind).toBe("toNumber");
+    expect(a.hint?.fix?.range).toEqual({ top: 0, left: 0, bottom: 1, right: 0 });
+    const b = ev2('=MATCH("North", B1:B2, 0)');
+    expect(b.hint?.fix?.kind).toBe("trim");
+    const c = ev2('=XLOOKUP("7", C1:C1, C1:C1)');
+    expect(c.hint?.message).toMatch(/VALUE/);
+    expect(ev2('=MATCH("West", B1:B2, 0)').hint).toBeUndefined();
+  });
+});

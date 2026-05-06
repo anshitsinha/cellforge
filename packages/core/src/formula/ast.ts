@@ -41,8 +41,17 @@ export type Node =
 export type BinaryOp = "+" | "-" | "*" | "/" | "^" | "&" | "=" | "<>" | "<" | ">" | "<=" | ">=";
 
 /** Spreadsheet errors are values, not exceptions - they flow through formulas. */
+/** Why an error happened and how to fix it, when cellforge can tell (lookup near misses). */
+export interface ErrorHint {
+  message: string;
+  fix?: { kind: "trim" | "toNumber"; range: RangeRef; sheet?: string; label: string };
+}
+
 export class CellError {
-  constructor(readonly code: ErrorCode) {}
+  constructor(
+    readonly code: ErrorCode,
+    readonly hint?: ErrorHint,
+  ) {}
   toString(): string {
     return this.code;
   }

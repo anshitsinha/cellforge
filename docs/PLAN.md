@@ -69,9 +69,9 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Lookups that warn about type and whitespace mismatches instead of a silent `#N/A`
-- [ ] Lookup diagnosis: when VLOOKUP/XLOOKUP/MATCH/COUNTIF find nothing, find the near misses (number stored as text, text stored as number, extra or non-breaking spaces, different case for EXACT, trailing zeros in codes)
-- [ ] Show it: a marker on cells whose lookup failed for a fixable reason, and the reason in the status bar / formula bar tooltip
-- [ ] One-click fixes: TRIM the column, convert text to numbers, or wrap the key (VALUE / TEXT / TRIM) — each an undoable action
+- [x] Lookup diagnosis: when VLOOKUP/XLOOKUP/MATCH/COUNTIF find nothing, find the near misses (number stored as text, text stored as number, extra or non-breaking spaces, different case for EXACT, trailing zeros in codes)
+- [x] Show it: a marker on cells whose lookup failed for a fixable reason, and the reason in the status bar / formula bar tooltip
+- [x] One-click fixes: TRIM the column, convert text to numbers, or wrap the key (VALUE / TEXT / TRIM) — each an undoable action
 - [ ] Tests, user guide
 
 ## Milestones

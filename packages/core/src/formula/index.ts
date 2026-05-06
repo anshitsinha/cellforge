@@ -1,4 +1,4 @@
-export { CellError, errors, type Node, type RangeRef } from "./ast";
+export { CellError, errors, type ErrorHint, type Node, type RangeRef } from "./ast";
 export { CellArray, evaluate, firstOf, FUNCTIONS, Lambda, LIFTED, shiftRange, SPECIAL_NAMES, type EvalContext, type Scalar, type Value as FormulaValue } from "./evaluate";
 export { formatFormula, sheetPrefix } from "./print";
 export { compileFill, readsOtherSheets, type ColumnInput, type CompiledFill, type KernelFn, type ScalarInput } from "./compile";
@@ -7,3 +7,4 @@ export { adjustForColChange, adjustForRowChange, breakpoints, mapCol, mapRow, ty
 export { moveFormula } from "./move";
 export { EXAMPLE_CELLS, FUNCTION_INFO, signature, type FunctionArg, type FunctionCategory, type FunctionInfo } from "./functions";
 export { parseTableSpec, type TableSpec } from "./tablespec";
+export { diagnoseMiss, squeeze } from "./diagnose";

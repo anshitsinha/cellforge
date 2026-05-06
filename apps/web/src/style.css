@@ -65,6 +65,19 @@ body {
   white-space: nowrap;
 }
 
+.status-hint {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: #f29900;
+  margin-left: 12px;
+}
+
+.status-hint button {
+  padding: 0 8px;
+  font-size: 12px;
+}
+
 .save-state {
   color: var(--muted);
   font-size: 12px;

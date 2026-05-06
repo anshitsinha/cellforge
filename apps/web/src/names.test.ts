@@ -57,3 +57,23 @@ describe("defined names", () => {
     expect(workbook.definedNames.length).toBe(1);
   });
 });
+
+describe("lookup near misses", () => {
+  it("explains the #N/A and the fix makes the lookup work, undoably", async () => {
+    const { history, type, at, sheet } = setup();
+    await type([["A1", "1001"], ["A2", "1002"], ["B1", "x"], ["B2", "y"], ["C1", "  North "], ["D1", "=VLOOKUP(1002, A1:B2, 2, FALSE)"], ["D2", '=MATCH("North", C1:C1, 0)']]);
+    // stored as numbers by typing; make A2 text the way an export would
+    await history.run(setCells([{ row: 1, col: 0, input: "'1002" }]));
+    expect(at("A2")).toBe("1002");
+    expect(at("D1")).toBe("#N/A");
+    expect(sheet.hintAt(0, 3)?.fix?.kind).toBe("toNumber");
+    expect(sheet.hasNote(0, 3)).toBe(true);
+    await history.run({ type: "cells.toNumber", params: { range: sheet.hintAt(0, 3)!.fix!.range } });
+    expect(at("D1")).toBe("y");
+    expect(sheet.hintAt(1, 3)?.fix?.kind).toBe("trim");
+    await history.run({ type: "cells.trim", params: { range: { top: 0, left: 2, bottom: 0, right: 2 } } });
+    expect(at("D2")).toBe(1);
+    await history.undo();
+    expect(at("D2")).toBe("#N/A");
+  });
+});

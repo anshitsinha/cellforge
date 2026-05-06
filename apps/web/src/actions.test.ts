@@ -144,6 +144,8 @@ describe("sheet actions", () => {
       "cols.hide",
       "fill.series",
       "cells.paste",
+      "cells.trim",
+      "cells.toNumber",
       "tables.create",
       "tables.delete",
       "names.define",

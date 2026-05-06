@@ -38,7 +38,7 @@ function contextFor(node: { sheet?: string }, ctx: EvalContext): EvalContext | n
 
 export type Arg =
   | { kind: "value"; value: Scalar }
-  | { kind: "range"; range: RangeRef; ctx: EvalContext }
+  | { kind: "range"; range: RangeRef; ctx: EvalContext; sheet?: string }
   | { kind: "array"; array: CellArray }
   | { kind: "lambda"; fn: Lambda };
 
@@ -288,7 +288,7 @@ export function evaluate(node: Node, ctx: EvalContext, rowShift = 0, env?: Env):
           const range = shiftRange(a, shift);
           const target = contextFor(a, ctx);
           if (!range || !target) return errors.ref;
-          args.push({ kind: "range", range, ctx: target });
+          args.push({ kind: "range", range, ctx: target, ...(a.sheet ? { sheet: a.sheet } : {}) });
         } else {
           args.push(toArg(evaluate(a, ctx, rowShift, env)));
         }

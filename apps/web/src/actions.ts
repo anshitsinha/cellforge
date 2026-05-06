@@ -8,8 +8,8 @@
  * tabs still changes the right sheet.
  */
 import { type Action, ActionRegistry, type BlobStore, type JsonSchema, s } from "@cellforge/actions";
-import { type CellStyle, columnLetter, expandToMerges, intersects } from "@cellforge/grid";
-import { adjustForColChange, adjustForRowChange, type ColChange, formatFormula, isDateFormat, moveFormula, parseFormula, parseTyped, seriesOf, type Node, type RowChange, type SeriesValue } from "@cellforge/core";
+import { type CellStyle, type CellValue, columnLetter, expandToMerges, intersects } from "@cellforge/grid";
+import { squeeze, adjustForColChange, adjustForRowChange, type ColChange, formatFormula, isDateFormat, moveFormula, parseFormula, parseTyped, seriesOf, type Node, type RowChange, type SeriesValue } from "@cellforge/core";
 import { type ColumnRemoval, type EditableSource, effectiveShift, type Fill, type FormulaSnapshot, isFormula, parseInput, type Stored } from "./editable";
 import { BlankSource, EditableSource as Source } from "./editable";
 import { CLEAR_ALL, type ColumnStyles, type StylePatch } from "./styles";
@@ -293,7 +293,7 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
             data.setCell(c.row, c.col, c.input);
             continue;
           }
-          const typed = c.input !== null && !c.input.trim().startsWith("=") ? parseTyped(c.input) : null;
+          const typed = c.input !== null && !c.input.trim().startsWith("=") && !c.input.startsWith("'") ? parseTyped(c.input) : null;
           if (typed) {
             data.setCell(c.row, c.col, typed.value);
             if (!data.getStyle(c.row, c.col)?.numFmt) formatted.push({ row: c.row, col: c.col, format: typed.format });
@@ -784,6 +784,48 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       }
       return { type: "cells.restore", params: restoreParams(id, before, undefined, formats) };
     },
+  });
+
+  // ------------------------------------------------------------ clean --
+  const cleanAction = (type: string, title: string, verb: string, change: (v: CellValue | boolean) => Stored | undefined) =>
+    registry.register<{ range: Range; sheet?: string }>({
+      type,
+      title,
+      schema: withSheet({ range: rangeSchema }, ["range"]),
+      describe: () => verb,
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const r = p.range;
+        const bottom = Math.min(r.bottom, data.rowCount - 1);
+        const right = Math.min(r.right, data.colCount - 1);
+        if ((bottom - r.top + 1) * (right - r.left + 1) > MAX_FILL_CELLS) throw new Error("That's too many cells to clean at once.");
+        const writes: { row: number; col: number; value: Stored }[] = [];
+        for (let row = r.top; row <= bottom; row++) {
+          for (let col = r.left; col <= right; col++) {
+            if (data.getEditText(row, col).startsWith("=")) continue; // leave formulas alone
+            const v = data.getCell(row, col);
+            if (v === null) continue;
+            const next = change(v);
+            if (next !== undefined && next !== v) writes.push({ row, col, value: next });
+          }
+        }
+        if (!writes.length) return null;
+        const before = snapshot(data, writes);
+        for (const w of writes) data.setCell(w.row, w.col, w.value);
+        return { type: "cells.restore", params: restoreParams(id, before, verb) };
+      },
+    });
+  cleanAction("cells.trim", "Remove extra spaces from text (both ends, doubled spaces, non-breaking spaces from exports)", "trim spaces", (v) =>
+    typeof v === "string" ? squeeze(v) : undefined,
+  );
+  cleanAction("cells.toNumber", "Turn numbers stored as text into real numbers (\"1,200\", \" 42 \", \"(15)\")", "convert to numbers", (v) => {
+    if (typeof v !== "string") return undefined;
+    const t = squeeze(v);
+    const paren = /^\((.*)\)$/.exec(t);
+    const body = (paren ? paren[1] : t).replace(/,/g, "");
+    if (!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(body)) return undefined;
+    return paren ? -Number(body) : Number(body);
   });
 
   // ----------------------------------------------------------- tables --

@@ -26,6 +26,8 @@ export interface DataSource {
    * format (e.g. [Red]) wins over the cell's text colour.
    */
   formatValue?(value: CellValue, style: CellStyle | null): { text: string; color?: string };
+  /** True when a cell has something to explain (a lookup near miss): drawn as a corner marker. */
+  hasNote?(row: number, col: number): boolean;
 }
 
 export interface CellRef {

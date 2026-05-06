@@ -1282,6 +1282,16 @@ export class Grid {
     }
     const value = this.source.getCell(row, col);
     if (value === null) return;
+    // a cell with something to explain gets a small corner triangle
+    if (!spanText && this.source.hasNote?.(row, col)) {
+      ctx.fillStyle = "#f29900";
+      ctx.beginPath();
+      ctx.moveTo(x + w - 7, y);
+      ctx.lineTo(x + w, y);
+      ctx.lineTo(x + w, y + 7);
+      ctx.closePath();
+      ctx.fill();
+    }
     // centred across empty neighbours: the span pass draws the text
     if (style?.align === "centerAcross" && !spanText && this.acrossEnd(row, col) > col) return;
     const shown = this.source.formatValue ? this.source.formatValue(value, style) : { text: formatCell(value) };

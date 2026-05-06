@@ -114,11 +114,41 @@ async function updateSelectionStats() {
 
 // keep the name box, formula bar and stats in sync with the selection
 grid.onSelectionChange = () => {
+  showHint();
   syncFormulaBar();
   updateSelectionStats();
   formatBar.sync();
   historyPanel.render();
 };
+
+// a lookup that found nothing for a fixable reason explains itself here
+const hintBox = document.createElement("span");
+hintBox.className = "status-hint";
+statusLeft.after(hintBox);
+function showHint() {
+  const { row, col } = grid.selection;
+  const hint = source.hintAt(row, col);
+  hintBox.replaceChildren();
+  if (!hint) return;
+  const msg = document.createElement("span");
+  msg.textContent = hint.message;
+  hintBox.append(msg);
+  const fix = hint.fix;
+  if (fix) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = fix.label;
+    b.addEventListener("click", () => {
+      const sheet = fix.sheet ? workbook.byName(fix.sheet)?.id : activeId;
+      if (!sheet) return;
+      void run({ type: fix.kind === "trim" ? "cells.trim" : "cells.toNumber", params: { range: fix.range, sheet } }).then(() => {
+        showHint();
+        grid.focus();
+      });
+    });
+    hintBox.append(b);
+  }
+}
 
 // drag a row border (or double-click it to fit): resize that row, or every
 // selected row when the drag is on one of several selected whole rows
@@ -283,6 +313,7 @@ function settleActiveSheet() {
 /** Repaint and update everything that shows cell contents. */
 function refresh() {
   settleActiveSheet();
+  showHint();
   tabs.render();
   grid.syncShape();
   grid.setHiddenRows(source.hiddenRowIntervals());

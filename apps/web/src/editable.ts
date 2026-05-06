@@ -21,7 +21,7 @@ import {
   type Scalar,
 } from "@cellforge/core";
 import { formatCell, spliceMerges, type CellRange, type CellStyle, type CellValue, type DataSource } from "@cellforge/grid";
-import { CellArray, parseTableSpec, formatGeneral, formatValue as formatWithCode, isDateFormat, Lambda, type FormulaValue } from "@cellforge/core";
+import { CellArray, type ErrorHint, parseTableSpec, formatGeneral, formatValue as formatWithCode, isDateFormat, Lambda, type FormulaValue } from "@cellforge/core";
 import { DepIndex, type Rect } from "./deps";
 import { SheetStyles, type ColumnStyles, type StylesState } from "./styles";
 
@@ -1223,6 +1223,21 @@ export class EditableSource implements DataSource {
     return { type: "range", range: { top, left, bottom, right }, absTop: true, absBottom: true, absLeft: true, absRight: true, ...(sheet ? { sheet } : {}) };
   }
 
+  /** Why a cell shows an error, when cellforge can tell (lookup near misses). */
+  hintAt(row: number, col: number): ErrorHint | null {
+    if (row >= this.rowCount || col >= this.colCount) return null;
+    const v = this.value(row, col);
+    return v instanceof CellError && v.hint ? v.hint : null;
+  }
+
+  hasNote(row: number, col: number): boolean {
+    if (this.formulas === 0) return false;
+    const b = this.toBase(row);
+    const stored = this.edits.get(b)?.get(col);
+    if (!isFormula(stored) && !(stored === undefined && this.fillAt(b, col))) return false;
+    return this.hintAt(row, col) !== null;
+  }
+
   getMerges(): readonly CellRange[] {
     return this.merges;
   }
@@ -1689,6 +1704,8 @@ export function parseInput(text: string): Stored {
     }
     return { kind: "formula", text: trimmed, ast };
   }
+  // a leading apostrophe keeps what follows as text ('007, '=not a formula), as in Excel
+  if (text.startsWith("'")) return text.slice(1);
   if (/^(true|false)$/i.test(trimmed)) return trimmed.toUpperCase() === "TRUE";
   // Number("") and Number(" ") are 0, and Number("0x1f") is 31 - neither of
   // which we want, hence the regex instead of just Number(trimmed).

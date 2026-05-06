@@ -7,6 +7,10 @@ import { CellError, errors, type RangeRef } from "../ast";
 import { CellArray } from "../arrays";
 import { compare, isError, scalarArg, toBool, toNumber, type Arg, type Scalar } from "../evaluate";
 import { define } from "./define";
+import { notFound } from "../diagnose";
+
+/** Where a range argument is, for fix suggestions. */
+const whereOf = (a: Arg) => (a.kind === "range" ? { range: bounds(a), sheet: a.sheet } : undefined);
 
 type RangeArg = Extract<Arg, { kind: "range" }>;
 
@@ -142,7 +146,7 @@ function vhlookup(args: Arg[], vertical: boolean): Scalar {
   const n = vertical ? height(r) : width(r);
   const get = (i: number) => (vertical ? table.ctx.cell(r.top + i, r.left) : table.ctx.cell(r.top, r.left + i));
   const i = approx ? approxAscending(get, n, key) : exact(get, n, key, true);
-  if (i < 0) return errors.na;
+  if (i < 0) return notFound(key, get, n, { range: vertical ? { ...r, right: r.left } : { ...r, bottom: r.top }, sheet: table.sheet });
   return vertical ? table.ctx.cell(r.top + i, r.left + idx - 1) : table.ctx.cell(r.top + idx - 1, r.left + i);
 }
 
@@ -221,7 +225,7 @@ define(
         else break;
       }
     }
-    return i < 0 ? errors.na : i + 1;
+    return i < 0 ? notFound(key, l.get, l.length, whereOf(args[1])) : i + 1;
   },
 );
 
@@ -270,7 +274,7 @@ define(
     if (i === -2) return errors.value;
     if (i < 0) {
       if (args[3] && !(args[3].kind === "value" && args[3].value === null)) return scalarArg(args[3]);
-      return errors.na;
+      return notFound(key, look.get, look.length, whereOf(args[1]));
     }
     return ret.get(i);
   },
@@ -303,7 +307,7 @@ define(
     if (isError(mm)) return mm;
     if (isError(sm)) return sm;
     const i = xsearch(l.get, l.length, key, mm, sm);
-    return i === -2 ? errors.value : i < 0 ? errors.na : i + 1;
+    return i === -2 ? errors.value : i < 0 ? notFound(key, l.get, l.length, whereOf(args[1])) : i + 1;
   },
 );
 
