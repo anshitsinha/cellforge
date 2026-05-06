@@ -10,6 +10,7 @@ import { download, exportCsv } from "./exporter";
 import { SheetTabs } from "./tabs";
 import { NUMBER_FORMATS, setupFormatBar } from "./formatbar";
 import { attachFormulaAssist } from "./formulaassist";
+import { setupNamesUi } from "./namesui";
 import { type Command, setupPalette } from "./palette";
 import { setupHistoryPanel, type TrailEntry } from "./historypanel";
 import { AutoSaver, fromFile, OpfsStore, packWorkbook, toFile, unpackWorkbook, type JournalEntry } from "./persist";
@@ -799,6 +800,12 @@ sheet.addEventListener("contextmenu", (e) => {
       setDefaultPaste(defaultPaste === "values" ? "all" : "values"),
     );
   }
+  if (kind === "cell") {
+    sep();
+    item("Make a table", "Ctrl T", () => void namesUi.makeTable());
+    item("Define a name…", "", () => namesUi.defineName());
+    item("Names and tables…", "Ctrl F3", () => namesUi.manager());
+  }
   // merging, for a selection of more than one cell
   const sel = grid.range;
   const touchesMerge = source.getMerges().some((m) => m.top <= sel.bottom && sel.top <= m.bottom && m.left <= sel.right && sel.left <= m.right);
@@ -1030,11 +1037,36 @@ const historyPanel = setupHistoryPanel({
 });
 
 document.getElementById("btn-history")!.addEventListener("click", () => historyPanel.toggle());
+// Excel: Ctrl+T makes a table, Ctrl+F3 opens the name manager
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || !gridHasFocus()) return;
+  if (e.key.toLowerCase() === "t" && !e.shiftKey) {
+    e.preventDefault();
+    void namesUi.makeTable();
+  } else if (e.key === "F3") {
+    e.preventDefault();
+    namesUi.manager();
+  }
+});
 document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "h") {
     e.preventDefault();
     historyPanel.toggle();
   }
+});
+
+// --- names and tables -----------------------------------------------------------
+const namesUi = setupNamesUi({
+  workbook: () => workbook,
+  sheetName: () => workbook.get(activeId).name,
+  range: () => grid.range,
+  run: (a) => run(a),
+  focusGrid: () => grid.focus(),
+  goTo: (sheetId, row, col) => {
+    showSheet(sheetId);
+    grid.select(row, col);
+    grid.focus();
+  },
 });
 
 // --- command palette (Ctrl+K) -------------------------------------------------
@@ -1067,6 +1099,9 @@ function paletteCommands(): Command[] {
     { id: "borders-all", title: "Borders: all", run: border("all") },
     { id: "borders-outline", title: "Borders: outline", run: border("outline") },
     { id: "borders-none", title: "Borders: none", run: border("none") },
+    { id: "table", title: "Make a table from the selection", hint: "format as table structured", keys: "Ctrl T", run: () => namesUi.makeTable() },
+    { id: "define-name", title: "Define a name for the selection…", hint: "named range", run: () => namesUi.defineName() },
+    { id: "name-manager", title: "Names and tables…", hint: "name manager", keys: "Ctrl F3", run: () => namesUi.manager() },
     { id: "merge", title: "Merge cells", run: () => run({ type: "cells.merge", params: { range: grid.range } }) },
     { id: "merge-center", title: "Merge and centre", hint: "center", run: () => run({ type: "cells.merge", params: { range: grid.range, center: true } }) },
     { id: "merge-across", title: "Merge across", run: () => run({ type: "cells.merge", params: { range: grid.range, across: true } }) },

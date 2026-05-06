@@ -81,6 +81,35 @@ away, or hand it to **MAP** (every value), **REDUCE** (fold to one value),
 =REDUCE(0, D2:D100, LAMBDA(total, x, total + ROUND(x, 2)))
 ```
 
+## Names and tables
+
+**Names** make formulas readable: `=SUMIF(Region, "North", Amount)` instead of
+`=SUMIF(Sales!$A$2:$A$500, "North", Sales!$C$2:$C$500)`.
+
+- Select cells, right-click and choose **Define a name…** (or search for it
+  with **Ctrl+K**). A name can also hold a constant, like `VatRate` = `0.2`.
+- Names follow their cells when you insert or delete rows and columns or
+  rename the sheet. **Names and tables…** (**Ctrl+F3**) lists them all.
+
+**Tables** turn a block with a header row into something formulas can talk
+about by column name. Select the block (headers included) and press
+**Ctrl+T**, or right-click and choose **Make a table**.
+
+| You write | It means |
+| --- | --- |
+| `Table1[Amount]` | the whole Amount column (data rows only) |
+| `[@Amount]` | the Amount in this row (in a formula inside the table) |
+| `Table1[@Amount]` | the same, naming the table |
+| `Table1` | all the data rows |
+| `Table1[#Headers]` | the header row; `#All` is headers and data together |
+| `Table1[[Q1]:[Q4]]` | the columns Q1 to Q4 |
+
+Tables **grow on their own**: type in the row just below and it becomes part
+of the table, so `=SUM(Table1[Amount])` never misses new rows. A header
+typed just to the right adds a column. Inserting rows inside a table grows
+it too. Tables get banded rows and a coloured header; your own formatting
+shows on top.
+
 ## Numbers, text, TRUE/FALSE and dates
 
 A cell holds a number, text, TRUE or FALSE, or nothing. These follow Excel's

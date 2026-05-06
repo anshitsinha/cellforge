@@ -557,6 +557,31 @@ button:disabled {
   min-height: 1em;
 }
 
+.nm-list {
+  display: grid;
+  gap: 6px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.nm-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.nm-row small {
+  display: block;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.nm-row button {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
 .numfmt-pop {
   width: 300px;
   padding: 10px;
