@@ -68,10 +68,11 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Lookups that warn about type and whitespace mismatches instead of a silent `#N/A`
-- [x] Lookup diagnosis: when VLOOKUP/XLOOKUP/MATCH/COUNTIF find nothing, find the near misses (number stored as text, text stored as number, extra or non-breaking spaces, different case for EXACT, trailing zeros in codes)
-- [x] Show it: a marker on cells whose lookup failed for a fixable reason, and the reason in the status bar / formula bar tooltip
-- [x] One-click fixes: TRIM the column, convert text to numbers, or wrap the key (VALUE / TEXT / TRIM) — each an undoable action
+### Formula auditing: trace precedents/dependents, step-by-step evaluation, precise broken-reference locator, hard-coded-number lint
+- [ ] Audit engine: the cells a formula reads (precedents), the formulas that read a cell (dependents, across sheets), R1C1 shape to spot a formula that differs from its neighbours
+- [ ] Step-by-step evaluation: every part of a formula with its value, nested, so you can see where a result comes from
+- [ ] Checks: #REF! inside a formula (where exactly), numbers typed into formulas, a formula unlike the ones above and below, references to empty cells
+- [ ] Inspect panel (Ctrl+[ ): all of the above for the selected cell, precedents/dependents highlighted on the grid and clickable
 - [ ] Tests, user guide
 
 ## Milestones
@@ -102,8 +103,8 @@ tracker shows this expanded, with the first unticked step as the current one.
   maths, statistics, text, dates, financial, logic, information
 - ✅ Dynamic arrays and spill, `LET`, `LAMBDA`
 - ✅ Named ranges; tables with structured references that grow with new rows
-- 🔨 Lookups that warn about type and whitespace mismatches instead of a silent `#N/A`
-- ⬜ Formula auditing: trace precedents/dependents, step-by-step evaluation,
+- ✅ Lookups that warn about type and whitespace mismatches instead of a silent `#N/A`
+- 🔨 Formula auditing: trace precedents/dependents, step-by-step evaluation,
   precise broken-reference locator, hard-coded-number lint
 - ⬜ Iterative calculation for intentional circular references
 - ⬜ Compiler coverage for the new functions; Excel conformance corpus in CI
