@@ -22,6 +22,7 @@ type Token =
   | { t: "sheet"; v: string }
   | { t: "err"; v: ErrorCode }
   | { t: "op"; v: string }
+  | { t: "struct"; table: string; spec: string }
   | { t: "eof" };
 
 export class FormulaSyntaxError extends Error {}
@@ -134,6 +135,27 @@ function tokenize(src: string): Token[] {
       continue;
     }
 
+    // structured references: Sales[Amount], Sales[@Amount], [@Amount], Sales[[#All],[Amount]]
+    const tableName = /^[A-Za-z_][A-Za-z0-9_.]*(?=\[)/.exec(rest)?.[0] ?? (ch === "[" ? "" : null);
+    if (tableName !== null) {
+      let j = i + tableName.length;
+      let depth = 0;
+      let k = j;
+      for (; k < src.length; k++) {
+        const c = src[k];
+        if (c === "'") {
+          k++; // ' escapes the next character
+          continue;
+        }
+        if (c === "[") depth++;
+        else if (c === "]" && --depth === 0) break;
+      }
+      if (depth !== 0) throw new FormulaSyntaxError("Unclosed [ in a table reference");
+      tokens.push({ t: "struct", table: tableName, spec: src.slice(j + 1, k) });
+      i = k + 1;
+      continue;
+    }
+
     m = IDENT.exec(rest);
     if (m) {
       tokens.push({ t: "ident", v: m[0].toUpperCase() });
@@ -229,6 +251,8 @@ export function parseFormula(src: string): Node {
         node.sheet = tok.v;
         return node;
       }
+      case "struct":
+        return { type: "call", name: "__TABLE", args: [{ type: "string", value: tok.table }, { type: "string", value: tok.spec }] };
       case "num":
         return { type: "number", value: tok.v };
       case "err":

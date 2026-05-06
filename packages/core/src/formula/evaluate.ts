@@ -23,6 +23,8 @@ export interface EvalContext {
   spilled?(row: number, col: number): CellArray | null;
   /** A named range or constant's definition (already parsed), or null. */
   nameDef?(name: string): Node | null;
+  /** A structured reference (Sales[Amount]) as the range it means, or null. */
+  structured?(table: string, spec: string): Node | null;
   /** How many rows the sheet has, so whole-column lookups (A:B) know where to stop. */
   rowCount?: number;
   colCount?: number;
@@ -268,6 +270,13 @@ export function evaluate(node: Node, ctx: EvalContext, rowShift = 0, env?: Env):
         // a defined name that is a range acts as that range (=COUNTIF(Region, "North"))
         let a = a0;
         let shift = rowShift;
+        if (a.type === "call" && a.name === "__TABLE") {
+          const def = structuredDef(a, ctx);
+          if (def) {
+            a = def.type === "ref" ? { type: "range", range: { top: def.row, bottom: def.row, left: def.col, right: def.col }, sheet: def.sheet, absTop: true, absBottom: true, absLeft: true, absRight: true } : def;
+            shift = 0;
+          }
+        }
         if (a.type === "name" && !env?.has(a.name)) {
           const def = ctx.nameDef?.(a.name);
           if (def && (def.type === "range" || def.type === "ref")) {
@@ -306,7 +315,18 @@ function arrayOf(node: Node, ctx: EvalContext, rowShift: number, env: Env | unde
 }
 
 /** Functions that control when (or whether) their arguments are evaluated. */
+/** What a structured reference node points at. */
+function structuredDef(node: Extract<Node, { type: "call" }>, ctx: EvalContext): Node | null {
+  const [t, spec] = node.args;
+  if (t?.type !== "string" || spec?.type !== "string") return null;
+  return ctx.structured?.(t.value, spec.value) ?? null;
+}
+
 const SPECIAL: Record<string, Special> = {
+  __TABLE: (args, ctx) => {
+    const def = structuredDef({ type: "call", name: "__TABLE", args }, ctx);
+    return def ? evaluate(def, ctx, 0) : errors.ref;
+  },
   LET: (args, ctx, rowShift, env) => {
     if (args.length < 3 || args.length % 2 === 0) return errors.value;
     const scope = new Map(env ?? []);

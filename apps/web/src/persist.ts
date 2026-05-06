@@ -170,7 +170,7 @@ export async function unpackWorkbook(
     const base = bases.get(s.base);
     if (!base) throw new Error(`Sheet "${s.name}" is missing its data.`);
     let order: Uint32Array | undefined;
-    if (s.state.order) {
+    if (s.state.order === "order") {
       const data = await read(orderFile(s.id));
       if (typeof data === "string") throw new Error("A data file is damaged.");
       order = new Uint32Array(copyBuffer(data));
@@ -186,7 +186,7 @@ export async function unpackWorkbook(
       const base = bases.get(s.base);
       if (!base) throw new Error(`Version "${v.name}" is missing its data.`);
       let order: Uint32Array | undefined;
-      if (s.state.order) {
+      if (s.state.order === "order") {
         const data = await read(`v${i}-${orderFile(s.id)}`);
         if (typeof data === "string") throw new Error("A data file is damaged.");
         order = new Uint32Array(copyBuffer(data));

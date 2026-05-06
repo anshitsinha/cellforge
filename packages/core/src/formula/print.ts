@@ -91,6 +91,10 @@ function print(node: Node, shift: number): string {
       return `${left}${node.op}${right}`;
     }
     case "call":
+      if (node.name === "__TABLE") {
+        const [t, spec] = node.args as { type: "string"; value: string }[];
+        return `${t.value}[${spec.value}]`;
+      }
       if (node.name === "__INVOKE") {
         const [fn, ...rest] = node.args;
         return `${print(fn, shift)}(${rest.map((a) => print(a, shift)).join(", ")})`;

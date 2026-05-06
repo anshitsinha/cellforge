@@ -21,9 +21,17 @@ import {
   type Scalar,
 } from "@cellforge/core";
 import { formatCell, spliceMerges, type CellRange, type CellStyle, type CellValue, type DataSource } from "@cellforge/grid";
-import { CellArray, formatGeneral, formatValue as formatWithCode, isDateFormat, Lambda, type FormulaValue } from "@cellforge/core";
+import { CellArray, parseTableSpec, formatGeneral, formatValue as formatWithCode, isDateFormat, Lambda, type FormulaValue } from "@cellforge/core";
 import { DepIndex, type Rect } from "./deps";
 import { SheetStyles, type ColumnStyles, type StylesState } from "./styles";
+
+/** A table: a named block whose first row holds its column headers. */
+export interface TableDef extends CellRange {
+  name: string;
+}
+
+const TABLE_HEADER: CellStyle = { bold: true, fill: "#305496", color: "#ffffff" };
+const TABLE_BAND: CellStyle = { fill: "rgba(48, 84, 150, 0.14)" };
 import { type IdRuns, RowMap, runsLength } from "./rowmap";
 
 /** Something whose cached result depends on other cells. */
@@ -190,6 +198,14 @@ export class EditableSource implements DataSource {
   /** merged blocks, in view rows and columns */
   merges: CellRange[] = [];
 
+  /** tables: a named block whose first row holds the column headers */
+  tables: TableDef[] = [];
+
+  /** the cell whose formula is being evaluated (for [@Column] references) */
+  private evalStack: [number, number][] = [];
+  /** Tables anywhere in the workbook, by name (set by the workbook). */
+  resolveTable: ((name: string) => { source: EditableSource; sheetName: string; table: TableDef } | null) | null = null;
+
   private cache = new Map<number, Scalar>();
 
   // dynamic arrays: formulas whose result is an array spill into the cells
@@ -262,6 +278,7 @@ export class EditableSource implements DataSource {
       colWidths: [...this.colWidths],
       frozen: { ...this.frozen },
       merges: this.merges.map((m) => ({ ...m })),
+      ...(this.tables.length ? { tables: this.tables.map((t) => ({ ...t })) } : {}),
     };
     return { state, binary: this.order?.isArray ? { order: this.order.toArray() } : {} };
   }
@@ -294,6 +311,7 @@ export class EditableSource implements DataSource {
     s.colWidths = new Map(state.colWidths ?? []);
     s.frozen = { ...state.frozen };
     s.merges = state.merges.map((m) => ({ ...m }));
+    s.tables = (state.tables ?? []).map((t) => ({ ...t }));
     s.rebuildDeps();
     return s;
   }
@@ -321,6 +339,7 @@ export class EditableSource implements DataSource {
     copy.colWidths = new Map(this.colWidths);
     copy.frozen = { ...this.frozen };
     copy.merges = this.merges.map((m) => ({ ...m }));
+    copy.tables = this.tables.map((t) => ({ ...t }));
     copy.rebuildDeps();
     return copy;
   }
@@ -632,6 +651,7 @@ export class EditableSource implements DataSource {
     const n = this.rowCount;
     if (at < 0 || at + remove > n) throw new Error("rows out of range");
     if (this.merges.length) this.merges = spliceMerges(this.merges, "row", at, remove, runsLength(insert));
+    if (this.tables.length) this.tables = spliceMerges(this.tables, "row", at, remove, runsLength(insert)) as TableDef[];
     const current = this.order ?? RowMap.identity(n);
     const { map, removed } = current.splice(at, remove, insert);
     // back to the identity (e.g. an insert was undone): fast paths come back
@@ -655,6 +675,7 @@ export class EditableSource implements DataSource {
     return {
       cells,
       merges: this.merges.map((m) => ({ ...m })),
+      tables: this.tables.map((t) => ({ ...t })),
       fills: this.fills.map((f) => ({ ...f, template: isFormula(f.template) ? { ...f.template, ast: f.template.ast && cloneAst(f.template.ast) } : f.template, chunks: new Map(), computing: false })),
     };
   }
@@ -667,6 +688,7 @@ export class EditableSource implements DataSource {
     for (const c of snap.cells) this.putEdit(c.id, c.col, { ...c.formula, ast: c.formula.ast && cloneAst(c.formula.ast) });
     this.fills = snap.fills.map((f) => ({ ...f, chunks: new Map(), computing: false }));
     if (snap.merges) this.merges = snap.merges.map((m) => ({ ...m }));
+    if (snap.tables) this.tables = snap.tables.map((t) => ({ ...t }));
     this.rebuildDeps();
     this.invalidate();
   }
@@ -872,6 +894,7 @@ export class EditableSource implements DataSource {
     if (at < 0 || at > this.colCount) throw new Error("column out of range");
     this.shiftColumns(at, count);
     if (this.merges.length) this.merges = spliceMerges(this.merges, "col", at, 0, count);
+    if (this.tables.length) this.tables = spliceMerges(this.tables, "col", at, 0, count) as TableDef[];
     this.spliceColMap(at, 0, new Array(count).fill(-1));
     this.columnsChanged();
   }
@@ -892,6 +915,7 @@ export class EditableSource implements DataSource {
     const widths = [...this.colWidths].filter(([c]) => c >= at && c < at + count);
     for (const [c] of widths) this.colWidths.delete(c);
     if (this.merges.length) this.merges = spliceMerges(this.merges, "col", at, count, 0);
+    if (this.tables.length) this.tables = spliceMerges(this.tables, "col", at, count, 0) as TableDef[];
     this.shiftColumns(at + count, -count);
     const map = this.spliceColMap(at, count, []);
     this.columnsChanged();
@@ -902,6 +926,7 @@ export class EditableSource implements DataSource {
   restoreColumns(at: number, removed: ColumnRemoval): void {
     this.shiftColumns(at, removed.map.length);
     if (this.merges.length) this.merges = spliceMerges(this.merges, "col", at, 0, removed.map.length);
+    if (this.tables.length) this.tables = spliceMerges(this.tables, "col", at, 0, removed.map.length) as TableDef[];
     this.spliceColMap(at, 0, removed.map);
     for (const e of removed.edits) this.putEdit(e.id, e.col, e.value);
     this.fills.push(...removed.fills);
@@ -1139,13 +1164,77 @@ export class EditableSource implements DataSource {
     this.invalidate();
   }
 
+  /** The table a cell is in, if any. */
+  tableAt(row: number, col: number): TableDef | null {
+    for (const t of this.tables) if (row >= t.top && row <= t.bottom && col >= t.left && col <= t.right) return t;
+    return null;
+  }
+
+  /** A table's column headers as text. */
+  tableHeaders(t: TableDef): string[] {
+    return Array.from({ length: t.right - t.left + 1 }, (_, i) => String(this.getCell(t.top, t.left + i) ?? ""));
+  }
+
+  /** Sales[Amount] and friends as the range they mean (null: no such table, column or row). */
+  private structuredRef(tableName: string, specText: string): Node | null {
+    const here = this.evalStack[this.evalStack.length - 1];
+    let found: { source: EditableSource; sheetName: string; table: TableDef } | null;
+    if (tableName === "") {
+      const t = here ? this.tableAt(here[0], here[1]) : null;
+      found = t ? { source: this, sheetName: "", table: t } : null;
+    } else found = this.resolveTable?.(tableName) ?? null;
+    if (!found) return null;
+    const spec = parseTableSpec(specText);
+    if (!spec) return null;
+    const { source, table: t } = found;
+    const headers = source.tableHeaders(t).map((h) => h.toLowerCase());
+    let left = t.left;
+    let right = t.right;
+    if (spec.from) {
+      const a = headers.indexOf(spec.from.toLowerCase());
+      const b = headers.indexOf((spec.to ?? spec.from).toLowerCase());
+      if (a < 0 || b < 0) return null;
+      left = t.left + Math.min(a, b);
+      right = t.left + Math.max(a, b);
+    }
+    let top: number;
+    let bottom: number;
+    switch (spec.area) {
+      case "headers":
+        top = bottom = t.top;
+        break;
+      case "all":
+        top = t.top;
+        bottom = t.bottom;
+        break;
+      case "this":
+        // the formula's own row: only from a cell beside the table's data, on its sheet
+        if (!here || source !== this || here[0] <= t.top || here[0] > t.bottom) return null;
+        top = bottom = here[0];
+        break;
+      case "totals":
+        return null;
+      default:
+        top = t.top + 1;
+        bottom = t.bottom;
+    }
+    const sheet = found.sheetName || undefined;
+    if (top === bottom && left === right) return { type: "ref", row: top, col: left, absRow: true, absCol: true, ...(sheet ? { sheet } : {}) };
+    return { type: "range", range: { top, left, bottom, right }, absTop: true, absBottom: true, absLeft: true, absRight: true, ...(sheet ? { sheet } : {}) };
+  }
+
   getMerges(): readonly CellRange[] {
     return this.merges;
   }
 
   getStyle(row: number, col: number): CellStyle | null {
-    if (this.styles.isEmpty) return null;
-    return this.styles.get(this.toBase(row), col);
+    const own = this.styles.isEmpty ? null : this.styles.get(this.toBase(row), col);
+    if (!this.tables.length) return own;
+    const t = this.tableAt(row, col);
+    if (!t) return own;
+    // table look underneath, the cell's own formatting on top
+    const look: CellStyle = row === t.top ? TABLE_HEADER : (row - t.top) % 2 === 0 ? TABLE_BAND : {};
+    return own ? { ...look, ...own } : look;
   }
 
   /**
@@ -1505,7 +1594,13 @@ export class EditableSource implements DataSource {
     this.inProgress.add(k);
     let result: Scalar;
     try {
-      const v: FormulaValue = f.ast ? evaluate(f.ast, this.ctx, shift) : errors.syntax;
+      this.evalStack.push([row, col]);
+      let v: FormulaValue;
+      try {
+        v = f.ast ? evaluate(f.ast, this.ctx, shift) : errors.syntax;
+      } finally {
+        this.evalStack.pop();
+      }
       result = v instanceof CellArray ? this.placeArray(row, col, v) : v instanceof Lambda ? errors.calc : v;
     } catch (e) {
       // very long dependency chains (a running total filled down 100k rows)
@@ -1526,6 +1621,7 @@ export class EditableSource implements DataSource {
       sheet: (name: string) => this.resolveSheet?.(name)?.evalContext ?? null,
       spilled: (row: number, col: number) => this.spilledArray(row, col),
       nameDef: (name: string) => this.resolveName?.(name) ?? null,
+      structured: (table: string, spec: string) => this.structuredRef(table, spec),
     } as EvalContext,
     // live sizes, for lookups over whole columns
     { rowCount: { get: () => this.rowCount }, colCount: { get: () => this.colCount } },
@@ -1722,6 +1818,8 @@ export interface SheetState {
   colWidths?: [number, number][];
   frozen: { rows: number; cols: number };
   merges: CellRange[];
+  /** added after v1 shipped */
+  tables?: TableDef[];
 }
 
 export interface FormulaSnapshot {
@@ -1729,6 +1827,7 @@ export interface FormulaSnapshot {
   fills: Fill[];
   /** merged blocks move with structural changes too */
   merges?: CellRange[];
+  tables?: TableDef[];
 }
 
 function cloneAst(node: Node): Node {
@@ -1753,7 +1852,7 @@ function compileOwn(ast: Node, origin: number, col: number): CompiledFill | null
 }
 
 const ARRAY_FUNCTIONS = new Set(
-  "FILTER SORT SORTBY UNIQUE SEQUENCE TRANSPOSE MAP SCAN BYROW BYCOL MAKEARRAY RANDARRAY HSTACK VSTACK TAKE DROP TOCOL TOROW CHOOSECOLS CHOOSEROWS EXPAND WRAPROWS WRAPCOLS LET LAMBDA __INVOKE INDEX XLOOKUP".split(" "),
+  "FILTER SORT SORTBY UNIQUE SEQUENCE TRANSPOSE MAP SCAN BYROW BYCOL MAKEARRAY RANDARRAY HSTACK VSTACK TAKE DROP TOCOL TOROW CHOOSECOLS CHOOSEROWS EXPAND WRAPROWS WRAPCOLS LET LAMBDA __INVOKE __TABLE INDEX XLOOKUP".split(" "),
 );
 
 /**

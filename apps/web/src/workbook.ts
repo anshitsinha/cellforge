@@ -96,6 +96,24 @@ export class Workbook {
     this.clearAll();
   }
 
+  /** A table by name, anywhere in the workbook. */
+  findTable(name: string): { source: EditableSource; sheetName: string; table: import("./editable").TableDef } | null {
+    const lower = name.toLowerCase();
+    for (const s of this.sheets) {
+      const t = s.source.tables.find((x) => x.name.toLowerCase() === lower);
+      if (t) return { source: s.source, sheetName: s.name, table: t };
+    }
+    return null;
+  }
+
+  /** A table's name on its own (=SUM(Sales)) means its data rows. */
+  private tableDataRange(name: string): Node | null {
+    const f = this.findTable(name);
+    if (!f) return null;
+    const t = f.table;
+    return { type: "range", range: { top: t.top + 1, left: t.left, bottom: t.bottom, right: t.right }, sheet: f.sheetName, absTop: true, absBottom: true, absLeft: true, absRight: true };
+  }
+
   /** Swap in a whole new set of sheets (restoring a version), in place. */
   replaceSheets(sheets: Sheet[]): void {
     if (!sheets.length) throw new Error("A workbook needs at least one sheet.");
@@ -229,7 +247,8 @@ export class Workbook {
    */
   private connect(source: EditableSource): void {
     source.resolveSheet = (name) => this.byName(name)?.source ?? null;
-    source.resolveName = (name) => this.names.get(name.toUpperCase())?.ast ?? null;
+    source.resolveName = (name) => this.names.get(name.toUpperCase())?.ast ?? this.tableDataRange(name);
+    source.resolveTable = (name) => this.findTable(name);
     source.onChange = () => this.propagate(source);
   }
 

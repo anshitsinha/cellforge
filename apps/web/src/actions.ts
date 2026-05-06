@@ -15,7 +15,7 @@ import { BlankSource, EditableSource as Source } from "./editable";
 import { CLEAR_ALL, type ColumnStyles, type StylePatch } from "./styles";
 import { captureVersion, versionSheets, type Version } from "./versions";
 import { type IdRuns, type RowMap, runsLength } from "./rowmap";
-import type { NameDef, Sheet, Workbook } from "./workbook";
+import { nameProblem, type NameDef, type Sheet, type Workbook } from "./workbook";
 
 export interface SheetCtx {
   workbook: Workbook;
@@ -306,10 +306,26 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
           formats = ctx.blobs.put([...cols]);
           for (const f of formatted) data.styles.apply(f.col, data.rowIdIntervals(f.row, f.row), { numFmt: f.format });
         }
-        return { type: "cells.restore", params: restoreParams(id, before, p.label, formats) };
+        // typing in the row just under a table makes the table one row longer,
+        let tables: string | undefined;
+        for (const t of data.tables) {
+          if (p.cells.some((c) => c.row === t.bottom + 1 && c.col >= t.left && c.col <= t.right && c.input !== null && c.input !== "")) {
+            tables ??= ctx.blobs.put(data.tables.map((x) => ({ ...x })));
+            t.bottom++;
+          }
+        }
+        // and a header typed just right of it adds a column (as in Excel)
+        for (const t of data.tables) {
+          if (p.cells.some((c) => c.row === t.top && c.col === t.right + 1 && c.input !== null && c.input.trim() !== "")) {
+            tables ??= ctx.blobs.put(data.tables.map((x) => ({ ...x })));
+            t.right++;
+          }
+        }
+        if (tables) data.clearCaches();
+        return { type: "cells.restore", params: { ...restoreParams(id, before, p.label, formats), ...(tables ? { tables } : {}) } };
       },
     })
-    .register<{ cells: RestoreCell[]; label?: string; formats?: string; sheet?: string }>({
+    .register<{ cells: RestoreCell[]; label?: string; formats?: string; tables?: string; sheet?: string }>({
       type: "cells.restore",
       title: "Put cells back exactly as they were",
       internal: true,
@@ -320,6 +336,7 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
           ),
           label: s.string(),
           formats: s.string("saved formatting to swap back"),
+          tables: s.string("saved tables to swap back"),
         },
         ["cells"],
       ),
@@ -332,7 +349,13 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
           else data.setCell(c.row, c.col, fromJson(c.value ?? null));
         }
         const formats = p.formats ? swapFormats(ctx, data, p.formats) : undefined;
-        return { type: "cells.restore", params: restoreParams(id, before, p.label, formats) };
+        let tables: string | undefined;
+        if (p.tables) {
+          tables = ctx.blobs.put(data.tables.map((x) => ({ ...x })));
+          data.tables = ctx.blobs.get<typeof data.tables>(p.tables).map((x) => ({ ...x }));
+          data.clearCaches();
+        }
+        return { type: "cells.restore", params: { ...restoreParams(id, before, p.label, formats), ...(tables ? { tables } : {}) } };
       },
     })
     .register<{ range: Range; sheet?: string }>({
@@ -762,6 +785,70 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       return { type: "cells.restore", params: restoreParams(id, before, undefined, formats) };
     },
   });
+
+  // ----------------------------------------------------------- tables --
+  registry
+    .register<{ range: Range; name?: string; sheet?: string }>({
+      type: "tables.create",
+      title: "Make a range with a header row into a table: a name, banded rows, structured references like Sales[Amount], and it grows when you type below it",
+      schema: withSheet({ range: rangeSchema, name: s.string("the table's name; Table1, Table2... if left out") }, ["range"]),
+      describe: (p) => `make table ${p.name ?? ""}`.trim(),
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const r = p.range;
+        checkBounds(data, [{ row: r.bottom, col: r.right }]);
+        if (r.bottom <= r.top) throw new Error("A table needs a header row and at least one row of data.");
+        const overlap = (a: Range, b: Range) => a.top <= b.bottom && b.top <= a.bottom && a.left <= b.right && b.left <= a.right;
+        if (data.tables.some((t) => overlap(t, r))) throw new Error("That overlaps another table.");
+        if (data.merges.some((m) => overlap(m, r))) throw new Error("Unmerge the cells first; tables can't contain merged cells.");
+        const headers = Array.from({ length: r.right - r.left + 1 }, (_, i) => String(data.getCell(r.top, r.left + i) ?? "").trim());
+        if (headers.some((h) => !h)) throw new Error("Every column needs a header in the first row.");
+        if (new Set(headers.map((h) => h.toLowerCase())).size !== headers.length) throw new Error("Each column header has to be different.");
+        let name = p.name?.trim();
+        if (!name) for (let n = 1; ; n++) if (!ctx.workbook.findTable(`Table${n}`) && !ctx.workbook.getName(`Table${n}`)) { name = `Table${n}`; break; }
+        const problem = nameProblem(name!);
+        if (problem) throw new Error(problem);
+        if (ctx.workbook.findTable(name!) || ctx.workbook.getName(name!)) throw new Error(`The name ${name} is already used.`);
+        const before = data.tables.map((t) => ({ ...t }));
+        data.tables = [...data.tables, { name: name!, top: r.top, left: r.left, bottom: r.bottom, right: r.right }];
+        data.clearCaches();
+        return { type: "tables.restore", params: { sheet: id, tables: before } };
+      },
+    })
+    .register<{ name: string }>({
+      type: "tables.delete",
+      title: "Turn a table back into a plain range (the data stays; references to it show #REF!)",
+      schema: s.object({ name: s.string() }),
+      describe: (p) => `remove table ${p.name}`,
+      recordable: true,
+      apply(ctx, p) {
+        const found = ctx.workbook.findTable(p.name);
+        if (!found) throw new Error(`There's no table called ${p.name}.`);
+        const sheet = ctx.workbook.sheets.find((x) => x.source === found.source)!;
+        const before = found.source.tables.map((t) => ({ ...t }));
+        found.source.tables = found.source.tables.filter((t) => t !== found.table);
+        ctx.workbook.sheets.forEach((x) => x.source.clearCaches());
+        return { type: "tables.restore", params: { sheet: sheet.id, tables: before } };
+      },
+    })
+    .register<{ sheet: string; tables: (Range & { name: string })[] }>({
+      type: "tables.restore",
+      title: "Put a sheet's tables back",
+      internal: true,
+      schema: s.object({
+        sheet: s.string(),
+        tables: s.array(s.object({ name: s.string(), top: s.int(), left: s.int(), bottom: s.int(), right: s.int() })),
+      }),
+      describe: () => "table",
+      apply(ctx, p) {
+        const data = ctx.workbook.get(p.sheet).source;
+        const before = data.tables.map((t) => ({ ...t }));
+        data.tables = p.tables.map((t) => ({ ...t }));
+        ctx.workbook.sheets.forEach((x) => x.source.clearCaches());
+        return { type: "tables.restore", params: { sheet: p.sheet, tables: before } };
+      },
+    });
 
   // ------------------------------------------------------------ names --
   registry

@@ -70,8 +70,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 
 ### Named ranges; tables with structured references that grow with new rows
 - [x] Named ranges and named constants: define, use in formulas (=SUM(Revenue)), rename and delete with formulas following; scope workbook or sheet
-- [ ] Tables: turn a range into a table with a name and header row; banded style; grows when rows are added below
-- [ ] Structured references: Table1[Amount], Table1[@Amount], Table1[#Totals]; adjust when columns are renamed
+- [x] Tables: turn a range into a table with a name and header row; banded style; grows when rows are added below
+- [x] Structured references: Table1[Amount], Table1[@Amount], Table1[#Totals]; adjust when columns are renamed
 - [ ] Name manager panel and palette entries; tests; user guide
 
 ## Milestones

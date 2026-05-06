@@ -376,7 +376,7 @@ define(
     args: [{ name: "range", description: "a range" }],
     examples: [["=ROWS(A1:B5)", 5]],
   },
-  (args) => (args.length !== 1 ? errors.value : (grid(args[0])?.rows ?? 1)),
+  (args) => (args.length !== 1 ? errors.value : isError(scalarArg(args[0])) && !grid(args[0]) ? scalarArg(args[0]) : (grid(args[0])?.rows ?? 1)),
 );
 
 define(
@@ -387,5 +387,5 @@ define(
     args: [{ name: "range", description: "a range" }],
     examples: [["=COLUMNS(A1:C5)", 3]],
   },
-  (args) => (args.length !== 1 ? errors.value : (grid(args[0])?.cols ?? 1)),
+  (args) => (args.length !== 1 ? errors.value : isError(scalarArg(args[0])) && !grid(args[0]) ? scalarArg(args[0]) : (grid(args[0])?.cols ?? 1)),
 );
