@@ -148,6 +148,7 @@ describe("sheet actions", () => {
       "cells.toNumber",
       "tables.create",
       "tables.delete",
+      "calc.iterative",
       "names.define",
       "names.delete",
       "version.save",

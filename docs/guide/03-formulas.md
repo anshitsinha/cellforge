@@ -133,6 +133,16 @@ rules exactly, so formulas copied from Excel give the same answers:
 - **COUNTIF and SUMIF** take wildcards: `*` for any run of characters, `?`
   for one, and `~` before either to mean the character itself.
 
+## Circular references
+
+A formula that ends up reading itself (B1 uses C1, C1 uses B1) shows
+**#CYCLE!**. Usually that's a mistake, and **Inspect** (Ctrl+[) shows the
+loop. Some models need one on purpose, such as interest worked out on a
+balance that includes the interest. For those, search **Ctrl+K** for
+"iterative calculation": the loop is then recalculated up to 100 times until
+nothing changes by more than 0.001, as Excel does. The setting is saved with
+the workbook.
+
 ## Errors
 
 Errors are values that flow through formulas, so you can catch them with

@@ -1144,6 +1144,7 @@ function paletteCommands(): Command[] {
   const { row, col } = grid.selection;
   const list: Command[] = [
     { id: "undo", title: "Undo", keys: "Ctrl Z", run: undo },
+    { id: "iterative", title: workbook.iterative ? "Turn off iterative calculation" : "Turn on iterative calculation (for circular references)", hint: "circular cycle", run: () => run({ type: "calc.iterative", params: { enabled: !workbook.iterative } }) },
     { id: "inspect", title: "Inspect this cell", keys: "Ctrl [", hint: "trace precedents dependents evaluate formula audit", run: () => inspectPanel.toggle() },
     { id: "history", title: "Show history and versions", keys: "Ctrl H", hint: "timeline compare changes audit", run: () => historyPanel.toggle() },
     { id: "version-save", title: "Save a version…", hint: "name snapshot checkpoint", run: () => { if (!historyPanel.open) historyPanel.toggle(); document.querySelector<HTMLInputElement>(".hp-version-form input")?.focus(); } },

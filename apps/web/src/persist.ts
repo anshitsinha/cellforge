@@ -32,6 +32,8 @@ export interface WorkbookState {
   active: string;
   bases: Record<string, BaseState>;
   sheets: SavedSheet[];
+  /** iterative calculation settings (added after v1 shipped) */
+  iterative?: { max: number; change: number };
   /** defined names (added after v1 shipped) */
   names?: { name: string; formula: string; comment?: string }[];
   /** named versions (added after v1 shipped; missing means none) */
@@ -134,7 +136,8 @@ export function packWorkbook(wb: Workbook, active: string, name: string): Packed
     }),
   }));
   const names = wb.definedNames;
-  return { meta: { format: "cellforge", v: 1, name, active, bases, sheets, ...(versions.length ? { versions } : {}), ...(names.length ? { names } : {}) }, files };
+  const iterative = wb.iterative;
+  return { meta: { format: "cellforge", v: 1, name, active, bases, sheets, ...(versions.length ? { versions } : {}), ...(names.length ? { names } : {}), ...(iterative ? { iterative } : {}) }, files };
 }
 
 /** Rebuild a workbook from its metadata, reading files as needed. */
@@ -197,6 +200,7 @@ export async function unpackWorkbook(
   }
   workbook.versions = versions;
   if (meta.names?.length) workbook.restoreNames(meta.names);
+  if (meta.iterative) workbook.iterative = meta.iterative;
   const active = workbook.has(meta.active) ? meta.active : workbook.sheets[0].id;
   return { workbook, active, name: meta.name };
 }

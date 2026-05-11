@@ -1625,12 +1625,52 @@ export class EditableSource implements DataSource {
     return null;
   }
 
+  /**
+   * Iterative calculation (Excel's setting, off by default): a circular
+   * reference starts from its previous value and the calculation repeats
+   * until nothing moves more than `change` or `max` passes have run.
+   */
+  iterative: { max: number; change: number } | null = null;
+  private iterPrev = new Map<number, Scalar>();
+  private cycleHit = false;
+
   private evalFormula(row: number, col: number, f: Formula, shift: number): Scalar {
     const k = key(row, col);
     const cached = this.cache.get(k);
     if (cached !== undefined) return cached;
-    if (this.inProgress.has(k)) return errors.cycle;
+    if (this.inProgress.has(k)) {
+      if (!this.iterative) return errors.cycle;
+      this.cycleHit = true;
+      return this.iterPrev.get(k) ?? 0;
+    }
+    if (this.iterative && this.evalStack.length === 0) return this.iterate(row, col, f, shift);
+    return this.computeFormula(row, col, f, shift);
+  }
 
+  /** Repeat the calculation until a circular reference settles. */
+  private iterate(row: number, col: number, f: Formula, shift: number): Scalar {
+    const { max, change } = this.iterative!;
+    let result: Scalar = null;
+    for (let pass = 0; pass < max; pass++) {
+      this.cycleHit = false;
+      result = this.computeFormula(row, col, f, shift);
+      if (!this.cycleHit) return result;
+      let delta = 0;
+      for (const [k, v] of this.cache) {
+        const p = this.iterPrev.get(k);
+        if (typeof v === "number" && typeof p === "number") delta = Math.max(delta, Math.abs(v - p));
+        else if (v !== p) delta = Infinity;
+      }
+      this.iterPrev = new Map(this.cache);
+      if (delta <= change) break;
+      // next pass: everything recomputes from these values
+      this.cache.clear();
+    }
+    return result;
+  }
+
+  private computeFormula(row: number, col: number, f: Formula, shift: number): Scalar {
+    const k = key(row, col);
     this.inProgress.add(k);
     let result: Scalar;
     try {

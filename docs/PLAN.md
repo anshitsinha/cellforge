@@ -68,12 +68,10 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Formula auditing: trace precedents/dependents, step-by-step evaluation, precise broken-reference locator, hard-coded-number lint
-- [x] Audit engine: the cells a formula reads (precedents), the formulas that read a cell (dependents, across sheets), R1C1 shape to spot a formula that differs from its neighbours
-- [x] Step-by-step evaluation: every part of a formula with its value, nested, so you can see where a result comes from
-- [x] Checks: #REF! inside a formula (where exactly), numbers typed into formulas, a formula unlike the ones above and below, references to empty cells
-- [x] Inspect panel (Ctrl+[ ): all of the above for the selected cell, precedents/dependents highlighted on the grid and clickable
-- [x] Tests, user guide
+### Compiler coverage for the new functions; Excel conformance corpus in CI
+- [ ] Conformance corpus: a table of formulas with Excel's own results (from Microsoft's documentation examples and hand-checked cases), run as tests
+- [ ] Compiled kernels for the common numeric functions in filled columns (ROUND family, ABS, MIN/MAX of cells, IF with numeric branches), proven identical to the interpreter by randomised tests
+- [ ] CI workflow: typecheck, tests and the corpus on every push
 
 ## Milestones
 
@@ -104,10 +102,10 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Dynamic arrays and spill, `LET`, `LAMBDA`
 - ✅ Named ranges; tables with structured references that grow with new rows
 - ✅ Lookups that warn about type and whitespace mismatches instead of a silent `#N/A`
-- 🔨 Formula auditing: trace precedents/dependents, step-by-step evaluation,
+- ✅ Formula auditing: trace precedents/dependents, step-by-step evaluation,
   precise broken-reference locator, hard-coded-number lint
-- ⬜ Iterative calculation for intentional circular references
-- ⬜ Compiler coverage for the new functions; Excel conformance corpus in CI
+- ✅ Iterative calculation for intentional circular references
+- 🔨 Compiler coverage for the new functions; Excel conformance corpus in CI
 
 ### M3: Files and messy-export import
 - ⬜ Streaming `.xlsx` reader and writer (values, formulas, styles, merges,

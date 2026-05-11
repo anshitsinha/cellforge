@@ -48,6 +48,19 @@ export class Workbook {
   /** named versions, oldest first; saved with the workbook */
   versions: Version[] = [];
 
+  /** iterative calculation for circular references (off by default, as in Excel) */
+  private iter: { max: number; change: number } | null = null;
+
+  get iterative(): { max: number; change: number } | null {
+    return this.iter;
+  }
+
+  set iterative(v: { max: number; change: number } | null) {
+    this.iter = v;
+    for (const s of this.sheets) s.source.iterative = v;
+    this.clearAll();
+  }
+
   /** defined names, by upper-case name */
   private names = new Map<string, NameDef & { ast: Node | null }>();
 
@@ -249,6 +262,7 @@ export class Workbook {
     source.resolveSheet = (name) => this.byName(name)?.source ?? null;
     source.resolveName = (name) => this.names.get(name.toUpperCase())?.ast ?? this.tableDataRange(name);
     source.resolveTable = (name) => this.findTable(name);
+    source.iterative = this.iter;
     source.onChange = () => this.propagate(source);
   }
 

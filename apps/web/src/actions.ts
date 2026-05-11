@@ -892,6 +892,30 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       },
     });
 
+  // ------------------------------------------------------------- calc --
+  registry.register<{ enabled: boolean; maxIterations?: number; maxChange?: number }>({
+    type: "calc.iterative",
+    title: "Turn iterative calculation on or off: circular references repeat until they settle instead of showing #CYCLE!",
+    schema: s.object(
+      {
+        enabled: s.bool(),
+        maxIterations: s.int("most passes (100 by default)", 1, 32_767),
+        maxChange: s.number("stop when nothing moves more than this (0.001 by default)"),
+      },
+      ["enabled"],
+    ),
+    describe: (p) => (p.enabled ? "iterative calculation on" : "iterative calculation off"),
+    recordable: true,
+    apply(ctx, p) {
+      const before = ctx.workbook.iterative;
+      ctx.workbook.iterative = p.enabled ? { max: p.maxIterations ?? 100, change: p.maxChange ?? 0.001 } : null;
+      return {
+        type: "calc.iterative",
+        params: before ? { enabled: true, maxIterations: before.max, maxChange: before.change } : { enabled: false },
+      };
+    },
+  });
+
   // ------------------------------------------------------------ names --
   registry
     .register<{ name: string; refersTo: string; comment?: string }>({

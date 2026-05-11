@@ -77,3 +77,17 @@ describe("lookup near misses", () => {
     expect(at("D2")).toBe("#N/A");
   });
 });
+
+describe("iterative calculation", () => {
+  it("circular references show #CYCLE! until iterative calculation is on, then settle", async () => {
+    const { history, type, at, workbook } = setup();
+    // a classic: interest depends on the closing balance, which depends on interest
+    await type([["A1", "1000"], ["B1", "=A1+C1"], ["C1", "=B1*0.05"]]);
+    expect(at("B1")).toBe("#CYCLE!");
+    await history.run({ type: "calc.iterative", params: { enabled: true } });
+    expect(Math.abs((at("B1") as number) - 1000 / 0.95)).toBeLessThan(0.01);
+    expect(workbook.iterative).toEqual({ max: 100, change: 0.001 });
+    await history.undo();
+    expect(at("B1")).toBe("#CYCLE!");
+  });
+});
