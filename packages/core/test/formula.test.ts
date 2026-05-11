@@ -28,7 +28,7 @@ describe("arithmetic", () => {
   it("respects precedence and parentheses", () => {
     expect(run("=1+2*3")).toBe(7);
     expect(run("=(1+2)*3")).toBe(9);
-    expect(run("=2^3^2")).toBe(512); // right associative
+    expect(run("=2^3^2")).toBe(64); // left to right, as in Excel
     expect(run("=-2^2")).toBe(4); // unary minus binds tighter than ^, like Excel
     expect(run("=50%")).toBe(0.5);
   });

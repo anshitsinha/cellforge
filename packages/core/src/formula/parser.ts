@@ -209,13 +209,13 @@ export function parseFormula(src: string): Node {
   const multiplicative = binaryLevel(["*", "/"], () => power());
 
   function power(): Node {
-    const base = unary();
-    if (isOp("^")) {
+    // left to right, as in Excel: 2^3^2 is (2^3)^2 = 64
+    let node = unary();
+    while (isOp("^")) {
       pos++;
-      // right associative: 2^3^2 = 2^(3^2)
-      return { type: "binary", op: "^", left: base, right: power() };
+      node = { type: "binary", op: "^", left: node, right: unary() };
     }
-    return base;
+    return node;
   }
 
   function unary(): Node {

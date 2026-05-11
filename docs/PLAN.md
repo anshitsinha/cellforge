@@ -68,10 +68,13 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Compiler coverage for the new functions; Excel conformance corpus in CI
-- [ ] Conformance corpus: a table of formulas with Excel's own results (from Microsoft's documentation examples and hand-checked cases), run as tests
-- [ ] Compiled kernels for the common numeric functions in filled columns (ROUND family, ABS, MIN/MAX of cells, IF with numeric branches), proven identical to the interpreter by randomised tests
-- [ ] CI workflow: typecheck, tests and the corpus on every push
+### Streaming `.xlsx` reader and writer (values, formulas, styles, merges, names, multiple sheets), round-trip tested
+- [ ] Zip reading and writing with the browser's own compression streams (no library)
+- [ ] Fast XML scanning; shared strings, cell types, shared formulas expanded, _xlfn./_xlpm. prefixes handled
+- [ ] Styles: fonts, fills, borders, alignment, number formats (built-in and custom), theme colours
+- [ ] Sheet layout: merges, column widths, row heights, hidden rows/columns, freeze panes; defined names
+- [ ] Import into the workbook (columnar for big sheets) and export from it; Open accepts .xlsx, Save as .xlsx
+- [ ] Round-trip tests, user guide
 
 ## Milestones
 
@@ -94,7 +97,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ History panel: timeline, named versions, compare any two points, per-cell history
 - ✅ Instant insert/delete on 100M-row sheets (segment row map)
 
-### M2: Formula engine 🔨
+### M2: Formula engine ✅
 - ✅ Function registry + generated reference and autocomplete with argument hints
 - ✅ Excel type system and coercion; dates as serials (incl. the 1900 bug)
 - ✅ The ~150 functions that cover real use: lookup (XLOOKUP, INDEX/MATCH),
@@ -105,10 +108,10 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Formula auditing: trace precedents/dependents, step-by-step evaluation,
   precise broken-reference locator, hard-coded-number lint
 - ✅ Iterative calculation for intentional circular references
-- 🔨 Compiler coverage for the new functions; Excel conformance corpus in CI
+- ✅ Compiler coverage for the new functions; Excel conformance corpus in CI
 
-### M3: Files and messy-export import
-- ⬜ Streaming `.xlsx` reader and writer (values, formulas, styles, merges,
+### M3: Files and messy-export import 🔨
+- 🔨 Streaming `.xlsx` reader and writer (values, formulas, styles, merges,
   names, multiple sheets), round-trip tested
 - ⬜ Parquet and JSON; CSV options (delimiter, encoding)
 - ⬜ Report un-wrapping: header-row detection, drop title/subtotal/footer rows,

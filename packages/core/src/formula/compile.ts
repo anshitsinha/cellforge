@@ -76,7 +76,7 @@ class Unsupported extends Error {}
 // Helpers the generated code closes over. Kept tiny so V8 inlines them.
 const RUNTIME = {
   // finite or NaN - Infinity - Infinity is NaN, x - x is 0 for finite x
-  F: (x: number) => (x - x === 0 ? x : NaN),
+  F: (x: number) => (x - x === 0 ? x + 0 : NaN), // + 0: no negative zeros, like the interpreter
   // x ** 0 is 1 even for x = NaN, which would turn an error into a number.
   // Another fuzz-test find.
   P: (a: number, b: number) => (a !== a ? NaN : a ** b),
@@ -176,7 +176,7 @@ export function compileFill(ast: Node, origin: number): CompiledFill | null {
         return ref(node, valuePos);
       case "unary": {
         const a = num(node.arg);
-        if (node.op === "-") return `(-${a})`;
+        if (node.op === "-") return `(0 - ${a})`; // 0 - x: never a negative zero
         if (node.op === "+") return a;
         return `F(${a} / 100)`;
       }
@@ -228,11 +228,11 @@ export function compileFill(ast: Node, origin: number): CompiledFill | null {
     };
     switch (node.name) {
       case "ABS":
-        return `Math.abs(${one()})`;
+        return `F(Math.abs(${one()}))`;
       case "SQRT":
-        return `Math.sqrt(${one()})`; // sqrt(-1) is NaN -> interpreter gives #NUM!
+        return `F(Math.sqrt(${one()}))`; // sqrt(-1) is NaN -> interpreter gives #NUM!
       case "INT":
-        return `Math.floor(${one()})`;
+        return `F(Math.floor(${one()}))`;
       case "ROUND": {
         if (args.length < 1 || args.length > 2) throw new Unsupported();
         return `F(ROUND(${num(args[0])}, ${args.length === 2 ? num(args[1]) : "0"}))`;
@@ -249,6 +249,8 @@ export function compileFill(ast: Node, origin: number): CompiledFill | null {
       case "SUM":
       case "AVERAGE": {
         if (args.length === 0) throw new Unsupported();
+        // a blank cell given directly is skipped by AVERAGE (Excel) but arrives here as 0
+        if (node.name === "AVERAGE" && args.some((a) => a.type === "ref")) throw new Unsupported();
         // fold from 0 in argument order, exactly like numericFold
         const sum = args.reduce((acc, a) => `(${acc} + ${num(a)})`, "0");
         return node.name === "SUM" ? `F${sum}` : `F(F${sum} / ${args.length})`;
@@ -256,8 +258,10 @@ export function compileFill(ast: Node, origin: number): CompiledFill | null {
       case "MIN":
       case "MAX": {
         if (args.length === 0) throw new Unsupported();
+        // same for MIN/MAX: MIN(5, blank) is 5, not 0
+        if (args.some((a) => a.type === "ref")) throw new Unsupported();
         // (not args.map(num) - map would pass the index as valuePos)
-        return args.map((a) => num(a)).reduce((acc, a) => `${node.name}(${acc}, ${a})`);
+        return `F(${args.map((a) => num(a)).reduce((acc, a) => `${node.name}(${acc}, ${a})`)})`;
       }
       case "IF": {
         // the 2-arg form returns FALSE (a boolean) when the condition fails

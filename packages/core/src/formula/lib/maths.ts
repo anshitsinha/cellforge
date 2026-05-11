@@ -411,7 +411,7 @@ define(
     if (m === 0) return 0;
     if (x * m < 0) return errors.num;
     const q = clean(Math.abs(x / m));
-    return tidy(Math.sign(x) * Math.round(q) * Math.abs(m));
+    return tidy(clean(Math.sign(x) * Math.round(q) * Math.abs(m)));
   },
 );
 

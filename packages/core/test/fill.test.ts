@@ -9,7 +9,7 @@ describe("formatFormula", () => {
     expect(roundTrip("=(A1+B1)*2")).toBe("=(A1+B1)*2");
     expect(roundTrip("=((A1))")).toBe("=A1");
     expect(roundTrip("=2^3^2")).toBe("=2^3^2");
-    expect(roundTrip("=(2^3)^2")).toBe("=(2^3)^2");
+    expect(roundTrip("=2^(3^2)")).toBe("=2^(3^2)");
     expect(roundTrip("=A1-(B1-C1)")).toBe("=A1-(B1-C1)");
     expect(roundTrip("=-(A1+1)")).toBe("=-(A1+1)");
     expect(roundTrip('=IF(A1>5,"a ""q""",B$2)')).toBe('=IF(A1>5, "a ""q""", B$2)');

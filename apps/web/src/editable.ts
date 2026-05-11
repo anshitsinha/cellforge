@@ -1682,6 +1682,8 @@ export class EditableSource implements DataSource {
         this.evalStack.pop();
       }
       result = v instanceof CellArray ? this.placeArray(row, col, v) : v instanceof Lambda ? errors.calc : v;
+      // a formula that comes out empty (=A1 with A1 empty) shows 0, as in Excel
+      if (result === null) result = 0;
     } catch (e) {
       // very long dependency chains (a running total filled down 100k rows)
       // recurse once per row and can blow the stack

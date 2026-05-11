@@ -37,7 +37,8 @@ function contextFor(node: { sheet?: string }, ctx: EvalContext): EvalContext | n
 }
 
 export type Arg =
-  | { kind: "value"; value: Scalar }
+  /** fromRef: the value came from a cell reference (Excel treats it like a range in COUNT, SUM...) */
+  | { kind: "value"; value: Scalar; fromRef?: boolean }
   | { kind: "range"; range: RangeRef; ctx: EvalContext; sheet?: string }
   | { kind: "array"; array: CellArray }
   | { kind: "lambda"; fn: Lambda };
@@ -86,13 +87,17 @@ export function toBool(v: Scalar): boolean | CellError {
  * produce bit-identical results to this interpreter.
  */
 export function tidy(n: number): number | CellError {
-  return Number.isFinite(n) ? n : errors.num;
+  // + 0 turns -0 into 0 (Excel never shows a negative zero)
+  return Number.isFinite(n) ? n + 0 : errors.num;
 }
 
 /** ROUND: half away from zero like Excel, not banker's rounding. */
 function roundHalfAway(n: number, digits: number): number {
   const f = 10 ** Math.trunc(digits);
-  return (Math.sign(n) * Math.round(Math.abs(n) * f)) / f;
+  // clean float noise to 15 significant digits first, as Excel does:
+  // 1.005 * 100 is 100.49999999999999, but ROUND(1.005, 2) is 1.01
+  const scaled = Number((Math.abs(n) * f).toPrecision(15));
+  return (Math.sign(n) * Math.round(scaled)) / f + 0;
 }
 
 /**
@@ -108,7 +113,8 @@ export function compare(a: Scalar, b: Scalar): number {
   const ra = rank(a);
   const rb = rank(b);
   if (ra !== rb) return ra - rb;
-  if (typeof a === "number" && typeof b === "number") return a - b;
+  // numbers compare to 15 significant digits, so 0.1+0.2 = 0.3 is TRUE as in Excel
+  if (typeof a === "number" && typeof b === "number") return Number(a.toPrecision(15)) - Number(b.toPrecision(15));
   if (typeof a === "boolean" && typeof b === "boolean") return Number(a) - Number(b);
   const sa = String(a).toLowerCase();
   const sb = String(b).toLowerCase();
@@ -245,7 +251,7 @@ export function evaluate(node: Node, ctx: EvalContext, rowShift = 0, env?: Env):
       const one = (x: Scalar): Scalar => {
         const n = toNumber(x);
         if (isError(n)) return n;
-        if (node.op === "-") return -n;
+        if (node.op === "-") return 0 - n; // never a negative zero
         if (node.op === "%") return tidy(n / 100);
         return n;
       };
@@ -290,11 +296,15 @@ export function evaluate(node: Node, ctx: EvalContext, rowShift = 0, env?: Env):
           if (!range || !target) return errors.ref;
           args.push({ kind: "range", range, ctx: target, ...(a.sheet ? { sheet: a.sheet } : {}) });
         } else {
-          args.push(toArg(evaluate(a, ctx, rowShift, env)));
+          const arg = toArg(evaluate(a, ctx, rowShift, env));
+          if (a.type === "ref" && arg.kind === "value") arg.fromRef = true;
+          args.push(arg);
         }
       }
       if (lift && args.some((a) => a.kind === "array")) return lifted(fn, args, ctx);
-      return fn(args, ctx);
+      const result = fn(args, ctx);
+      // never a negative zero (INT(-0), ROUND(-0.4)): Excel shows 0, and kernels agree
+      return result === 0 ? 0 : result;
     }
   }
 }
@@ -509,7 +519,7 @@ export function eachValue(args: Arg[], _ctx: EvalContext, visit: (v: Scalar, fro
     if (arg.kind === "range") arg.ctx.eachInRange(arg.range, (v) => visit(v, true));
     else if (arg.kind === "array") for (const v of arg.array.data) visit(v, true);
     else if (arg.kind === "lambda") visit(errors.value, false);
-    else visit(arg.value, false);
+    else visit(arg.value, !!arg.fromRef);
   }
 }
 
@@ -675,8 +685,10 @@ export const FUNCTIONS: Record<string, Fn> = {
   },
   COUNT: (args, ctx) => {
     let n = 0;
-    eachValue(args, ctx, (v) => {
+    eachValue(args, ctx, (v, fromRange) => {
       if (typeof v === "number") n++;
+      // typed straight into the arguments, TRUE and "2" count too (Excel)
+      else if (!fromRange && (typeof v === "boolean" || (typeof v === "string" && !isError(toNumber(v))))) n++;
     });
     return n;
   },

@@ -84,8 +84,8 @@ function print(node: Node, shift: number): string {
     }
     case "binary": {
       const p = PREC[node.op];
-      // ^ is right associative, everything else is left associative
-      const rightAssoc = node.op === "^";
+      // every operator is left associative (^ too, as in Excel)
+      const rightAssoc = false;
       const left = wrap(node.left, shift, rightAssoc ? p + 1 : p);
       const right = wrap(node.right, shift, rightAssoc ? p : p + 1);
       return `${left}${node.op}${right}`;
