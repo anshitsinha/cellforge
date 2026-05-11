@@ -69,8 +69,8 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Formula auditing: trace precedents/dependents, step-by-step evaluation, precise broken-reference locator, hard-coded-number lint
-- [ ] Audit engine: the cells a formula reads (precedents), the formulas that read a cell (dependents, across sheets), R1C1 shape to spot a formula that differs from its neighbours
-- [ ] Step-by-step evaluation: every part of a formula with its value, nested, so you can see where a result comes from
+- [x] Audit engine: the cells a formula reads (precedents), the formulas that read a cell (dependents, across sheets), R1C1 shape to spot a formula that differs from its neighbours
+- [x] Step-by-step evaluation: every part of a formula with its value, nested, so you can see where a result comes from
 - [ ] Checks: #REF! inside a formula (where exactly), numbers typed into formulas, a formula unlike the ones above and below, references to empty cells
 - [ ] Inspect panel (Ctrl+[ ): all of the above for the selected cell, precedents/dependents highlighted on the grid and clickable
 - [ ] Tests, user guide

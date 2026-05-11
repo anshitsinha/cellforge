@@ -8,3 +8,4 @@ export { moveFormula } from "./move";
 export { EXAMPLE_CELLS, FUNCTION_INFO, signature, type FunctionArg, type FunctionCategory, type FunctionInfo } from "./functions";
 export { parseTableSpec, type TableSpec } from "./tablespec";
 export { diagnoseMiss, squeeze } from "./diagnose";
+export { hardCodedNumbers, hasRefError, references, shape, steps, type Finding, type Reference, type Step } from "./audit";
