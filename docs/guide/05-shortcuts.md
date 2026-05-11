@@ -24,6 +24,7 @@
 | Ctrl + Z / Ctrl + Y | Undo / redo |
 | Ctrl + K | Command palette: search every command |
 | Ctrl + H | History and versions panel |
+| Ctrl + [ | Inspect the selected cell |
 | Ctrl + T | Make a table from the selection |
 | Ctrl + F3 | Names and tables |
 | Ctrl + S / Ctrl + Shift + S | Save / Save as (a .cellforge file) |

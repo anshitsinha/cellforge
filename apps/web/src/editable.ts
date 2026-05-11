@@ -1223,6 +1223,31 @@ export class EditableSource implements DataSource {
     return { type: "range", range: { top, left, bottom, right }, absTop: true, absBottom: true, absLeft: true, absRight: true, ...(sheet ? { sheet } : {}) };
   }
 
+  /** The formula at a cell (typed or from a fill) and the shift it's evaluated at. */
+  formulaAt(row: number, col: number): { ast: Node; shift: number } | null {
+    const b = this.toBase(row);
+    const stored = this.edits.get(b)?.get(col);
+    if (isFormula(stored)) return stored.ast ? { ast: stored.ast, shift: effectiveShift(stored, row) } : null;
+    if (stored !== undefined) return null;
+    const fill = this.fillAt(b, col);
+    if (fill && isFormula(fill.template) && fill.template.ast) return { ast: fill.template.ast, shift: row - fill.origin };
+    return null;
+  }
+
+  /** Every typed formula (view row, column, AST, shift) and every fill block, for finding dependents. */
+  formulaCells(): { cells: { row: number; col: number; ast: Node; shift: number }[]; fills: { top: number; bottom: number; col: number; ast: Node; origin: number }[] } {
+    const viewOf = this.viewLookup();
+    const cells: { row: number; col: number; ast: Node; shift: number }[] = [];
+    for (const [id, cols] of this.edits) {
+      const row = viewOf(id);
+      if (row < 0) continue;
+      for (const [col, v] of cols) if (isFormula(v) && v.ast) cells.push({ row, col, ast: v.ast, shift: effectiveShift(v, row) });
+    }
+    // fills are kept unsorted, so their rows are view rows
+    const fills = this.order ? [] : this.fills.flatMap((f) => (isFormula(f.template) && f.template.ast ? [{ top: f.top, bottom: f.bottom, col: f.col, ast: f.template.ast, origin: f.origin }] : []));
+    return { cells, fills };
+  }
+
   /** Why a cell shows an error, when cellforge can tell (lookup near misses). */
   hintAt(row: number, col: number): ErrorHint | null {
     if (row >= this.rowCount || col >= this.colCount) return null;

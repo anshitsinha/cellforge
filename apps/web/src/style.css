@@ -447,6 +447,50 @@ button:disabled {
   opacity: 0.5;
 }
 
+.ip-finding {
+  margin: 6px 0;
+  padding: 6px 8px;
+  border-left: 3px solid #f29900;
+  background: color-mix(in srgb, #f29900 10%, transparent);
+}
+
+.ip-steps,
+.ip-steps ul {
+  list-style: none;
+  margin: 0;
+  padding-left: 14px;
+}
+
+.ip-steps {
+  padding-left: 0;
+}
+
+.ip-step {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding: 2px 0;
+  flex-wrap: wrap;
+}
+
+.ip-step code {
+  font: 12px ui-monospace, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.ip-arrow {
+  color: var(--muted);
+}
+
+.ip-places {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
 /* --- command palette ------------------------------------------------------- */
 
 .palette-backdrop {

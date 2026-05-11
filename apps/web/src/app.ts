@@ -11,6 +11,7 @@ import { SheetTabs } from "./tabs";
 import { NUMBER_FORMATS, setupFormatBar } from "./formatbar";
 import { attachFormulaAssist } from "./formulaassist";
 import { setupNamesUi } from "./namesui";
+import { setupInspectPanel } from "./inspectpanel";
 import { type Command, setupPalette } from "./palette";
 import { setupHistoryPanel, type TrailEntry } from "./historypanel";
 import { AutoSaver, fromFile, OpfsStore, packWorkbook, toFile, unpackWorkbook, type JournalEntry } from "./persist";
@@ -119,6 +120,7 @@ grid.onSelectionChange = () => {
   updateSelectionStats();
   formatBar.sync();
   historyPanel.render();
+  inspectPanel.render();
 };
 
 // a lookup that found nothing for a fixable reason explains itself here
@@ -326,6 +328,7 @@ function refresh() {
   syncFormulaBar();
   formatBar.sync();
   historyPanel.render();
+  inspectPanel.render();
   updateStatus();
   updateSelectionStats();
   undoButton.disabled = !history.canUndo;
@@ -833,6 +836,7 @@ sheet.addEventListener("contextmenu", (e) => {
   }
   if (kind === "cell") {
     sep();
+    item("Inspect this cell", "Ctrl [", () => inspectPanel.toggle());
     item("Make a table", "Ctrl T", () => void namesUi.makeTable());
     item("Define a name…", "", () => namesUi.defineName());
     item("Names and tables…", "Ctrl F3", () => namesUi.manager());
@@ -1067,7 +1071,33 @@ const historyPanel = setupHistoryPanel({
   trail: (sheetId, rowId, col) => trail.get(`${sheetId}:${rowId}:${col}`) ?? [],
 });
 
-document.getElementById("btn-history")!.addEventListener("click", () => historyPanel.toggle());
+const inspectPanel = setupInspectPanel({
+  root: document.getElementById("inspect-panel")!,
+  workbook: () => workbook,
+  activeSheet: () => activeId,
+  selection: () => grid.selection,
+  goTo: (sheetId, row, col) => {
+    showSheet(sheetId);
+    grid.select(row, col);
+    grid.focus();
+  },
+  highlight: (list) => grid.setHighlights(list),
+  onOpen: () => {
+    if (historyPanel.open) historyPanel.toggle();
+  },
+});
+
+document.getElementById("btn-history")!.addEventListener("click", () => {
+  inspectPanel.close();
+  historyPanel.toggle();
+});
+// Ctrl+[ inspects the cell (Excel's "go to precedents" key)
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "[") {
+    e.preventDefault();
+    inspectPanel.toggle();
+  }
+});
 // Excel: Ctrl+T makes a table, Ctrl+F3 opens the name manager
 document.addEventListener("keydown", (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey || !gridHasFocus()) return;
@@ -1114,6 +1144,7 @@ function paletteCommands(): Command[] {
   const { row, col } = grid.selection;
   const list: Command[] = [
     { id: "undo", title: "Undo", keys: "Ctrl Z", run: undo },
+    { id: "inspect", title: "Inspect this cell", keys: "Ctrl [", hint: "trace precedents dependents evaluate formula audit", run: () => inspectPanel.toggle() },
     { id: "history", title: "Show history and versions", keys: "Ctrl H", hint: "timeline compare changes audit", run: () => historyPanel.toggle() },
     { id: "version-save", title: "Save a version…", hint: "name snapshot checkpoint", run: () => { if (!historyPanel.open) historyPanel.toggle(); document.querySelector<HTMLInputElement>(".hp-version-form input")?.focus(); } },
     { id: "redo", title: "Redo", keys: "Ctrl Y", run: redo },

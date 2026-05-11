@@ -108,6 +108,7 @@ export class Grid {
   private frozenRows = 0;
   private frozenCols = 0;
   private widthsKey = "";
+  private highlights: { range: CellRange; color: string }[] = [];
   /** merged blocks, in real row / column numbers */
   private merges: CellRange[] = [];
   private readonly headerHeight: number;
@@ -279,6 +280,12 @@ export class Grid {
     this.hiddenCols = hidden;
     this.columns = layout;
     this.clampScroll();
+    this.invalidate();
+  }
+
+  /** Coloured outlines over ranges (e.g. a formula's precedents), drawn dashed. */
+  setHighlights(list: readonly { range: CellRange; color: string }[]): void {
+    this.highlights = list.map((h) => ({ range: { ...h.range }, color: h.color }));
     this.invalidate();
   }
 
@@ -1563,6 +1570,30 @@ export class Grid {
         }
         ctx.restore();
       }
+    }
+
+    // highlighted ranges (precedents / dependents)
+    if (this.highlights.length) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(rowHeaderWidth, headerHeight, bodyW, bodyH);
+      ctx.clip();
+      ctx.setLineDash([5, 3]);
+      ctx.lineWidth = 2;
+      for (const h of this.highlights) {
+        const t = h.range;
+        if (t.bottom < 0 || t.top >= this.source.rowCount) continue;
+        const d0 = dispTop(Math.max(0, t.top));
+        const d1 = dispBottom(Math.min(t.bottom, this.source.rowCount - 1));
+        const x0 = colX(t.left);
+        const x1 = colX(Math.min(t.right, columns.count - 1)) + columns.width(Math.min(t.right, columns.count - 1));
+        const y0 = rowY(d0);
+        const y1 = rowY(d1) + rowH(d1);
+        if (y1 < headerHeight || y0 > headerHeight + bodyH) continue;
+        ctx.strokeStyle = h.color;
+        ctx.strokeRect(Math.round(x0) + 1, Math.round(Math.max(y0, headerHeight - 2)) + 1, Math.round(x1 - x0) - 2, Math.round(Math.min(y1, headerHeight + bodyH + 2) - Math.max(y0, headerHeight - 2)) - 2);
+      }
+      ctx.restore();
     }
 
     // the fill handle, and while dragging it, the area it will fill

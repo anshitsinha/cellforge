@@ -14,8 +14,11 @@ export interface Reference {
   range: RangeRef;
 }
 
-/** Every cell or range a formula reads, at a given fill shift. */
-export function references(node: Node, shift = 0): Reference[] {
+/**
+ * Every cell or range a formula reads, at a given fill shift. With a
+ * context, names and table references are followed to the cells they mean.
+ */
+export function references(node: Node, shift = 0, ctx?: EvalContext): Reference[] {
   const out: Reference[] = [];
   const visit = (n: Node) => {
     switch (n.type) {
@@ -35,9 +38,20 @@ export function references(node: Node, shift = 0): Reference[] {
         visit(n.left);
         return visit(n.right);
       case "call":
+        if (n.name === "__TABLE" && ctx?.structured) {
+          const [t, sp] = n.args;
+          const def = t?.type === "string" && sp?.type === "string" ? ctx.structured(t.value, sp.value) : null;
+          if (def) out.push(...references(def, 0));
+          return;
+        }
         return n.args.forEach(visit);
       case "array":
         return n.rows.forEach((r) => r.forEach(visit));
+      case "name": {
+        const def = ctx?.nameDef?.(n.name);
+        if (def) out.push(...references(def, 0));
+        return;
+      }
       default:
         return;
     }
