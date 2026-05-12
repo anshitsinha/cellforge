@@ -69,10 +69,10 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Streaming `.xlsx` reader and writer (values, formulas, styles, merges, names, multiple sheets), round-trip tested
-- [ ] Zip reading and writing with the browser's own compression streams (no library)
-- [ ] Fast XML scanning; shared strings, cell types, shared formulas expanded, _xlfn./_xlpm. prefixes handled
-- [ ] Styles: fonts, fills, borders, alignment, number formats (built-in and custom), theme colours
-- [ ] Sheet layout: merges, column widths, row heights, hidden rows/columns, freeze panes; defined names
+- [x] Zip reading and writing with the browser's own compression streams (no library)
+- [x] Fast XML scanning; shared strings, cell types, shared formulas expanded, _xlfn./_xlpm. prefixes handled
+- [x] Styles: fonts, fills, borders, alignment, number formats (built-in and custom), theme colours
+- [x] Sheet layout: merges, column widths, row heights, hidden rows/columns, freeze panes; defined names
 - [ ] Import into the workbook (columnar for big sheets) and export from it; Open accepts .xlsx, Save as .xlsx
 - [ ] Round-trip tests, user guide
 

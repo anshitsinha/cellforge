@@ -5,3 +5,6 @@ export { radixSortIndices } from "./radix";
 export * from "./formula";
 export { formatValue, formatGeneral, isDateFormat, adjustDecimals, parseTyped, serialToParts, dateToSerial, type Formatted } from "./numfmt";
 export { extendSeries, seriesOf, type SeriesValue } from "./series";
+export { readXlsx } from "./xlsx/read";
+export { writeXlsx } from "./xlsx/write";
+export type { XBorder, XCell, XRange, XSheet, XStyle, XWorkbook } from "./xlsx/model";
