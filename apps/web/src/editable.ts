@@ -246,6 +246,16 @@ export class EditableSource implements DataSource {
     this.nextRowId = base.rowCount;
   }
 
+  /** Put many cells in at once (opening a file): no per-cell recalculation. */
+  loadEdits(cells: { row: number; col: number; value: Stored }[]): void {
+    for (const c of cells) {
+      const v = isFormula(c.value) ? { ...c.value, anchor: c.row } : c.value;
+      this.putEdit(this.toBase(c.row), c.col, v);
+    }
+    this.rebuildDeps();
+    this.clearCaches();
+  }
+
   /** The data underneath the edits (imported, blank or generated). */
   get baseSource(): DataSource {
     return this.base;

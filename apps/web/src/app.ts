@@ -12,6 +12,7 @@ import { NUMBER_FORMATS, setupFormatBar } from "./formatbar";
 import { attachFormulaAssist } from "./formulaassist";
 import { setupNamesUi } from "./namesui";
 import { setupInspectPanel } from "./inspectpanel";
+import { openXlsx, saveXlsx } from "./xlsxio";
 import { type Command, setupPalette } from "./palette";
 import { setupHistoryPanel, type TrailEntry } from "./historypanel";
 import { AutoSaver, fromFile, OpfsStore, packWorkbook, toFile, unpackWorkbook, type JournalEntry } from "./persist";
@@ -1022,6 +1023,19 @@ async function saveFile(saveAs = false) {
 }
 
 document.getElementById("btn-save")!.addEventListener("click", () => void saveFile());
+
+async function exportExcel() {
+  try {
+    statusLeft.textContent = "Writing the Excel file…";
+    const blob = await saveXlsx(workbook);
+    const name = `${currentName.replace(/\.(csv|tsv|txt|cellforge|xlsx|xlsm)$/i, "") || "workbook"}.xlsx`;
+    download(blob, name);
+    statusLeft.textContent = `Downloaded ${name}`;
+  } catch (e) {
+    statusLeft.textContent = `Couldn't export: ${(e as Error).message}`;
+  }
+}
+document.getElementById("btn-export-xlsx")!.addEventListener("click", () => void exportExcel());
 document.addEventListener("keydown", (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
   const k = e.key.toLowerCase();
@@ -1194,6 +1208,7 @@ function paletteCommands(): Command[] {
     { id: "open", title: "Open…", keys: "Ctrl O", hint: "import csv file cellforge", run: click("btn-open") },
     { id: "save", title: "Save", keys: "Ctrl S", hint: "file cellforge", run: () => saveFile() },
     { id: "save-as", title: "Save as…", keys: "Ctrl Shift S", run: () => saveFile(true) },
+    { id: "export-xlsx", title: "Export Excel (.xlsx)", hint: "download save excel xlsx", run: () => exportExcel() },
     { id: "export", title: "Export CSV", hint: "download save", run: click("btn-export") },
     { id: "demo", title: "Load the 100M-row demo", run: click("btn-demo") },
   ];
@@ -1285,7 +1300,7 @@ document.getElementById("btn-export")!.addEventListener("click", async () => {
 
 const fileInput = document.createElement("input");
 fileInput.type = "file";
-fileInput.accept = ".cellforge,.csv,.tsv,.txt,text/csv,text/tab-separated-values";
+fileInput.accept = ".cellforge,.xlsx,.xlsm,.csv,.tsv,.txt,text/csv,text/tab-separated-values";
 fileInput.addEventListener("change", () => {
   const file = fileInput.files?.[0];
   if (file) openFile(file);
@@ -1297,6 +1312,19 @@ let cancelImport: (() => void) | null = null;
 
 async function openFile(file: File) {
   cancelImport?.();
+  if (/\.xls[xm]$/i.test(file.name)) {
+    try {
+      statusLeft.textContent = `Opening ${file.name}…`;
+      const wb = await openXlsx(await file.arrayBuffer());
+      fileHandle = null;
+      loadWorkbook(wb, (wb.visible[0] ?? wb.sheets[0]).id, file.name.replace(/\.xls[xm]$/i, ""));
+      void snapshotNow();
+      statusLeft.textContent = `Opened ${file.name}: ${wb.sheets.length} sheet${wb.sheets.length === 1 ? "" : "s"}`;
+    } catch (e) {
+      statusLeft.textContent = `Couldn't open ${file.name}: ${(e as Error).message}`;
+    }
+    return;
+  }
   if (/\.cellforge$/i.test(file.name)) {
     try {
       statusLeft.textContent = `Opening ${file.name}…`;

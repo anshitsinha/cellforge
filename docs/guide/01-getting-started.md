@@ -7,7 +7,7 @@ and no account.
 ## Open it
 
 - **A blank sheet:** open the app. It starts with an empty sheet, like any spreadsheet.
-- **Your own data:** click **Open**, or drag a `.csv`, `.tsv` or `.txt` file
+- **Your own data:** click **Open**, or drag an Excel (`.xlsx`), `.csv`, `.tsv` or `.txt` file
   anywhere onto the window. Big files stream in, so the page stays responsive
   while they load.
 - **The 100M-row demo:** click **100M demo** to see what scale feels like:
@@ -57,3 +57,4 @@ A few things to know:
 - [Formatting](#/guide/08-formatting)
 - [Command palette](#/guide/09-command-palette)
 - [History and versions](#/guide/10-history)
+- [Excel files](#/guide/13-excel-files)

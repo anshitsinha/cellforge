@@ -73,8 +73,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - [x] Fast XML scanning; shared strings, cell types, shared formulas expanded, _xlfn./_xlpm. prefixes handled
 - [x] Styles: fonts, fills, borders, alignment, number formats (built-in and custom), theme colours
 - [x] Sheet layout: merges, column widths, row heights, hidden rows/columns, freeze panes; defined names
-- [ ] Import into the workbook (columnar for big sheets) and export from it; Open accepts .xlsx, Save as .xlsx
-- [ ] Round-trip tests, user guide
+- [x] Import into the workbook (columnar for big sheets) and export from it; Open accepts .xlsx, Save as .xlsx
+- [x] Round-trip tests, user guide
 
 ## Milestones
 
