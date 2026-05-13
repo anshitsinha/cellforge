@@ -68,13 +68,11 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Streaming `.xlsx` reader and writer (values, formulas, styles, merges, names, multiple sheets), round-trip tested
-- [x] Zip reading and writing with the browser's own compression streams (no library)
-- [x] Fast XML scanning; shared strings, cell types, shared formulas expanded, _xlfn./_xlpm. prefixes handled
-- [x] Styles: fonts, fills, borders, alignment, number formats (built-in and custom), theme colours
-- [x] Sheet layout: merges, column widths, row heights, hidden rows/columns, freeze panes; defined names
-- [x] Import into the workbook (columnar for big sheets) and export from it; Open accepts .xlsx, Save as .xlsx
-- [x] Round-trip tests, user guide
+### Parquet and JSON; CSV options (delimiter, encoding)
+- [ ] CSV/TSV options: encoding (UTF-8, Windows-1252, UTF-16, auto-detected), delimiter, header row on/off, rows to skip; a preview before opening
+- [ ] JSON: an array of records (nested objects flattened to a.b columns) or an array of arrays; JSON Lines
+- [ ] Parquet: plain and dictionary encodings, uncompressed / Snappy / gzip pages, the common column types
+- [ ] Tests, user guide
 
 ## Milestones
 
@@ -111,9 +109,9 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Compiler coverage for the new functions; Excel conformance corpus in CI
 
 ### M3: Files and messy-export import 🔨
-- 🔨 Streaming `.xlsx` reader and writer (values, formulas, styles, merges,
+- ✅ Streaming `.xlsx` reader and writer (values, formulas, styles, merges,
   names, multiple sheets), round-trip tested
-- ⬜ Parquet and JSON; CSV options (delimiter, encoding)
+- 🔨 Parquet and JSON; CSV options (delimiter, encoding)
 - ⬜ Report un-wrapping: header-row detection, drop title/subtotal/footer rows,
   fill down group labels, flatten multi-row headers
 - ⬜ Folder import with column alignment across files
