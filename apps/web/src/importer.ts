@@ -1,4 +1,4 @@
-import { Table } from "@cellforge/core";
+import { Table, type CsvOptions } from "@cellforge/core";
 import type { ImportMessage } from "./workers/import.worker";
 
 export interface ImportProgress {
@@ -14,6 +14,7 @@ export interface ImportProgress {
 export function importCsv(
   file: File,
   onProgress: (p: ImportProgress) => void,
+  options: CsvOptions = {},
 ): { result: Promise<{ table: Table; ms: number }>; cancel: () => void } {
   const worker = new Worker(new URL("./workers/import.worker.ts", import.meta.url), {
     type: "module",
@@ -40,7 +41,7 @@ export function importCsv(
     };
   });
 
-  worker.postMessage({ file });
+  worker.postMessage({ file, options });
 
   return {
     result,

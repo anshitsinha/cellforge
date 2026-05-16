@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { ColumnBuilder, CsvParser, detectDelimiter, transferablesOf } from "@cellforge/core";
+import { afterLines, ColumnBuilder, CsvParser, detectDelimiter, detectEncoding, transferablesOf, type CsvOptions } from "@cellforge/core";
 
 /**
  * Parses a CSV file off the main thread and posts the finished columns back.
@@ -16,24 +16,34 @@ export type ImportMessage =
 
 const PROGRESS_INTERVAL_MS = 150;
 
-self.onmessage = async (e: MessageEvent<{ file: File }>) => {
+self.onmessage = async (e: MessageEvent<{ file: File; options?: CsvOptions }>) => {
   try {
-    await importFile(e.data.file);
+    await importFile(e.data.file, e.data.options ?? {});
   } catch (err) {
     post({ type: "error", message: err instanceof Error ? err.message : String(err) });
   }
 };
 
-async function importFile(file: File): Promise<void> {
+async function importFile(file: File, options: CsvOptions): Promise<void> {
   const started = performance.now();
   const reader = file.stream().getReader();
-  const decoder = new TextDecoder("utf-8");
+  let decoder: TextDecoder | null = null;
+  let skip = options.skipRows ?? 0;
+  const header = options.header ?? true;
 
   let builders: ColumnBuilder[] | null = null;
   let rows = 0;
   let parser: CsvParser | null = null;
 
   const onRow = (fields: string[]) => {
+    if (skip > 0) {
+      skip--;
+      return;
+    }
+    if (!builders && !header) {
+      // no header row: name the columns and keep this row as data
+      builders = fields.map((_, i) => new ColumnBuilder(`column_${i + 1}`));
+    }
     if (!builders) {
       // first record is the header. blank header names get spreadsheet-ish
       // fallbacks so the grid always has something to show
@@ -61,12 +71,14 @@ async function importFile(file: File): Promise<void> {
     const { done, value } = await reader.read();
     if (done) break;
     bytes += value.byteLength;
+    // the encoding is worked out from the first bytes unless it was chosen
+    decoder ??= new TextDecoder(options.encoding ?? detectEncoding(value));
     let text = decoder.decode(value, { stream: true });
 
     if (first) {
       first = false;
       if (text.charCodeAt(0) === 0xfeff) text = text.slice(1); // Excel's UTF-8 BOM
-      parser = new CsvParser(onRow, detectDelimiter(text.slice(0, 64 * 1024)));
+      parser = new CsvParser(onRow, options.delimiter ?? detectDelimiter(afterLines(text, options.skipRows ?? 0).slice(0, 64 * 1024)));
     }
     parser!.push(text);
 
@@ -78,7 +90,7 @@ async function importFile(file: File): Promise<void> {
   }
 
   if (!parser) throw new Error("The file is empty.");
-  parser.push(decoder.decode());
+  parser.push(decoder!.decode());
   parser.end();
   if (!builders) throw new Error("No header row found.");
 

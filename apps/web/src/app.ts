@@ -13,6 +13,8 @@ import { attachFormulaAssist } from "./formulaassist";
 import { setupNamesUi } from "./namesui";
 import { setupInspectPanel } from "./inspectpanel";
 import { openXlsx, saveXlsx } from "./xlsxio";
+import { askCsvOptions } from "./importdialog";
+import { jsonToColumns, Table } from "@cellforge/core";
 import { type Command, setupPalette } from "./palette";
 import { setupHistoryPanel, type TrailEntry } from "./historypanel";
 import { AutoSaver, fromFile, OpfsStore, packWorkbook, toFile, unpackWorkbook, type JournalEntry } from "./persist";
@@ -1300,7 +1302,7 @@ document.getElementById("btn-export")!.addEventListener("click", async () => {
 
 const fileInput = document.createElement("input");
 fileInput.type = "file";
-fileInput.accept = ".cellforge,.xlsx,.xlsm,.csv,.tsv,.txt,text/csv,text/tab-separated-values";
+fileInput.accept = ".cellforge,.xlsx,.xlsm,.csv,.tsv,.txt,.json,.jsonl,.ndjson,text/csv,text/tab-separated-values";
 fileInput.addEventListener("change", () => {
   const file = fileInput.files?.[0];
   if (file) openFile(file);
@@ -1343,6 +1345,22 @@ async function openFile(file: File) {
     }
     return;
   }
+  if (/\.(json|jsonl|ndjson)$/i.test(file.name)) {
+    try {
+      const table = new Table(jsonToColumns(await file.text()));
+      loadSource(new EditableSource(table, SPARE_COLUMNS), file.name);
+      setInfo(`Opened ${table.rowCount.toLocaleString()} records from ${file.name}`);
+    } catch (e) {
+      statusLeft.textContent = `Couldn't open ${file.name}: ${(e as Error).message}`;
+    }
+    return;
+  }
+  // a text file: show what was detected and let the user adjust it first
+  const options = await askCsvOptions(file);
+  if (!options) {
+    statusLeft.textContent = "Ready";
+    return;
+  }
   statusLeft.textContent = `Opening ${file.name}…`;
 
   const job = importCsv(file, ({ bytes, total, rows }) => {
@@ -1350,7 +1368,7 @@ async function openFile(file: File) {
     statusLeft.textContent =
       `Importing ${file.name} — ${pct}% (${formatBytes(bytes)} of ${formatBytes(total)}, ` +
       `${rowFormat.format(rows)} rows)`;
-  });
+  }, options);
   cancelImport = job.cancel;
 
   try {
