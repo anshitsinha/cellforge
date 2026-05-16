@@ -73,7 +73,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - [x] Statement parser: transaction lines start with a date, wrapped descriptions merged, debit/credit or signed amounts, balance column
 - [x] Date repair: dates without a year (12 Mar), year roll-over in December/January, day/month order per statement
 - [x] Running-balance check: every row's balance = previous + amount, breaks listed with page and row; opening/closing per page
-- [ ] Import dialog for .pdf and statement CSVs, one undo step; tests, user guide
+- [x] Import dialog for .pdf and statement CSVs, one undo step; tests, user guide
 
 ## Milestones
 

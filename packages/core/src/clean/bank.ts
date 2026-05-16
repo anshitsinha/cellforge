@@ -154,7 +154,9 @@ function dateBits(text: string, order: DateOrder): { y: number | null; m: number
   return null;
 }
 
-const looksLikeDate = (text: string) => dateBits(text, "dmy") !== null || dateBits(text, "mdy") !== null;
+/** Shaped like a date (even an impossible one like 31/02, which is kept as printed). */
+const DATE_SHAPE = /^(\d{1,2}[/.\-]\d{1,2}([/.\-]\d{2,4})?|\d{4}-\d{1,2}-\d{1,2})$/;
+const looksLikeDate = (text: string) => DATE_SHAPE.test(text.trim()) || dateBits(text, "dmy") !== null || dateBits(text, "mdy") !== null;
 
 /** A money amount, with any CR / DR / OD mark. */
 function money(text: string, style: NumberStyle): { value: number; mark: "cr" | "dr" | null } | null {

@@ -16,6 +16,14 @@ import { openXlsx, saveXlsx } from "./xlsxio";
 import { askCsvOptions } from "./importdialog";
 import { openCleanup } from "./cleanupdialog";
 import { openCombine } from "./combinedialog";
+import { importStatement, pickStatement } from "./statement";
+
+const statementDeps = () => ({
+  run: (a: Action) => run(a),
+  putBlob: (v: unknown) => blobs.put(v),
+  status: (t: string) => (statusLeft.textContent = t),
+  focusGrid: () => grid.focus(),
+});
 import { jsonToColumns, readParquet, Table } from "@cellforge/core";
 import { type Command, setupPalette } from "./palette";
 import { setupHistoryPanel, type TrailEntry } from "./historypanel";
@@ -1179,6 +1187,15 @@ function paletteCommands(): Command[] {
         ),
     })),
     {
+      id: "statement",
+      title: "Import a bank statement (PDF or CSV)…",
+      hint: "bank statement pdf transactions balance reconcile import",
+      run: () =>
+        void pickStatement().then((f) => {
+          if (f) void importStatement(f, statementDeps());
+        }),
+    },
+    {
       id: "cleanup",
       title: "Clean up this sheet (messy export)…",
       hint: "unwrap report header totals footers dates numbers text to numbers type",
@@ -1334,7 +1351,7 @@ document.getElementById("btn-export")!.addEventListener("click", async () => {
 
 const fileInput = document.createElement("input");
 fileInput.type = "file";
-fileInput.accept = ".cellforge,.xlsx,.xlsm,.csv,.tsv,.txt,.json,.jsonl,.ndjson,.parquet,text/csv,text/tab-separated-values";
+fileInput.accept = ".cellforge,.xlsx,.xlsm,.pdf,.csv,.tsv,.txt,.json,.jsonl,.ndjson,.parquet,text/csv,text/tab-separated-values";
 fileInput.addEventListener("change", () => {
   const file = fileInput.files?.[0];
   if (file) openFile(file);
@@ -1346,6 +1363,11 @@ let cancelImport: (() => void) | null = null;
 
 async function openFile(file: File) {
   cancelImport?.();
+  if (/\.pdf$/i.test(file.name)) {
+    // a PDF is read as a bank statement; its transactions go on a new sheet
+    await importStatement(file, statementDeps());
+    return;
+  }
   if (/\.xls[xm]$/i.test(file.name)) {
     try {
       statusLeft.textContent = `Opening ${file.name}…`;
