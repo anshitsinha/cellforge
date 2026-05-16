@@ -14,4 +14,5 @@ export { readParquet, rleHybrid, unsnappy, type ParquetResult } from "./parquet"
 export { dateParts, parseAs, parseDateLoose, parseNumberLoose, profileColumn, type ColumnProfile, type ColumnType, type DateOrder, type NumberStyle } from "./clean/values";
 export { findHeaderRow, unwrapReport, type DroppedRow, type Unwrapped } from "./clean/unwrap";
 export { alignColumns, columnKey, combineParts, type AlignedColumn, type FilePart } from "./clean/combine";
+export { parseStatement, rowsToLines, type Statement, type StatementCell, type StatementLine, type StatementPage, type StatementRole, type Transaction } from "./clean/bank";
 export { pageLines, readPdfText, type LineCell, type PdfPage, type TextItem } from "./pdf/read";

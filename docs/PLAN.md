@@ -70,9 +70,9 @@ tracker shows this expanded, with the first unticked step as the current one.
 
 ### Bank statements: local text-PDF/CSV import, multi-line merge, date repair,
 - [x] PDF text reader: objects and object streams, Flate, fonts with ToUnicode maps, text positions, lines and columns per page
-- [ ] Statement parser: transaction lines start with a date, wrapped descriptions merged, debit/credit or signed amounts, balance column
-- [ ] Date repair: dates without a year (12 Mar), year roll-over in December/January, day/month order per statement
-- [ ] Running-balance check: every row's balance = previous + amount, breaks listed with page and row; opening/closing per page
+- [x] Statement parser: transaction lines start with a date, wrapped descriptions merged, debit/credit or signed amounts, balance column
+- [x] Date repair: dates without a year (12 Mar), year roll-over in December/January, day/month order per statement
+- [x] Running-balance check: every row's balance = previous + amount, breaks listed with page and row; opening/closing per page
 - [ ] Import dialog for .pdf and statement CSVs, one undo step; tests, user guide
 
 ## Milestones
