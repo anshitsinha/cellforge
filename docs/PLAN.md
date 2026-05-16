@@ -68,11 +68,12 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Folder import with column alignment across files
-- [x] Combine logic: read many files (CSV, Excel, JSON, Parquet), match columns by name (case, spacing and common synonyms), keep the union, add a source-file column
-- [x] Alignment preview: which file has which column, columns that only some files have, rename/merge before combining
-- [x] Pick a folder (or several files) and stream them in, one undo step
-- [x] Tests, user guide
+### Bank statements: local text-PDF/CSV import, multi-line merge, date repair,
+- [x] PDF text reader: objects and object streams, Flate, fonts with ToUnicode maps, text positions, lines and columns per page
+- [ ] Statement parser: transaction lines start with a date, wrapped descriptions merged, debit/credit or signed amounts, balance column
+- [ ] Date repair: dates without a year (12 Mar), year roll-over in December/January, day/month order per statement
+- [ ] Running-balance check: every row's balance = previous + amount, breaks listed with page and row; opening/closing per page
+- [ ] Import dialog for .pdf and statement CSVs, one undo step; tests, user guide
 
 ## Milestones
 
@@ -114,10 +115,10 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Parquet and JSON; CSV options (delimiter, encoding)
 - ✅ Report un-wrapping: header-row detection, drop title/subtotal/footer rows,
   fill down group labels, flatten multi-row headers
-- 🔨 Folder import with column alignment across files
+- ✅ Folder import with column alignment across files
 - ✅ Parsers: accounting negatives, locale numbers, any date format, currencies (with the item above)
 - ✅ Type confidence report with jump-to (with the item above)
-- ⬜ Bank statements: local text-PDF/CSV import, multi-line merge, date repair,
+- 🔨 Bank statements: local text-PDF/CSV import, multi-line merge, date repair,
   running-balance validation per page
 - ⬜ Trial balance import mapper (debit/credit or signed, code/name/current/prior)
 
