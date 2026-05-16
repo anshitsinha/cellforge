@@ -69,11 +69,11 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Report un-wrapping: header-row detection, drop title/subtotal/footer rows,
-- [ ] Value parsers: accounting negatives (1,234), trailing minus, CR/DR, locale numbers (1.234,56), currency symbols and codes, percentages, any date format (day/month order worked out per column), ISO timestamps
-- [ ] Report un-wrapping: find the header row, drop titles / blank / subtotal / total / footer / repeated-header rows, fill down group labels, flatten two-row headers
-- [ ] Clean-up tool: preview what will change, then make a clean sheet (one undo step) with a report of every dropped row and why
-- [ ] Type confidence report: per column the type found, how many values fit, and the ones that didn't, with jump-to
-- [ ] Tests, user guide
+- [x] Value parsers: accounting negatives (1,234), trailing minus, CR/DR, locale numbers (1.234,56), currency symbols and codes, percentages, any date format (day/month order worked out per column), ISO timestamps
+- [x] Report un-wrapping: find the header row, drop titles / blank / subtotal / total / footer / repeated-header rows, fill down group labels, flatten two-row headers
+- [x] Clean-up tool: preview what will change, then make a clean sheet (one undo step) with a report of every dropped row and why
+- [x] Type confidence report: per column the type found, how many values fit, and the ones that didn't, with jump-to
+- [x] Tests, user guide
 
 ## Milestones
 

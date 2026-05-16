@@ -217,6 +217,22 @@ button:disabled {
   border-radius: 2px;
 }
 
+.cleanup-cols {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.cleanup-cols td,
+.cleanup-cols th {
+  white-space: normal !important;
+  max-width: none !important;
+}
+
+.cleanup-warn {
+  color: #f29900;
+  font-weight: 600;
+}
+
 .import-dialog {
   width: min(760px, 100%);
 }

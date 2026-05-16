@@ -14,6 +14,7 @@ import { type ColumnRemoval, type EditableSource, effectiveShift, type Fill, typ
 import { BlankSource, EditableSource as Source } from "./editable";
 import { CLEAR_ALL, type ColumnStyles, type StylePatch } from "./styles";
 import { captureVersion, versionSheets, type Version } from "./versions";
+import { buildClean, buildDropped, namedHeader, planCleanup, sheetText } from "./cleanup";
 import { type IdRuns, type RowMap, runsLength } from "./rowmap";
 import { nameProblem, type NameDef, type Sheet, type Workbook } from "./workbook";
 
@@ -785,6 +786,58 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       return { type: "cells.restore", params: restoreParams(id, before, undefined, formats) };
     },
   });
+
+  // ---------------------------------------------------- report clean-up --
+  registry
+    .register<{ sheet?: string; unwrap?: boolean }>({
+      type: "data.cleanup",
+      title:
+        "Make a clean copy of a messy export: find the header row, drop titles, totals, footers and repeated headers, fill down group labels, and turn text numbers and dates into real ones. Adds a sheet with the clean data and one listing the dropped rows.",
+      schema: withSheet({ unwrap: s.bool("un-wrap a printed report (default true)") }, []),
+      describe: () => "clean up",
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const original = ctx.workbook.get(id);
+        const { plan, rows } = planCleanup(sheetText(data), p.unwrap ?? true, namedHeader(data) ? 1 : 0);
+        if (!plan.dataRows) throw new Error("No data rows found to clean.");
+        const at = ctx.workbook.indexOf(id) + 1;
+        const added: string[] = [];
+        const clean = ctx.workbook.add(ctx.workbook.freeName(`${original.name} clean`.slice(0, 31)), buildClean(plan, rows).source, at);
+        added.push(clean.id);
+        if (plan.dropped.length) {
+          const dropped = ctx.workbook.add(ctx.workbook.freeName(`${original.name} dropped`.slice(0, 31)), buildDropped(plan), at + 1);
+          added.push(dropped.id);
+        }
+        ctx.onSheetShown?.(clean.id);
+        return { type: "sheets.remove", params: { ids: added } };
+      },
+    })
+    .register<{ ids: string[] }>({
+      type: "sheets.remove",
+      title: "Take sheets out (undo of adding them)",
+      internal: true,
+      schema: s.object({ ids: s.array(s.string()) }),
+      describe: () => "sheets",
+      apply(ctx, p) {
+        // last sheet first, so each recorded index is right when they go back in ascending order
+        const order = [...p.ids].sort((a, b) => ctx.workbook.indexOf(b) - ctx.workbook.indexOf(a));
+        const removed = order.map((sid) => ctx.workbook.remove(sid));
+        return { type: "sheets.put", params: { sheets: ctx.blobs.put(removed) } };
+      },
+    })
+    .register<{ sheets: string }>({
+      type: "sheets.put",
+      title: "Put sheets back",
+      internal: true,
+      schema: s.object({ sheets: s.string() }),
+      describe: () => "sheets",
+      apply(ctx, p) {
+        const list = ctx.blobs.get<{ sheet: Sheet; index: number }[]>(p.sheets).slice().reverse();
+        for (const { sheet, index } of list) ctx.workbook.add(sheet.name, sheet.source, index, sheet.id, { color: sheet.color, hidden: sheet.hidden });
+        return { type: "sheets.remove", params: { ids: list.map((x) => x.sheet.id) } };
+      },
+    });
 
   // ------------------------------------------------------------ clean --
   const cleanAction = (type: string, title: string, verb: string, change: (v: CellValue | boolean) => Stored | undefined) =>
