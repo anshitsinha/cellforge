@@ -71,8 +71,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 ### Parquet and JSON; CSV options (delimiter, encoding)
 - [x] CSV/TSV options: encoding (UTF-8, Windows-1252, UTF-16, auto-detected), delimiter, header row on/off, rows to skip; a preview before opening
 - [x] JSON: an array of records (nested objects flattened to a.b columns) or an array of arrays; JSON Lines
-- [ ] Parquet: plain and dictionary encodings, uncompressed / Snappy / gzip pages, the common column types
-- [ ] Tests, user guide
+- [x] Parquet: plain and dictionary encodings, uncompressed / Snappy / gzip pages, the common column types
+- [x] Tests, user guide
 
 ## Milestones
 

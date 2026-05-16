@@ -14,7 +14,7 @@ import { setupNamesUi } from "./namesui";
 import { setupInspectPanel } from "./inspectpanel";
 import { openXlsx, saveXlsx } from "./xlsxio";
 import { askCsvOptions } from "./importdialog";
-import { jsonToColumns, Table } from "@cellforge/core";
+import { jsonToColumns, readParquet, Table } from "@cellforge/core";
 import { type Command, setupPalette } from "./palette";
 import { setupHistoryPanel, type TrailEntry } from "./historypanel";
 import { AutoSaver, fromFile, OpfsStore, packWorkbook, toFile, unpackWorkbook, type JournalEntry } from "./persist";
@@ -1302,7 +1302,7 @@ document.getElementById("btn-export")!.addEventListener("click", async () => {
 
 const fileInput = document.createElement("input");
 fileInput.type = "file";
-fileInput.accept = ".cellforge,.xlsx,.xlsm,.csv,.tsv,.txt,.json,.jsonl,.ndjson,text/csv,text/tab-separated-values";
+fileInput.accept = ".cellforge,.xlsx,.xlsm,.csv,.tsv,.txt,.json,.jsonl,.ndjson,.parquet,text/csv,text/tab-separated-values";
 fileInput.addEventListener("change", () => {
   const file = fileInput.files?.[0];
   if (file) openFile(file);
@@ -1340,6 +1340,21 @@ async function openFile(file: File) {
       loadWorkbook(opened.workbook, opened.active, file.name.replace(/\.cellforge$/i, ""));
       void snapshotNow();
       statusLeft.textContent = `Opened ${file.name}`;
+    } catch (e) {
+      statusLeft.textContent = `Couldn't open ${file.name}: ${(e as Error).message}`;
+    }
+    return;
+  }
+  if (/\.parquet$/i.test(file.name)) {
+    try {
+      statusLeft.textContent = `Opening ${file.name}…`;
+      const { columns, dateColumns } = await readParquet(await file.arrayBuffer());
+      const table = new Table(columns);
+      const src = new EditableSource(table, SPARE_COLUMNS);
+      // dates and timestamps arrive as serial numbers: show them as dates
+      for (const d of dateColumns) src.styles.apply(d.col, "all", { numFmt: d.withTime ? "yyyy-mm-dd hh:mm:ss" : "yyyy-mm-dd" });
+      loadSource(src, file.name);
+      setInfo(`Opened ${table.rowCount.toLocaleString()} rows from ${file.name}`);
     } catch (e) {
       statusLeft.textContent = `Couldn't open ${file.name}: ${(e as Error).message}`;
     }
