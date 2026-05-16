@@ -839,6 +839,23 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       },
     });
 
+  registry.register<{ name: string; source: string; numFmts?: string[] }>({
+    type: "sheet.insert",
+    title: "Add a sheet holding data that was read in (combined files)",
+    internal: true,
+    schema: s.object({ name: s.string(), source: s.string(), numFmts: s.array(s.string()) }, ["name", "source"]),
+    describe: (p) => `add "${p.name}"`,
+    apply(ctx, p) {
+      const source = ctx.blobs.get<EditableSource>(p.source).clone();
+      (p.numFmts ?? []).forEach((numFmt, col) => {
+        if (numFmt) source.styles.apply(col, "all", { numFmt });
+      });
+      const sheet = ctx.workbook.add(ctx.workbook.freeName(p.name.slice(0, 31)), source);
+      ctx.onSheetShown?.(sheet.id);
+      return { type: "sheet.delete", params: { sheet: sheet.id } };
+    },
+  });
+
   // ------------------------------------------------------------ clean --
   const cleanAction = (type: string, title: string, verb: string, change: (v: CellValue | boolean) => Stored | undefined) =>
     registry.register<{ range: Range; sheet?: string }>({

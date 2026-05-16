@@ -68,11 +68,10 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Report un-wrapping: header-row detection, drop title/subtotal/footer rows,
-- [x] Value parsers: accounting negatives (1,234), trailing minus, CR/DR, locale numbers (1.234,56), currency symbols and codes, percentages, any date format (day/month order worked out per column), ISO timestamps
-- [x] Report un-wrapping: find the header row, drop titles / blank / subtotal / total / footer / repeated-header rows, fill down group labels, flatten two-row headers
-- [x] Clean-up tool: preview what will change, then make a clean sheet (one undo step) with a report of every dropped row and why
-- [x] Type confidence report: per column the type found, how many values fit, and the ones that didn't, with jump-to
+### Folder import with column alignment across files
+- [x] Combine logic: read many files (CSV, Excel, JSON, Parquet), match columns by name (case, spacing and common synonyms), keep the union, add a source-file column
+- [x] Alignment preview: which file has which column, columns that only some files have, rename/merge before combining
+- [x] Pick a folder (or several files) and stream them in, one undo step
 - [x] Tests, user guide
 
 ## Milestones
@@ -113,11 +112,11 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Streaming `.xlsx` reader and writer (values, formulas, styles, merges,
   names, multiple sheets), round-trip tested
 - ✅ Parquet and JSON; CSV options (delimiter, encoding)
-- 🔨 Report un-wrapping: header-row detection, drop title/subtotal/footer rows,
+- ✅ Report un-wrapping: header-row detection, drop title/subtotal/footer rows,
   fill down group labels, flatten multi-row headers
-- ⬜ Folder import with column alignment across files
-- ⬜ Parsers: accounting negatives, locale numbers, any date format, currencies (with the item above)
-- ⬜ Type confidence report with jump-to (with the item above)
+- 🔨 Folder import with column alignment across files
+- ✅ Parsers: accounting negatives, locale numbers, any date format, currencies (with the item above)
+- ✅ Type confidence report with jump-to (with the item above)
 - ⬜ Bank statements: local text-PDF/CSV import, multi-line merge, date repair,
   running-balance validation per page
 - ⬜ Trial balance import mapper (debit/credit or signed, code/name/current/prior)

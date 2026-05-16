@@ -15,6 +15,7 @@ import { setupInspectPanel } from "./inspectpanel";
 import { openXlsx, saveXlsx } from "./xlsxio";
 import { askCsvOptions } from "./importdialog";
 import { openCleanup } from "./cleanupdialog";
+import { openCombine } from "./combinedialog";
 import { jsonToColumns, readParquet, Table } from "@cellforge/core";
 import { type Command, setupPalette } from "./palette";
 import { setupHistoryPanel, type TrailEntry } from "./historypanel";
@@ -1162,6 +1163,21 @@ function paletteCommands(): Command[] {
   const list: Command[] = [
     { id: "undo", title: "Undo", keys: "Ctrl Z", run: undo },
     { id: "iterative", title: workbook.iterative ? "Turn off iterative calculation" : "Turn on iterative calculation (for circular references)", hint: "circular cycle", run: () => run({ type: "calc.iterative", params: { enabled: !workbook.iterative } }) },
+    ...[true, false].map((folder) => ({
+      id: folder ? "combine-folder" : "combine-files",
+      title: folder ? "Combine all files in a folder…" : "Combine several files…",
+      hint: "append stack merge union monthly exports csv excel folder import",
+      run: () =>
+        void openCombine(
+          {
+            run: (a) => run(a),
+            putBlob: (v) => blobs.put(v),
+            status: (t) => (statusLeft.textContent = t),
+            focusGrid: () => grid.focus(),
+          },
+          folder,
+        ),
+    })),
     {
       id: "cleanup",
       title: "Clean up this sheet (messy export)…",
