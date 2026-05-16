@@ -68,11 +68,12 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Parquet and JSON; CSV options (delimiter, encoding)
-- [x] CSV/TSV options: encoding (UTF-8, Windows-1252, UTF-16, auto-detected), delimiter, header row on/off, rows to skip; a preview before opening
-- [x] JSON: an array of records (nested objects flattened to a.b columns) or an array of arrays; JSON Lines
-- [x] Parquet: plain and dictionary encodings, uncompressed / Snappy / gzip pages, the common column types
-- [x] Tests, user guide
+### Report un-wrapping: header-row detection, drop title/subtotal/footer rows,
+- [ ] Value parsers: accounting negatives (1,234), trailing minus, CR/DR, locale numbers (1.234,56), currency symbols and codes, percentages, any date format (day/month order worked out per column), ISO timestamps
+- [ ] Report un-wrapping: find the header row, drop titles / blank / subtotal / total / footer / repeated-header rows, fill down group labels, flatten two-row headers
+- [ ] Clean-up tool: preview what will change, then make a clean sheet (one undo step) with a report of every dropped row and why
+- [ ] Type confidence report: per column the type found, how many values fit, and the ones that didn't, with jump-to
+- [ ] Tests, user guide
 
 ## Milestones
 
@@ -111,12 +112,12 @@ tracker shows this expanded, with the first unticked step as the current one.
 ### M3: Files and messy-export import 🔨
 - ✅ Streaming `.xlsx` reader and writer (values, formulas, styles, merges,
   names, multiple sheets), round-trip tested
-- 🔨 Parquet and JSON; CSV options (delimiter, encoding)
-- ⬜ Report un-wrapping: header-row detection, drop title/subtotal/footer rows,
+- ✅ Parquet and JSON; CSV options (delimiter, encoding)
+- 🔨 Report un-wrapping: header-row detection, drop title/subtotal/footer rows,
   fill down group labels, flatten multi-row headers
 - ⬜ Folder import with column alignment across files
-- ⬜ Parsers: accounting negatives, locale numbers, any date format, currencies
-- ⬜ Type confidence report with jump-to
+- ⬜ Parsers: accounting negatives, locale numbers, any date format, currencies (with the item above)
+- ⬜ Type confidence report with jump-to (with the item above)
 - ⬜ Bank statements: local text-PDF/CSV import, multi-line merge, date repair,
   running-balance validation per page
 - ⬜ Trial balance import mapper (debit/credit or signed, code/name/current/prior)
