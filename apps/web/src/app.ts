@@ -20,6 +20,7 @@ import { importStatement, pickStatement } from "./statement";
 import { openTbMapper } from "./tbdialog";
 import { closeFilterMenu, openFilterMenu } from "./filtermenu";
 import { openSortDialog } from "./sortdialog";
+import { editRule, openCfManager } from "./cfmanager";
 
 const statementDeps = () => ({
   run: (a: Action) => run(a),
@@ -341,6 +342,7 @@ function syncFilterButtons() {
   grid.setFilterButtons(buttons);
 }
 
+const cfDeps = () => ({ source: () => source, range: () => grid.range, run: (a: Action) => run(a), focusGrid: () => grid.focus() });
 const filterDeps = () => ({ source: () => source, run: (a: Action) => run(a), focusGrid: () => grid.focus() });
 
 /** Open the active column's filter, under its header. */
@@ -1233,6 +1235,8 @@ function paletteCommands(): Command[] {
           { id: "filter-clear", title: "Clear filter (show all rows)", hint: "remove filter show all", run: () => run({ type: "filter.clear", params: {} }) },
         ]
       : []),
+    { id: "cf-manager", title: "Conditional formatting: manage rules…", hint: "highlight rules colour scale data bars icons", run: () => openCfManager(cfDeps()) },
+    { id: "cf-new", title: "Conditional formatting: new rule for the selection…", hint: "highlight cells greater than duplicates top 10 colour scale data bar icon set", run: () => void editRule(cfDeps(), null).then((rule) => rule && run({ type: "format.conditionalAdd", params: { rule } })) },
     { id: "sort-dialog", title: "Sort by several columns…", hint: "multi-level sort order custom sort", run: () => openSortDialog({ ...filterDeps(), activeCol: () => grid.selection.col }) },
     ...source.filterViews.map((v) => ({ id: `view:${v.name}`, title: `Switch to view: ${v.name}`, hint: "filter view saved", run: () => run({ type: "filter.applyView", params: { name: v.name } }) })),
     { id: "iterative", title: workbook.iterative ? "Turn off iterative calculation" : "Turn on iterative calculation (for circular references)", hint: "circular cycle", run: () => run({ type: "calc.iterative", params: { enabled: !workbook.iterative } }) },

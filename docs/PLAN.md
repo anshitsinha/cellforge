@@ -71,7 +71,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 ### Conditional formatting with a proper rules manager
 - [x] Rules engine: cell value / text / dates / blanks / duplicates / top-bottom / above-average / formula rules, colour scales, data bars, icon sets; evaluated per visible cell with column stats cached
 - [x] Grid drawing: fills, font colours, bold, data bars and icons drawn from rule results
-- [ ] Rules manager: list per sheet, add / edit / reorder / stop-if-true / delete, applies-to ranges that move with inserts and deletes
+- [x] Rules manager: list per sheet, add / edit / reorder / stop-if-true / delete, applies-to ranges that move with inserts and deletes
 - [ ] Actions, saved with the file, Excel import / export of common rules; tests, user guide
 
 ## Milestones
