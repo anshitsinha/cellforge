@@ -1063,3 +1063,90 @@ button:disabled {
   margin: 4px 6px;
   background: var(--border);
 }
+
+/* ---- filter dropdown ---- */
+.filter-menu {
+  position: fixed;
+  z-index: 60;
+  width: 280px;
+  max-height: min(520px, calc(100vh - 16px));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: var(--panel, #fff);
+  color: var(--text, #202124);
+  border: 1px solid var(--border, #dadce0);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 25%);
+  font-size: 13px;
+}
+
+.filter-sort,
+.filter-tools {
+  display: flex;
+  gap: 6px;
+}
+
+.filter-sort button {
+  flex: 1;
+}
+
+.filter-cond {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.filter-cond select {
+  flex: 1 1 100%;
+}
+
+.filter-cond input {
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-list {
+  overflow: auto;
+  min-height: 80px;
+  max-height: 240px;
+  border: 1px solid var(--border, #dadce0);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.filter-list label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 2px 0;
+}
+
+.filter-list label span:first-of-type {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-count {
+  color: var(--muted, #5f6368);
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.sort-level {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 4px 0;
+}
+
+.sort-level span {
+  width: 56px;
+}

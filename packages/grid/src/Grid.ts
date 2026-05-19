@@ -12,6 +12,8 @@ const FONT = '13px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const HEADER_FONT = '12px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const CELL_PADDING = 6;
 const SCROLLBAR_SIZE = 10;
+/** size of the filter button drawn in a column header */
+const FILTER_BUTTON = 14;
 const MIN_THUMB = 24;
 const RESIZE_HANDLE = 4; // px either side of a column border that counts as "grab"
 const MIN_COLUMN_WIDTH = 30;
@@ -147,6 +149,11 @@ export class Grid {
   /** A row was resized by dragging its border or auto-fitted (height in px). */
   onRowResize: ((row: number, height: number) => void) | null = null;
 
+  /** A column's filter button was clicked; x / y are page coordinates under the button. */
+  onFilterButton: ((col: number, x: number, y: number) => void) | null = null;
+  // columns that show a filter button, and whether their filter is on
+  private filterButtons: ReadonlyMap<number, boolean> = new Map();
+
   /** Called when the user asks to clear the selected range (Delete key). */
   onClearRange: ((range: CellRange) => void) | null = null;
 
@@ -281,6 +288,21 @@ export class Grid {
     this.columns = layout;
     this.clampScroll();
     this.invalidate();
+  }
+
+  /** Show filter buttons on these columns' headers (true = that column is filtered). */
+  setFilterButtons(buttons: ReadonlyMap<number, boolean>): void {
+    this.filterButtons = buttons;
+    this.invalidate();
+  }
+
+  /** The column whose filter button is under (x, y) on the canvas, or null. */
+  private filterButtonAt(x: number, y: number): number | null {
+    if (!this.filterButtons.size || y >= this.headerHeight || x < this.rowHeaderWidth) return null;
+    const col = this.columns.indexAt(this.contentX(x - this.rowHeaderWidth));
+    if (!this.filterButtons.has(col)) return null;
+    const right = this.colScreenX(col) + this.columns.width(col);
+    return x >= right - FILTER_BUTTON - 2 && x <= right - 1 ? col : null;
   }
 
   /** Coloured outlines over ranges (e.g. a formula's precedents), drawn dashed. */
@@ -813,6 +835,15 @@ export class Grid {
     if (y >= this.height - SCROLLBAR_SIZE && x >= this.rowHeaderWidth) {
       e.preventDefault();
       this.onScrollbarDown("hscroll", x, e.clientX);
+      return;
+    }
+
+    // a filter button opens the column's filter
+    const filterCol = this.filterButtonAt(x, y);
+    if (filterCol !== null) {
+      e.preventDefault();
+      const right = this.colScreenX(filterCol) + this.columns.width(filterCol);
+      this.onFilterButton?.(filterCol, rect.left + right - FILTER_BUTTON, rect.top + this.headerHeight);
       return;
     }
 
@@ -1658,7 +1689,38 @@ export class Grid {
           continue;
         }
         const label = this.source.getColumnName?.(c) ?? columnLetter(c);
-        ctx.fillText(label, colX(c) + columns.width(c) / 2, headerHeight / 2);
+        const button = this.filterButtons.get(c);
+        if (button === undefined) {
+          ctx.fillText(label, colX(c) + columns.width(c) / 2, headerHeight / 2);
+          continue;
+        }
+        // leave room for the filter button at the right
+        const w = columns.width(c);
+        ctx.fillText(label, colX(c) + (w - FILTER_BUTTON) / 2, headerHeight / 2);
+        const bx = colX(c) + w - FILTER_BUTTON - 2;
+        const by = (headerHeight - FILTER_BUTTON) / 2;
+        ctx.save();
+        ctx.strokeStyle = button ? theme.accent : theme.gridLine;
+        ctx.strokeRect(bx + 0.5, by + 0.5, FILTER_BUTTON - 1, FILTER_BUTTON - 1);
+        ctx.fillStyle = button ? theme.accent : theme.mutedText;
+        ctx.beginPath();
+        if (button) {
+          // a funnel: this column is filtered
+          ctx.moveTo(bx + 3, by + 4);
+          ctx.lineTo(bx + FILTER_BUTTON - 3, by + 4);
+          ctx.lineTo(bx + FILTER_BUTTON / 2 + 1, by + 8);
+          ctx.lineTo(bx + FILTER_BUTTON / 2 + 1, by + FILTER_BUTTON - 3);
+          ctx.lineTo(bx + FILTER_BUTTON / 2 - 1, by + FILTER_BUTTON - 4);
+          ctx.lineTo(bx + FILTER_BUTTON / 2 - 1, by + 8);
+        } else {
+          ctx.moveTo(bx + 4, by + 5);
+          ctx.lineTo(bx + FILTER_BUTTON - 4, by + 5);
+          ctx.lineTo(bx + FILTER_BUTTON / 2, by + FILTER_BUTTON - 5);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        ctx.fillStyle = theme.mutedText;
       }
       ctx.restore();
     }

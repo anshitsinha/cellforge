@@ -18,6 +18,8 @@ import { openCleanup } from "./cleanupdialog";
 import { openCombine } from "./combinedialog";
 import { importStatement, pickStatement } from "./statement";
 import { openTbMapper } from "./tbdialog";
+import { closeFilterMenu, openFilterMenu } from "./filtermenu";
+import { openSortDialog } from "./sortdialog";
 
 const statementDeps = () => ({
   run: (a: Action) => run(a),
@@ -326,9 +328,46 @@ function settleActiveSheet() {
   }
 }
 
+// sheets whose filter buttons are showing (a filtered sheet always shows them)
+const filterButtonsOn = new Set<string>();
+
+function syncFilterButtons() {
+  const buttons = new Map<number, boolean>();
+  if (source.filter || filterButtonsOn.has(activeId)) {
+    const active = new Set(source.filter?.conditions.map((c) => c.col) ?? []);
+    const cols = Math.max(1, source.usedRange().cols);
+    for (let c = 0; c < cols; c++) buttons.set(c, active.has(c));
+  }
+  grid.setFilterButtons(buttons);
+}
+
+const filterDeps = () => ({ source: () => source, run: (a: Action) => run(a), focusGrid: () => grid.focus() });
+
+/** Open the active column's filter, under its header. */
+function filterActiveColumn() {
+  filterButtonsOn.add(activeId);
+  syncFilterButtons();
+  const col = grid.selection.col;
+  const r = sheet.getBoundingClientRect();
+  openFilterMenu(filterDeps(), col, r.left + 60, r.top + 30);
+}
+
+grid.onFilterButton = (col, x, y) => openFilterMenu(filterDeps(), col, x, y);
+
+function toggleFilterButtons() {
+  if (source.filter) {
+    void run({ type: "filter.clear", params: {} });
+    filterButtonsOn.delete(activeId);
+  } else if (filterButtonsOn.has(activeId)) filterButtonsOn.delete(activeId);
+  else filterButtonsOn.add(activeId);
+  closeFilterMenu();
+  syncFilterButtons();
+}
+
 /** Repaint and update everything that shows cell contents. */
 function refresh() {
   settleActiveSheet();
+  syncFilterButtons();
   showHint();
   tabs.render();
   grid.syncShape();
@@ -1136,6 +1175,20 @@ document.addEventListener("keydown", (e) => {
     namesUi.manager();
   }
 });
+// Excel: Ctrl+Shift+L turns the filter on or off, Ctrl+Alt+L reapplies it, Alt+Down opens a column's filter
+document.addEventListener("keydown", (e) => {
+  if (!gridHasFocus()) return;
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "l") {
+    e.preventDefault();
+    toggleFilterButtons();
+  } else if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === "l") {
+    e.preventDefault();
+    void run({ type: "filter.reapply", params: {} });
+  } else if (e.altKey && e.key === "ArrowDown" && (source.filter || filterButtonsOn.has(activeId))) {
+    e.preventDefault();
+    filterActiveColumn();
+  }
+});
 document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "h") {
     e.preventDefault();
@@ -1171,6 +1224,16 @@ function paletteCommands(): Command[] {
   const { row, col } = grid.selection;
   const list: Command[] = [
     { id: "undo", title: "Undo", keys: "Ctrl Z", run: undo },
+    { id: "filter-toggle", title: source.filter || filterButtonsOn.has(activeId) ? "Turn off filter" : "Filter (show filter buttons)", keys: "Ctrl Shift L", hint: "autofilter filter buttons dropdown", run: toggleFilterButtons },
+    { id: "filter-column", title: "Filter this column…", hint: "autofilter values blanks condition", run: filterActiveColumn },
+    ...(source.filter
+      ? [
+          { id: "filter-reapply", title: "Reapply filter", keys: "Ctrl Alt L", hint: "refresh filter", run: () => run({ type: "filter.reapply", params: {} }) },
+          { id: "filter-clear", title: "Clear filter (show all rows)", hint: "remove filter show all", run: () => run({ type: "filter.clear", params: {} }) },
+        ]
+      : []),
+    { id: "sort-dialog", title: "Sort by several columns…", hint: "multi-level sort order custom sort", run: () => openSortDialog({ ...filterDeps(), activeCol: () => grid.selection.col }) },
+    ...source.filterViews.map((v) => ({ id: `view:${v.name}`, title: `Switch to view: ${v.name}`, hint: "filter view saved", run: () => run({ type: "filter.applyView", params: { name: v.name } }) })),
     { id: "iterative", title: workbook.iterative ? "Turn off iterative calculation" : "Turn on iterative calculation (for circular references)", hint: "circular cycle", run: () => run({ type: "calc.iterative", params: { enabled: !workbook.iterative } }) },
     ...[true, false].map((folder) => ({
       id: folder ? "combine-folder" : "combine-files",
