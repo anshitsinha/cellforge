@@ -21,6 +21,8 @@ import { openTbMapper } from "./tbdialog";
 import { closeFilterMenu, openFilterMenu } from "./filtermenu";
 import { openSortDialog } from "./sortdialog";
 import { editRule, openCfManager } from "./cfmanager";
+import { openFindReplace } from "./finddialog";
+import { registerFindActions } from "./findreplace";
 
 const statementDeps = () => ({
   run: (a: Action) => run(a),
@@ -238,6 +240,7 @@ const undoButton = document.getElementById("btn-undo") as HTMLButtonElement;
 const redoButton = document.getElementById("btn-redo") as HTMLButtonElement;
 
 const registry = sheetActions();
+registerFindActions(registry);
 const blobs = new BlobStore();
 let cancelSort: (() => void) | null = null;
 
@@ -342,6 +345,28 @@ function syncFilterButtons() {
   grid.setFilterButtons(buttons);
 }
 
+const findDeps = () => ({
+  workbook: () => workbook,
+  activeSheet: () => activeId,
+  range: () => grid.range,
+  selection: () => grid.selection,
+  run: (a: Action) => run(a),
+  goTo: (sheetId: string, row: number, col: number) => {
+    showSheet(sheetId);
+    grid.select(row, col);
+    grid.focus();
+  },
+  focusGrid: () => grid.focus(),
+});
+// Excel: Ctrl+F finds, Ctrl+H replaces
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
+  const k = e.key.toLowerCase();
+  if (k !== "f" && k !== "h") return;
+  if (document.querySelector(".palette-backdrop")) return;
+  e.preventDefault();
+  openFindReplace(findDeps(), k === "f" ? "find" : "replace");
+});
 const cfDeps = () => ({ source: () => source, range: () => grid.range, run: (a: Action) => run(a), focusGrid: () => grid.focus() });
 const filterDeps = () => ({ source: () => source, run: (a: Action) => run(a), focusGrid: () => grid.focus() });
 
@@ -1193,7 +1218,7 @@ document.addEventListener("keydown", (e) => {
   }
 });
 document.addEventListener("keydown", (e) => {
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "h") {
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "h") {
     e.preventDefault();
     historyPanel.toggle();
   }
@@ -1235,6 +1260,8 @@ function paletteCommands(): Command[] {
           { id: "filter-clear", title: "Clear filter (show all rows)", hint: "remove filter show all", run: () => run({ type: "filter.clear", params: {} }) },
         ]
       : []),
+    { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
+    { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },
     { id: "cf-manager", title: "Conditional formatting: manage rules…", hint: "highlight rules colour scale data bars icons", run: () => openCfManager(cfDeps()) },
     { id: "cf-new", title: "Conditional formatting: new rule for the selection…", hint: "highlight cells greater than duplicates top 10 colour scale data bar icon set", run: () => void editRule(cfDeps(), null).then((rule) => rule && run({ type: "format.conditionalAdd", params: { rule } })) },
     { id: "sort-dialog", title: "Sort by several columns…", hint: "multi-level sort order custom sort", run: () => openSortDialog({ ...filterDeps(), activeCol: () => grid.selection.col }) },
@@ -1295,7 +1322,7 @@ function paletteCommands(): Command[] {
         }),
     },
     { id: "inspect", title: "Inspect this cell", keys: "Ctrl [", hint: "trace precedents dependents evaluate formula audit", run: () => inspectPanel.toggle() },
-    { id: "history", title: "Show history and versions", keys: "Ctrl H", hint: "timeline compare changes audit", run: () => historyPanel.toggle() },
+    { id: "history", title: "Show history and versions", keys: "Ctrl Shift H", hint: "timeline compare changes audit", run: () => historyPanel.toggle() },
     { id: "version-save", title: "Save a version…", hint: "name snapshot checkpoint", run: () => { if (!historyPanel.open) historyPanel.toggle(); document.querySelector<HTMLInputElement>(".hp-version-form input")?.focus(); } },
     { id: "redo", title: "Redo", keys: "Ctrl Y", run: redo },
     { id: "bold", title: "Bold", keys: "Ctrl B", run: toggle("bold") },

@@ -123,22 +123,22 @@ tracker shows this expanded, with the first unticked step as the current one.
 
 ### M4: Data tools 🔨
 - ✅ Filters and filter views, (Blanks) first, invert selection; multi-column sort
-- ⬜ Find & replace (regex, in formulas)
+- ✅ Find & replace (regex, in formulas)
 - 🔨 Conditional formatting with a proper rules manager
 - ⬜ Data validation and dropdowns; date, currency and checkbox column types
 - ⬜ Remove duplicates, text to columns, unpivot / pivot, extract by pattern
 - ⬜ Goal Seek
 - ⬜ Notes on cells, hyperlinks
 
-### M5: Query engine, explore, reconcile
+### M5: Query engine, explore, reconcile 🔨
 - ⬜ Query engine (DuckDB-WASM, loaded on demand) over sheet columns
 - ⬜ Pivot tables (drag fields, drill-down to rows), slicers
 - ⬜ Column profiles
 - ⬜ Join doctor (match rate, duplicate keys, orphans) and guided joins
 - ⬜ "Why don't these match?" inspector with one-click normalisation
-- ⬜ Reconciliation: keys, tolerances, fuzzy text, 1:N and N:1, matched /
+- 🔨 Reconciliation: keys, tolerances, fuzzy text, 1:N and N:1, matched /
   unmatched / mismatched outputs, exception export
-- ⬜ Reference normalisation, sum matching, keying-error flags, in-side duplicates,
+- 🔨 Reference normalisation, sum matching, keying-error flags, in-side duplicates,
   proposed adjusting entries, roll-forward of outstanding items, rec statement
 - ⬜ Open-item matching for balance sheet accounts; supplier / customer statement recs
 - ⬜ Trial balance compare; GL → TB tie-out
@@ -158,12 +158,12 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ⬜ Explain: where any number came from (formula chain, recipe step, source rows),
   lineage view, one-click write-up
 
-### M7: Audit, evidence, sharing
-- ⬜ Duplicate tests (exact, near, fuzzy, multi-column); sequence gaps
-- ⬜ Benford (1st and 1st-two digits) with chi-square / MAD and chart
+### M7: Audit, evidence, sharing 🔨
+- 🔨 Duplicate tests (exact, near, fuzzy, multi-column); sequence gaps
+- 🔨 Benford (1st and 1st-two digits) with chi-square / MAD and chart
 - ⬜ Journal entry testing suite; red-flag overlaps (vendor vs employee etc.)
-- ⬜ Stratification, top-N, Pareto, ageing buckets, materiality
-- ⬜ Sampling (random, systematic, stratified, monetary-unit) with recorded seed
+- 🔨 Stratification, top-N, Pareto, ageing buckets, materiality
+- 🔨 Sampling (random, systematic, stratified, monetary-unit) with recorded seed
 - ⬜ Footing / cross-footing and roll-forward checks
 - ⬜ Evidence pack: workbook + recipe + input fingerprints + hash-chained action log
 - ⬜ Evidence linking: attached documents stored outside the workbook, cell ↔
@@ -173,8 +173,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ⬜ Share safely: PII scan, mask / hash / pseudonymise / redact, hidden-content
   check, encrypted export; clear all local data; offline bundle
 
-### M8: Charts and reports
-- ⬜ Charts: column, bar, line, area, pie, scatter, combo, histogram, waterfall,
+### M8: Charts and reports 🔨
+- 🔨 Charts: column, bar, line, area, pie, scatter, combo, histogram, waterfall,
   Pareto, Benford, ageing; millions of points downsampled; axis limits from cells
 - ⬜ Pivot charts
 - ⬜ Reports: narrative + live tables and charts, one template for many entities,

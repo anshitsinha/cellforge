@@ -63,7 +63,7 @@ function render(state: State) {
         <ul>${items
           .map(
             (i) => `<li class="item ${i.status}"><span class="box">${BOX[i.status]}</span><div>${inline(i.text)}${
-              i.status === "doing" ? `<span class="tag">in progress</span>${stepList("substeps")}` : ""
+              i.status === "doing" ? (plan.now && i.text.startsWith(plan.now.title) ? `<span class="tag">in progress</span>${stepList("substeps")}` : `<span class="tag">in progress (in parallel)</span>`) : ""
             }</div></li>`,
           )
           .join("")}</ul>

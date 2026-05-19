@@ -23,7 +23,12 @@
 | Ctrl + Shift + V | Paste values only |
 | Ctrl + Z / Ctrl + Y | Undo / redo |
 | Ctrl + K | Command palette: search every command |
-| Ctrl + H | History and versions panel |
+| Ctrl + F | Find |
+| Ctrl + H | Find and replace |
+| Ctrl + Shift + H | History and versions panel |
+| Ctrl + Shift + L | Filter buttons on / off |
+| Ctrl + Alt + L | Reapply filter |
+| Alt + ↓ | Open this column's filter |
 | Ctrl + [ | Inspect the selected cell |
 | Ctrl + T | Make a table from the selection |
 | Ctrl + F3 | Names and tables |
