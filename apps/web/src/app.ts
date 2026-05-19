@@ -17,6 +17,7 @@ import { askCsvOptions } from "./importdialog";
 import { openCleanup } from "./cleanupdialog";
 import { openCombine } from "./combinedialog";
 import { importStatement, pickStatement } from "./statement";
+import { openTbMapper } from "./tbdialog";
 
 const statementDeps = () => ({
   run: (a: Action) => run(a),
@@ -1186,6 +1187,21 @@ function paletteCommands(): Command[] {
           folder,
         ),
     })),
+    {
+      id: "tb-map",
+      title: "Map this sheet as a trial balance…",
+      hint: "trial balance tb debit credit account code prior year import mapper",
+      run: () =>
+        openTbMapper({
+          ...statementDeps(),
+          source: () => source,
+          sheetName: () => workbook.get(activeId).name,
+          goTo: (row, col) => {
+            grid.select(row, col);
+            grid.focus();
+          },
+        }),
+    },
     {
       id: "statement",
       title: "Import a bank statement (PDF or CSV)…",

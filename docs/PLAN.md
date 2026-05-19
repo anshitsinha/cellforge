@@ -68,12 +68,12 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Bank statements: local text-PDF/CSV import, multi-line merge, date repair,
-- [x] PDF text reader: objects and object streams, Flate, fonts with ToUnicode maps, text positions, lines and columns per page
-- [x] Statement parser: transaction lines start with a date, wrapped descriptions merged, debit/credit or signed amounts, balance column
-- [x] Date repair: dates without a year (12 Mar), year roll-over in December/January, day/month order per statement
-- [x] Running-balance check: every row's balance = previous + amount, breaks listed with page and row; opening/closing per page
-- [x] Import dialog for .pdf and statement CSVs, one undo step; tests, user guide
+### Filters and filter views, (Blanks) first, invert selection; multi-column sort
+- [ ] Filter engine: hide rows not matching per-column conditions (values list, text/number/date rules), on row ids so edits and sorts keep it
+- [ ] Filter dropdown on the header: value list with counts, (Blanks) first, search, select all / invert, sort buttons
+- [ ] Filter views: save, name and switch between filter + sort setups; clear all
+- [ ] Multi-column sort dialog (add levels, direction, by value)
+- [ ] Actions for all of it (undo, AI catalog); tests, user guide
 
 ## Milestones
 
@@ -109,7 +109,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Iterative calculation for intentional circular references
 - ✅ Compiler coverage for the new functions; Excel conformance corpus in CI
 
-### M3: Files and messy-export import 🔨
+### M3: Files and messy-export import ✅
 - ✅ Streaming `.xlsx` reader and writer (values, formulas, styles, merges,
   names, multiple sheets), round-trip tested
 - ✅ Parquet and JSON; CSV options (delimiter, encoding)
@@ -118,12 +118,12 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Folder import with column alignment across files
 - ✅ Parsers: accounting negatives, locale numbers, any date format, currencies (with the item above)
 - ✅ Type confidence report with jump-to (with the item above)
-- 🔨 Bank statements: local text-PDF/CSV import, multi-line merge, date repair,
+- ✅ Bank statements: local text-PDF/CSV import, multi-line merge, date repair,
   running-balance validation per page
-- ⬜ Trial balance import mapper (debit/credit or signed, code/name/current/prior)
+- ✅ Trial balance import mapper (debit/credit or signed, code/name/current/prior)
 
-### M4: Data tools
-- ⬜ Filters and filter views, (Blanks) first, invert selection; multi-column sort
+### M4: Data tools 🔨
+- 🔨 Filters and filter views, (Blanks) first, invert selection; multi-column sort
 - ⬜ Find & replace (regex, in formulas)
 - ⬜ Conditional formatting with a proper rules manager
 - ⬜ Data validation and dropdowns; date, currency and checkbox column types
