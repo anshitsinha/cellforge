@@ -69,7 +69,7 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Filters and filter views, (Blanks) first, invert selection; multi-column sort
-- [ ] Filter engine: hide rows not matching per-column conditions (values list, text/number/date rules), on row ids so edits and sorts keep it
+- [x] Filter engine: hide rows not matching per-column conditions (values list, text/number/date rules), on row ids so edits and sorts keep it
 - [ ] Filter dropdown on the header: value list with counts, (Blanks) first, search, select all / invert, sort buttons
 - [ ] Filter views: save, name and switch between filter + sort setups; clear all
 - [ ] Multi-column sort dialog (add levels, direction, by value)

@@ -23,6 +23,7 @@ import {
 import { formatCell, spliceMerges, type CellRange, type CellStyle, type CellValue, type DataSource } from "@cellforge/grid";
 import { CellArray, type ErrorHint, parseTableSpec, formatGeneral, formatValue as formatWithCode, isDateFormat, Lambda, type FormulaValue } from "@cellforge/core";
 import { DepIndex, type Rect } from "./deps";
+import { filteredOutRows, type FilterSpec, type FilterView } from "./filter";
 import { SheetStyles, type ColumnStyles, type StylesState } from "./styles";
 
 /** A table: a named block whose first row holds its column headers. */
@@ -180,6 +181,13 @@ export class EditableSource implements DataSource {
   private hiddenRowIds = new Set<number>();
   private hiddenCols = new Set<number>();
   private hiddenIntervalsCache: [number, number][] | null = null;
+  // the filter: its conditions, and the rows (by id) it hides
+  private filterSpec: FilterSpec | null = null;
+  private filteredIds = new Set<number>();
+  /** saved filter + sort setups */
+  filterViews: FilterView[] = [];
+  /** the last sort, for saving in a filter view (not saved with the file) */
+  lastSort: { col: number; descending: boolean }[] | null = null;
 
   /** formatting, by view column and row id (so it moves with its row) */
   styles = new SheetStyles();
@@ -289,6 +297,8 @@ export class EditableSource implements DataSource {
       frozen: { ...this.frozen },
       merges: this.merges.map((m) => ({ ...m })),
       ...(this.tables.length ? { tables: this.tables.map((t) => ({ ...t })) } : {}),
+      ...(this.filterSpec ? { filter: structuredClone(this.filterSpec), filtered: [...this.filteredIds] } : {}),
+      ...(this.filterViews.length ? { filterViews: structuredClone(this.filterViews) } : {}),
     };
     return { state, binary: this.order?.isArray ? { order: this.order.toArray() } : {} };
   }
@@ -322,6 +332,9 @@ export class EditableSource implements DataSource {
     s.frozen = { ...state.frozen };
     s.merges = state.merges.map((m) => ({ ...m }));
     s.tables = (state.tables ?? []).map((t) => ({ ...t }));
+    s.filterSpec = state.filter ? structuredClone(state.filter) : null;
+    s.filteredIds = new Set(state.filtered ?? []);
+    s.filterViews = state.filterViews ? structuredClone(state.filterViews) : [];
     s.rebuildDeps();
     return s;
   }
@@ -350,6 +363,9 @@ export class EditableSource implements DataSource {
     copy.frozen = { ...this.frozen };
     copy.merges = this.merges.map((m) => ({ ...m }));
     copy.tables = this.tables.map((t) => ({ ...t }));
+    copy.filterSpec = this.filterSpec ? structuredClone(this.filterSpec) : null;
+    copy.filteredIds = new Set(this.filteredIds);
+    copy.filterViews = structuredClone(this.filterViews);
     copy.rebuildDeps();
     return copy;
   }
@@ -1059,14 +1075,50 @@ export class EditableSource implements DataSource {
     return changed;
   }
 
+  // ---------------------------------------------------------------------------
+  // filter
+
+  get filter(): FilterSpec | null {
+    return this.filterSpec;
+  }
+
+  /** Set (or clear, with null) the filter and apply it. */
+  setFilter(spec: FilterSpec | null): void {
+    this.filterSpec = spec ? structuredClone(spec) : null;
+    this.reapplyFilter();
+  }
+
+  /** Work out again which rows the filter hides (after edits, like Excel's Reapply). */
+  reapplyFilter(): void {
+    this.filteredIds = new Set(this.filterSpec ? filteredOutRows(this, this.filterSpec).map((v) => this.toBase(v)) : []);
+    this.hiddenIntervalsCache = null;
+  }
+
+  /** Rows the filter hides, by id (for undo). */
+  get filteredRowIds(): number[] {
+    return [...this.filteredIds];
+  }
+
+  /** Put back a filter exactly as it was, hidden rows and all (undo). */
+  restoreFilter(spec: FilterSpec | null, ids: number[]): void {
+    this.filterSpec = spec ? structuredClone(spec) : null;
+    this.filteredIds = new Set(ids);
+    this.hiddenIntervalsCache = null;
+  }
+
+  isFilteredOut(row: number): boolean {
+    return this.filteredIds.size > 0 && this.filteredIds.has(this.toBase(row));
+  }
+
   /** Hidden rows as sorted view-row intervals, for the grid. */
   hiddenRowIntervals(): [number, number][] {
     if (this.hiddenIntervalsCache) return this.hiddenIntervalsCache;
     let rows: number[];
-    if (!this.order) rows = [...this.hiddenRowIds].filter((id) => id < this.rowCount);
+    const ids = this.filteredIds.size ? new Set([...this.hiddenRowIds, ...this.filteredIds]) : this.hiddenRowIds;
+    if (!this.order) rows = [...ids].filter((id) => id < this.rowCount);
     else {
       const viewOf = this.viewLookup();
-      rows = [...this.hiddenRowIds].map(viewOf).filter((v) => v >= 0);
+      rows = [...ids].map(viewOf).filter((v) => v >= 0);
     }
     rows.sort((a, b) => a - b);
     const out: [number, number][] = [];
@@ -1914,6 +1966,10 @@ export interface SheetState {
   merges: CellRange[];
   /** added after v1 shipped */
   tables?: TableDef[];
+  filter?: FilterSpec;
+  /** row ids the filter hides */
+  filtered?: number[];
+  filterViews?: FilterView[];
 }
 
 export interface FormulaSnapshot {

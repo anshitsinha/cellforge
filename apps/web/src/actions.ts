@@ -14,6 +14,7 @@ import { type ColumnRemoval, type EditableSource, effectiveShift, type Fill, typ
 import { BlankSource, EditableSource as Source } from "./editable";
 import { CLEAR_ALL, type ColumnStyles, type StylePatch } from "./styles";
 import { captureVersion, versionSheets, type Version } from "./versions";
+import { describeCondition, type FilterCondition, type FilterSpec, type FilterView } from "./filter";
 import { buildClean, buildDropped, namedHeader, planCleanup, sheetText } from "./cleanup";
 import { type IdRuns, type RowMap, runsLength } from "./rowmap";
 import { nameProblem, type NameDef, type Sheet, type Workbook } from "./workbook";
@@ -218,6 +219,34 @@ function checkBounds(sheet: EditableSource, cells: { row: number; col: number }[
       throw new Error(`${cellRef(row, col)} is outside the sheet (${sheet.rowCount} rows × ${sheet.colCount} columns)`);
     }
   }
+}
+
+/**
+ * Sort by several keys, most important first: a stable sort per key, least
+ * important first. With a header, row 0 stays on top. False if cancelled
+ * (the order is left as it was).
+ */
+async function sortByKeys(ctx: SheetCtx, data: EditableSource, keys: { col: number; descending?: boolean }[], hasHeader: boolean): Promise<boolean> {
+  for (const k of keys) checkBounds(data, [{ row: 0, col: k.col }]);
+  if (data.merges.length) throw new Error("Sorting needs merged cells to be unmerged first.");
+  const start = data.rowOrder;
+  for (const k of [...keys].reverse()) {
+    const before = data.rowOrder;
+    let viewOrder = await ctx.sortRows(data, k.col, !!k.descending);
+    if (!viewOrder) {
+      data.setRowOrder(start);
+      return false;
+    }
+    if (hasHeader) {
+      const rest = viewOrder.filter((v) => v !== 0);
+      viewOrder = new Uint32Array(viewOrder.length);
+      viewOrder[0] = 0;
+      viewOrder.set(rest, 1);
+    }
+    data.setRowOrder(before ? before.compose(viewOrder) : viewOrder);
+  }
+  data.lastSort = keys.map((k) => ({ col: k.col, descending: !!k.descending }));
+  return true;
 }
 
 /** Most cells one fill can write one by one (a formula filled down uses fill.down instead). */
@@ -439,6 +468,7 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         if (!viewOrder) return null; // cancelled
         // the worker sorts view rows; map them through the order we started from
         data.setRowOrder(before ? before.compose(viewOrder) : viewOrder);
+        data.lastSort = [{ col: p.col, descending: !!p.descending }];
         return { type: "rows.order", params: { sheet: id, order: before ? ctx.blobs.put(before) : null } };
       },
     })
@@ -453,6 +483,200 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         const current = data.rowOrder;
         data.setRowOrder(p.order ? ctx.blobs.get<RowMap | Uint32Array>(p.order) : null);
         return { type: "rows.order", params: { sheet: id, order: current ? ctx.blobs.put(current) : null } };
+      },
+    });
+
+  // ------------------------------------------------------------ filter --
+  const cond = s.anyOf(
+    s.object({ kind: s.string(undefined, { enum: ["values"] }), keys: s.array(s.string(), "values to keep, as keys: 'n:12.5' for a number, 's:north' for text (lower case), '' for blanks") }),
+    s.object({ kind: s.string(undefined, { enum: ["text"] }), op: s.string(undefined, { enum: ["contains", "notContains", "begins", "ends", "equals", "notEquals"] }), value: s.string() }),
+    s.object(
+      {
+        kind: s.string(undefined, { enum: ["number"] }),
+        op: s.string(undefined, { enum: [">", ">=", "<", "<=", "=", "!=", "between", "top", "bottom", "aboveAverage", "belowAverage"] }),
+        a: s.number("the number (or N for top / bottom)"),
+        b: s.number("upper end for between"),
+      },
+      ["kind", "op"],
+    ),
+    s.object({ kind: s.string(undefined, { enum: ["date"] }), op: s.string(undefined, { enum: ["before", "after", "on", "between"] }), a: s.number("date as a serial number"), b: s.number() }, ["kind", "op", "a"]),
+    s.object({ kind: s.string(undefined, { enum: ["blanks"] }), blank: s.bool("true: only blanks; false: only non-blank") }),
+  );
+  const filterUndo = (id: string, data: EditableSource, ctx: SheetCtx) => ({
+    type: "filter.restore",
+    params: { sheet: id, filter: data.filter ? ctx.blobs.put(structuredClone(data.filter)) : null, ids: ctx.blobs.put(data.filteredRowIds) },
+  });
+  registry
+    .register<{ col: number; condition: FilterCondition | null; headerRow?: number; sheet?: string }>({
+      type: "filter.set",
+      title: "Filter rows by a column: keep only rows whose value matches (null removes this column's filter). Other columns' filters stay.",
+      schema: withSheet(
+        {
+          col: s.int("column, 0-based", 0),
+          condition: s.anyOf(cond, s.null()),
+          headerRow: s.int("header row, 0-based; -1 when the sheet's column names are the header (default: as before, else the column names or row 0)", -1),
+        },
+        ["col", "condition"],
+      ),
+      describe: (p) => (p.condition ? `filter ${columnLetter(p.col)}: ${describeCondition(p.condition)}` : `clear filter on ${columnLetter(p.col)}`),
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const undo = filterUndo(id, data, ctx);
+        const headerRow = p.headerRow ?? data.filter?.headerRow ?? (data.getColumnName(0) !== undefined ? -1 : 0);
+        const conditions = (data.filter?.conditions ?? []).filter((c) => c.col !== p.col);
+        if (p.condition) conditions.push({ col: p.col, cond: p.condition });
+        data.setFilter({ headerRow, conditions });
+        return undo;
+      },
+    })
+    .register<{ sheet?: string }>({
+      type: "filter.clear",
+      title: "Remove the filter: show every row it hid",
+      schema: withSheet({}, []),
+      describe: () => "clear filter",
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        if (!data.filter) return null;
+        const undo = filterUndo(id, data, ctx);
+        data.setFilter(null);
+        return undo;
+      },
+    })
+    .register<{ sheet?: string }>({
+      type: "filter.reapply",
+      title: "Apply the filter again after the data changed",
+      schema: withSheet({}, []),
+      describe: () => "reapply filter",
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        if (!data.filter) return null;
+        const undo = filterUndo(id, data, ctx);
+        data.reapplyFilter();
+        return undo;
+      },
+    })
+    .register<{ filter: string | null; ids: string; sheet?: string }>({
+      type: "filter.restore",
+      title: "Put a filter back as it was",
+      internal: true,
+      schema: withSheet({ filter: s.anyOf(s.string(), s.null()), ids: s.string() }, ["filter", "ids"]),
+      describe: () => "filter",
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const undo = filterUndo(id, data, ctx);
+        data.restoreFilter(p.filter ? ctx.blobs.get<FilterSpec>(p.filter) : null, ctx.blobs.get<number[]>(p.ids));
+        return undo;
+      },
+    })
+    .register<{ name: string; sheet?: string }>({
+      type: "filter.saveView",
+      title: "Save the current filter and sort as a named view (replaces a view with that name)",
+      schema: withSheet({ name: s.string("view name", { minLength: 1, maxLength: 60 }) }, ["name"]),
+      describe: (p) => `save view "${p.name}"`,
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const before = structuredClone(data.filterViews);
+        const view: FilterView = { name: p.name, filter: data.filter ? structuredClone(data.filter) : null, sort: data.lastSort ? [...data.lastSort] : [] };
+        const i = data.filterViews.findIndex((v) => v.name.toLowerCase() === p.name.toLowerCase());
+        if (i >= 0) data.filterViews[i] = view;
+        else data.filterViews.push(view);
+        return { type: "filter.views", params: { sheet: id, views: ctx.blobs.put(before) } };
+      },
+    })
+    .register<{ name: string; sheet?: string }>({
+      type: "filter.deleteView",
+      title: "Delete a saved filter view",
+      schema: withSheet({ name: s.string("view name") }, ["name"]),
+      describe: (p) => `delete view "${p.name}"`,
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const before = structuredClone(data.filterViews);
+        data.filterViews = data.filterViews.filter((v) => v.name.toLowerCase() !== p.name.toLowerCase());
+        if (data.filterViews.length === before.length) throw new Error(`No view called "${p.name}".`);
+        return { type: "filter.views", params: { sheet: id, views: ctx.blobs.put(before) } };
+      },
+    })
+    .register<{ views: string; sheet?: string }>({
+      type: "filter.views",
+      title: "Put the saved views back",
+      internal: true,
+      schema: withSheet({ views: s.string() }, ["views"]),
+      describe: () => "views",
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const before = structuredClone(data.filterViews);
+        data.filterViews = ctx.blobs.get<FilterView[]>(p.views);
+        return { type: "filter.views", params: { sheet: id, views: ctx.blobs.put(before) } };
+      },
+    })
+    .register<{ keys: { col: number; descending?: boolean }[]; hasHeader?: boolean; sheet?: string }>({
+      type: "rows.sortBy",
+      title: "Sort rows by several columns (first key first), keeping a header row in place if there is one",
+      schema: withSheet(
+        {
+          keys: s.array(s.object({ col: s.int("column, 0-based", 0), descending: s.bool("largest / latest / Z first") }, ["col"]), "sort keys, most important first", 1, 16),
+          hasHeader: s.bool("the first row is a header and stays at the top"),
+        },
+        ["keys"],
+      ),
+      describe: (p) => `sort by ${p.keys.map((k) => columnLetter(k.col) + (k.descending ? " ↓" : "")).join(", ")}`,
+      recordable: true,
+      async apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const start = data.rowOrder;
+        if (!(await sortByKeys(ctx, data, p.keys, !!p.hasHeader))) return null;
+        return { type: "rows.order", params: { sheet: id, order: start ? ctx.blobs.put(start) : null } };
+      },
+    })
+    .register<{ name: string; sheet?: string }>({
+      type: "filter.applyView",
+      title: "Switch to a saved filter view: its filter and its sort",
+      schema: withSheet({ name: s.string("view name") }, ["name"]),
+      describe: (p) => `view "${p.name}"`,
+      recordable: true,
+      async apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const view = data.filterViews.find((v) => v.name.toLowerCase() === p.name.toLowerCase());
+        if (!view) throw new Error(`No view called "${p.name}".`);
+        const undo = {
+          type: "filter.state",
+          params: {
+            sheet: id,
+            order: data.rowOrder ? ctx.blobs.put(data.rowOrder) : null,
+            filter: data.filter ? ctx.blobs.put(structuredClone(data.filter)) : null,
+            ids: ctx.blobs.put(data.filteredRowIds),
+          },
+        };
+        if (view.sort.length && !(await sortByKeys(ctx, data, view.sort, (view.filter?.headerRow ?? -1) === 0))) return null;
+        data.setFilter(view.filter);
+        return undo;
+      },
+    })
+    .register<{ order: string | null; filter: string | null; ids: string; sheet?: string }>({
+      type: "filter.state",
+      title: "Put the row order and filter back",
+      internal: true,
+      schema: withSheet({ order: s.anyOf(s.string(), s.null()), filter: s.anyOf(s.string(), s.null()), ids: s.string() }, ["order", "filter", "ids"]),
+      describe: () => "view",
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const undo = {
+          type: "filter.state",
+          params: {
+            sheet: id,
+            order: data.rowOrder ? ctx.blobs.put(data.rowOrder) : null,
+            filter: data.filter ? ctx.blobs.put(structuredClone(data.filter)) : null,
+            ids: ctx.blobs.put(data.filteredRowIds),
+          },
+        };
+        data.setRowOrder(p.order ? ctx.blobs.get<RowMap | Uint32Array>(p.order) : null);
+        data.restoreFilter(p.filter ? ctx.blobs.get<FilterSpec>(p.filter) : null, ctx.blobs.get<number[]>(p.ids));
+        return undo;
       },
     });
 
