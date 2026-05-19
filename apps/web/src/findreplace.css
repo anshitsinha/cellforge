@@ -1,0 +1,68 @@
+/* Find & replace: a dialog that stays open beside the grid, so the backdrop
+   doesn't dim or block it. */
+.palette-backdrop.find-backdrop {
+  background: transparent;
+  pointer-events: none;
+  justify-content: flex-end;
+  padding: 72px 16px 16px;
+}
+
+.find-backdrop .find-dialog {
+  pointer-events: auto;
+  width: min(440px, 100%);
+}
+
+.find-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.palette-form .find-options label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.find-status:empty {
+  display: none;
+}
+
+.find-dialog .numfmt-actions {
+  flex-wrap: wrap;
+}
+
+.find-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 30vh;
+  overflow-y: auto;
+}
+
+.find-results:empty {
+  display: none;
+}
+
+.find-results li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 2px 0;
+}
+
+.find-results li .hp-cell {
+  flex: none;
+  cursor: pointer;
+}
+
+.find-results li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.find-dialog [hidden] {
+  display: none !important;
+}
