@@ -368,6 +368,7 @@ function toggleFilterButtons() {
 function refresh() {
   settleActiveSheet();
   syncFilterButtons();
+  source.invalidateCondFormats();
   showHint();
   tabs.render();
   grid.syncShape();

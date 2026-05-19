@@ -21,6 +21,8 @@ export interface DataSource {
   getEditText?(row: number, col: number): string;
   /** Optional cell formatting; null or undefined means the default look. */
   getStyle?(row: number, col: number): CellStyle | null | undefined;
+  /** The style to draw with, when it differs from getStyle (conditional formatting on top). */
+  getDisplayStyle?(row: number, col: number): CellStyle | null | undefined;
   /**
    * Optional display text for a value (number formats). A colour from the
    * format (e.g. [Red]) wins over the cell's text colour.
@@ -100,4 +102,10 @@ export interface CellStyle {
   borderRight?: BorderLine;
   borderBottom?: BorderLine;
   borderLeft?: BorderLine;
+  /** conditional formatting: a data bar covering this share of the width */
+  bar?: { from: number; to: number; color: string };
+  /** conditional formatting: an icon drawn at the left of the cell */
+  icon?: { glyph: string; color: string };
+  /** conditional formatting: show only the bar / icon */
+  hideValue?: boolean;
 }

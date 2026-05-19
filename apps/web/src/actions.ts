@@ -8,12 +8,13 @@
  * tabs still changes the right sheet.
  */
 import { type Action, ActionRegistry, type BlobStore, type JsonSchema, s } from "@cellforge/actions";
-import { type CellStyle, type CellValue, columnLetter, expandToMerges, intersects } from "@cellforge/grid";
+import { type CellRange, type CellStyle, type CellValue, columnLetter, expandToMerges, intersects } from "@cellforge/grid";
 import { squeeze, adjustForColChange, adjustForRowChange, type ColChange, formatFormula, isDateFormat, moveFormula, parseFormula, parseTyped, seriesOf, type Node, type RowChange, type SeriesValue } from "@cellforge/core";
 import { type ColumnRemoval, type EditableSource, effectiveShift, type Fill, type FormulaSnapshot, isFormula, parseInput, type Stored } from "./editable";
 import { BlankSource, EditableSource as Source } from "./editable";
 import { CLEAR_ALL, type ColumnStyles, type StylePatch } from "./styles";
 import { captureVersion, versionSheets, type Version } from "./versions";
+import { checkRule, describeRule, newRuleId, type CfRule } from "./condformat";
 import { describeCondition, type FilterCondition, type FilterSpec, type FilterView } from "./filter";
 import { buildClean, buildDropped, namedHeader, planCleanup, sheetText } from "./cleanup";
 import { type IdRuns, type RowMap, runsLength } from "./rowmap";
@@ -676,6 +677,123 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         };
         data.setRowOrder(p.order ? ctx.blobs.get<RowMap | Uint32Array>(p.order) : null);
         data.restoreFilter(p.filter ? ctx.blobs.get<FilterSpec>(p.filter) : null, ctx.blobs.get<number[]>(p.ids));
+        return undo;
+      },
+    });
+
+  // ------------------------------------------------- conditional formatting --
+  const cfPoint = s.object({ type: s.string(undefined, { enum: ["min", "max", "number", "percent", "percentile"] }), value: s.number() }, ["type"]);
+  const cfRange = s.object({ top: s.int(undefined, 0), left: s.int(undefined, 0), bottom: s.int(undefined, 0), right: s.int(undefined, 0) });
+  const cfRuleSchema = s.object(
+    {
+      kind: s.string("what the rule looks at", {
+        enum: ["cell", "text", "date", "blanks", "noBlanks", "errors", "noErrors", "duplicates", "unique", "top", "average", "formula", "scale", "bar", "icons"],
+      }),
+      ranges: s.array(cfRange, "cells the rule applies to (0-based)", 1),
+      op: s.string("cell: > >= < <= = != between notBetween; text: contains notContains begins ends"),
+      a: s.anyOf(s.number(), s.string()),
+      b: s.number(),
+      value: s.string("text to look for"),
+      when: s.string("date: yesterday today tomorrow last7 lastWeek thisWeek nextWeek lastMonth thisMonth nextMonth past future"),
+      n: s.number("top / bottom: how many (or percent)"),
+      percent: s.bool(),
+      bottom: s.bool(),
+      below: s.bool("average: below instead of above"),
+      orEqual: s.bool(),
+      formula: s.string("formula for the range's top-left cell, e.g. =$C2>100"),
+      min: cfPoint,
+      mid: cfPoint,
+      max: cfPoint,
+      colors: s.array(s.string("#rrggbb"), "colour scale: 2 or 3 colours, low to high", 2, 3),
+      color: s.string("data bar colour #rrggbb"),
+      set: s.string(undefined, { enum: ["arrows3", "traffic3", "signs3", "flags3", "arrows5", "ratings5"] }),
+      reverse: s.bool(),
+      showValue: s.bool(),
+      format: s.object({ fill: s.string(), color: s.string(), bold: s.bool(), italic: s.bool(), strike: s.bool() }, []),
+      stopIfTrue: s.bool(),
+    },
+    ["kind", "ranges"],
+  );
+  const cfUndo = (id: string, data: EditableSource, ctx: SheetCtx) => ({ type: "format.conditionalRestore", params: { sheet: id, rules: ctx.blobs.put(structuredClone([...data.condFormats])) } });
+  registry
+    .register<{ rule: Omit<CfRule, "id">; first?: boolean; sheet?: string }>({
+      type: "format.conditionalAdd",
+      title: "Add a conditional formatting rule (highlight cells, colour scale, data bar or icon set)",
+      schema: withSheet({ rule: cfRuleSchema, first: s.bool("put it first (highest priority); default last") }, ["rule"]),
+      describe: (p) => `conditional format: ${describeRule({ ...p.rule, id: "" } as CfRule)}`,
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const rule = checkRule({ ...p.rule, id: newRuleId(data.condFormats) } as CfRule);
+        const undo = cfUndo(id, data, ctx);
+        data.setCondFormats(p.first ? [rule, ...data.condFormats] : [...data.condFormats, rule]);
+        return undo;
+      },
+    })
+    .register<{ id: string; rule: Omit<CfRule, "id">; sheet?: string }>({
+      type: "format.conditionalUpdate",
+      title: "Change a conditional formatting rule",
+      schema: withSheet({ id: s.string("rule id"), rule: cfRuleSchema }, ["id", "rule"]),
+      describe: () => "edit conditional format",
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const i = data.condFormats.findIndex((r) => r.id === p.id);
+        if (i < 0) throw new Error("That rule no longer exists.");
+        const undo = cfUndo(id, data, ctx);
+        const next = [...data.condFormats];
+        next[i] = checkRule({ ...p.rule, id: p.id } as CfRule);
+        data.setCondFormats(next);
+        return undo;
+      },
+    })
+    .register<{ id: string; to: number; sheet?: string }>({
+      type: "format.conditionalMove",
+      title: "Change a conditional formatting rule's priority (0 = first)",
+      schema: withSheet({ id: s.string("rule id"), to: s.int("new position, 0-based", 0) }, ["id", "to"]),
+      describe: () => "reorder conditional formats",
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const list = [...data.condFormats];
+        const i = list.findIndex((r) => r.id === p.id);
+        if (i < 0) throw new Error("That rule no longer exists.");
+        const to = Math.min(p.to, list.length - 1);
+        if (to === i) return null;
+        const undo = cfUndo(id, data, ctx);
+        const [rule] = list.splice(i, 1);
+        list.splice(to, 0, rule);
+        data.setCondFormats(list);
+        return undo;
+      },
+    })
+    .register<{ id?: string; range?: CellRange; sheet?: string }>({
+      type: "format.conditionalDelete",
+      title: "Delete one conditional formatting rule (by id), or every rule touching a range, or all rules on the sheet",
+      schema: withSheet({ id: s.string("rule id"), range: cfRange }, []),
+      describe: () => "delete conditional formats",
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const touches = (r: CfRule) =>
+          !p.range || r.ranges.some((x) => x.top <= p.range!.bottom && x.bottom >= p.range!.top && x.left <= p.range!.right && x.right >= p.range!.left);
+        const keep = data.condFormats.filter((r) => (p.id ? r.id !== p.id : !touches(r)));
+        if (keep.length === data.condFormats.length) return null;
+        const undo = cfUndo(id, data, ctx);
+        data.setCondFormats(keep);
+        return undo;
+      },
+    })
+    .register<{ rules: string; sheet?: string }>({
+      type: "format.conditionalRestore",
+      title: "Put conditional formats back",
+      internal: true,
+      schema: withSheet({ rules: s.string() }, ["rules"]),
+      describe: () => "conditional formats",
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const undo = cfUndo(id, data, ctx);
+        data.setCondFormats(ctx.blobs.get<CfRule[]>(p.rules));
         return undo;
       },
     });

@@ -24,6 +24,7 @@ import { formatCell, spliceMerges, type CellRange, type CellStyle, type CellValu
 import { CellArray, type ErrorHint, parseTableSpec, formatGeneral, formatValue as formatWithCode, isDateFormat, Lambda, type FormulaValue } from "@cellforge/core";
 import { DepIndex, type Rect } from "./deps";
 import { filteredOutRows, type FilterSpec, type FilterView } from "./filter";
+import { CondFormatter, spliceRules, type CfRule } from "./condformat";
 import { SheetStyles, type ColumnStyles, type StylesState } from "./styles";
 
 /** A table: a named block whose first row holds its column headers. */
@@ -186,6 +187,9 @@ export class EditableSource implements DataSource {
   private filteredIds = new Set<number>();
   /** saved filter + sort setups */
   filterViews: FilterView[] = [];
+  // conditional formatting rules, in priority order
+  private cfRules: CfRule[] = [];
+  private cf: CondFormatter | null = null;
   /** the last sort, for saving in a filter view (not saved with the file) */
   lastSort: { col: number; descending: boolean }[] | null = null;
 
@@ -299,6 +303,7 @@ export class EditableSource implements DataSource {
       ...(this.tables.length ? { tables: this.tables.map((t) => ({ ...t })) } : {}),
       ...(this.filterSpec ? { filter: structuredClone(this.filterSpec), filtered: [...this.filteredIds] } : {}),
       ...(this.filterViews.length ? { filterViews: structuredClone(this.filterViews) } : {}),
+      ...(this.cfRules.length ? { condFormats: structuredClone(this.cfRules) } : {}),
     };
     return { state, binary: this.order?.isArray ? { order: this.order.toArray() } : {} };
   }
@@ -335,6 +340,7 @@ export class EditableSource implements DataSource {
     s.filterSpec = state.filter ? structuredClone(state.filter) : null;
     s.filteredIds = new Set(state.filtered ?? []);
     s.filterViews = state.filterViews ? structuredClone(state.filterViews) : [];
+    if (state.condFormats?.length) s.setCondFormats(state.condFormats);
     s.rebuildDeps();
     return s;
   }
@@ -366,6 +372,7 @@ export class EditableSource implements DataSource {
     copy.filterSpec = this.filterSpec ? structuredClone(this.filterSpec) : null;
     copy.filteredIds = new Set(this.filteredIds);
     copy.filterViews = structuredClone(this.filterViews);
+    if (this.cfRules.length) copy.setCondFormats(this.cfRules);
     copy.rebuildDeps();
     return copy;
   }
@@ -677,6 +684,7 @@ export class EditableSource implements DataSource {
     const n = this.rowCount;
     if (at < 0 || at + remove > n) throw new Error("rows out of range");
     if (this.merges.length) this.merges = spliceMerges(this.merges, "row", at, remove, runsLength(insert));
+    if (this.cfRules.length) this.setCondFormats(spliceRules(this.cfRules, "row", at, remove, runsLength(insert)));
     if (this.tables.length) this.tables = spliceMerges(this.tables, "row", at, remove, runsLength(insert)) as TableDef[];
     const current = this.order ?? RowMap.identity(n);
     const { map, removed } = current.splice(at, remove, insert);
@@ -920,6 +928,7 @@ export class EditableSource implements DataSource {
     if (at < 0 || at > this.colCount) throw new Error("column out of range");
     this.shiftColumns(at, count);
     if (this.merges.length) this.merges = spliceMerges(this.merges, "col", at, 0, count);
+    if (this.cfRules.length) this.setCondFormats(spliceRules(this.cfRules, "col", at, 0, count));
     if (this.tables.length) this.tables = spliceMerges(this.tables, "col", at, 0, count) as TableDef[];
     this.spliceColMap(at, 0, new Array(count).fill(-1));
     this.columnsChanged();
@@ -941,6 +950,7 @@ export class EditableSource implements DataSource {
     const widths = [...this.colWidths].filter(([c]) => c >= at && c < at + count);
     for (const [c] of widths) this.colWidths.delete(c);
     if (this.merges.length) this.merges = spliceMerges(this.merges, "col", at, count, 0);
+    if (this.cfRules.length) this.setCondFormats(spliceRules(this.cfRules, "col", at, count, 0));
     if (this.tables.length) this.tables = spliceMerges(this.tables, "col", at, count, 0) as TableDef[];
     this.shiftColumns(at + count, -count);
     const map = this.spliceColMap(at, count, []);
@@ -952,6 +962,7 @@ export class EditableSource implements DataSource {
   restoreColumns(at: number, removed: ColumnRemoval): void {
     this.shiftColumns(at, removed.map.length);
     if (this.merges.length) this.merges = spliceMerges(this.merges, "col", at, 0, removed.map.length);
+    if (this.cfRules.length) this.setCondFormats(spliceRules(this.cfRules, "col", at, 0, removed.map.length));
     if (this.tables.length) this.tables = spliceMerges(this.tables, "col", at, 0, removed.map.length) as TableDef[];
     this.spliceColMap(at, 0, removed.map);
     for (const e of removed.edits) this.putEdit(e.id, e.col, e.value);
@@ -1327,6 +1338,46 @@ export class EditableSource implements DataSource {
 
   getMerges(): readonly CellRange[] {
     return this.merges;
+  }
+
+  // ---------------------------------------------------------------------------
+  // conditional formatting
+
+  get condFormats(): readonly CfRule[] {
+    return this.cfRules;
+  }
+
+  setCondFormats(rules: readonly CfRule[]): void {
+    this.cfRules = structuredClone([...rules]);
+    if (!this.cfRules.length) this.cf = null;
+    else if (this.cf) this.cf.setRules(this.cfRules);
+    else this.cf = new CondFormatter(this, this.cfRules);
+  }
+
+  /** Values changed: rules that look at a whole range work it out again. */
+  invalidateCondFormats(): void {
+    this.cf?.invalidate();
+  }
+
+  /** A formula (already moved to this cell) worked out at row, col: for formula rules. */
+  evalAt(ast: Node, row: number, col: number): unknown {
+    this.evalStack.push([row, col]);
+    try {
+      const v = evaluate(ast, this.ctx, 0);
+      return v instanceof CellArray ? v.get(0, 0) : v instanceof Lambda ? errors.calc : v;
+    } catch {
+      return errors.value;
+    } finally {
+      this.evalStack.pop();
+    }
+  }
+
+  /** The style the grid draws: the cell's own, with conditional formatting on top. */
+  getDisplayStyle(row: number, col: number): CellStyle | null {
+    const own = this.getStyle(row, col);
+    const r = this.cf?.apply(row, col);
+    if (!r) return own;
+    return { ...own, ...r.style, ...(r.bar ? { bar: r.bar } : {}), ...(r.icon ? { icon: r.icon } : {}), ...(r.hideValue ? { hideValue: true } : {}) };
   }
 
   getStyle(row: number, col: number): CellStyle | null {
@@ -1970,6 +2021,7 @@ export interface SheetState {
   /** row ids the filter hides */
   filtered?: number[];
   filterViews?: FilterView[];
+  condFormats?: CfRule[];
 }
 
 export interface FormulaSnapshot {

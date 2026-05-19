@@ -68,12 +68,11 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Filters and filter views, (Blanks) first, invert selection; multi-column sort
-- [x] Filter engine: hide rows not matching per-column conditions (values list, text/number/date rules), on row ids so edits and sorts keep it
-- [x] Filter dropdown on the header: value list with counts, (Blanks) first, search, select all / invert, sort buttons
-- [x] Filter views: save, name and switch between filter + sort setups; clear all
-- [x] Multi-column sort dialog (add levels, direction, by value)
-- [x] Actions for all of it (undo, AI catalog); tests, user guide
+### Conditional formatting with a proper rules manager
+- [x] Rules engine: cell value / text / dates / blanks / duplicates / top-bottom / above-average / formula rules, colour scales, data bars, icon sets; evaluated per visible cell with column stats cached
+- [x] Grid drawing: fills, font colours, bold, data bars and icons drawn from rule results
+- [ ] Rules manager: list per sheet, add / edit / reorder / stop-if-true / delete, applies-to ranges that move with inserts and deletes
+- [ ] Actions, saved with the file, Excel import / export of common rules; tests, user guide
 
 ## Milestones
 
@@ -123,9 +122,9 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Trial balance import mapper (debit/credit or signed, code/name/current/prior)
 
 ### M4: Data tools 🔨
-- 🔨 Filters and filter views, (Blanks) first, invert selection; multi-column sort
+- ✅ Filters and filter views, (Blanks) first, invert selection; multi-column sort
 - ⬜ Find & replace (regex, in formulas)
-- ⬜ Conditional formatting with a proper rules manager
+- 🔨 Conditional formatting with a proper rules manager
 - ⬜ Data validation and dropdowns; date, currency and checkbox column types
 - ⬜ Remove duplicates, text to columns, unpivot / pivot, extract by pattern
 - ⬜ Goal Seek

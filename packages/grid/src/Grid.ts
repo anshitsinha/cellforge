@@ -1313,13 +1313,34 @@ export class Grid {
 
   private paintCell(row: number, col: number, x: number, y: number, w: number, h: number, fill: boolean, spanText = false): void {
     const { ctx } = this;
-    const style = this.source.getStyle?.(row, col) ?? null;
+    const style = (this.source.getDisplayStyle ?? this.source.getStyle)?.call(this.source, row, col) ?? null;
     if (fill && style?.fill) {
       ctx.fillStyle = style.fill;
       ctx.fillRect(x, y, w, h);
     }
+    if (style?.bar) {
+      // a data bar: a soft fill with a solid edge, inset from the grid lines
+      const bx = x + 2 + (w - 4) * style.bar.from;
+      const bw = Math.max(1, (w - 4) * (style.bar.to - style.bar.from));
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = style.bar.color;
+      ctx.fillRect(bx, y + 3, bw, h - 6);
+      ctx.globalAlpha = 1;
+      ctx.fillRect(style.bar.from > 0 && style.bar.to <= style.bar.from + 1e-9 ? bx : bx + bw - 2, y + 3, 2, h - 6);
+      ctx.restore();
+    }
+    if (style?.icon) {
+      ctx.save();
+      ctx.font = `${Math.round(h * 0.55)}px system-ui, sans-serif`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = style.icon.color;
+      ctx.fillText(style.icon.glyph, x + 3, y + h / 2);
+      ctx.restore();
+    }
     const value = this.source.getCell(row, col);
-    if (value === null) return;
+    if (value === null || style?.hideValue) return;
     // a cell with something to explain gets a small corner triangle
     if (!spanText && this.source.hasNote?.(row, col)) {
       ctx.fillStyle = "#f29900";
