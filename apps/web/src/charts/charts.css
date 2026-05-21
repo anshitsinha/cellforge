@@ -1,0 +1,199 @@
+/* Chart windows. Imported by charts/panel.ts, so nothing to add to style.css. */
+
+:root {
+  /* colour-blind-safe categorical order, stepped for the light surface */
+  --chart-1: #2a78d6;
+  --chart-2: #eb6834;
+  --chart-3: #1baf7a;
+  --chart-4: #eda100;
+  --chart-5: #e87ba4;
+  --chart-6: #008300;
+  --chart-7: #6250d6;
+  --chart-8: #e34948;
+  --chart-up: #2a78d6;
+  --chart-down: #eb6834;
+  --chart-total: #6b7078;
+  --chart-grid: #ebedf0;
+  --chart-axis: #9aa0a6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --chart-1: #3987e5;
+    --chart-2: #d95926;
+    --chart-3: #199e70;
+    --chart-4: #c98500;
+    --chart-5: #d55181;
+    --chart-6: #0ca30c;
+    --chart-7: #9085e9;
+    --chart-8: #e66767;
+    --chart-up: #3987e5;
+    --chart-down: #d95926;
+    --chart-total: #8b8f96;
+    --chart-grid: #34363b;
+    --chart-axis: #5f636a;
+  }
+}
+
+.chart-window {
+  position: fixed;
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  min-width: 260px;
+  min-height: 200px;
+  max-width: calc(100vw - 8px);
+  max-height: calc(100vh - 8px);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgb(0 0 0 / 0.28);
+  overflow: hidden;
+  resize: both;
+}
+
+.chart-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+
+.chart-head .chart-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.chart-head button {
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chart-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.chart-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.chart-canvas-wrap canvas {
+  display: block;
+}
+
+.chart-tip {
+  position: absolute;
+  pointer-events: none;
+  max-width: 260px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.2);
+  font-size: 12px;
+  white-space: pre-line;
+}
+
+.chart-tip b {
+  font-weight: 600;
+}
+
+.chart-editor {
+  width: 230px;
+  flex: none;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  padding: 10px;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+/* display rules below would otherwise beat the hidden attribute */
+.chart-window [hidden] {
+  display: none !important;
+}
+
+.chart-editor label {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.chart-editor label.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-editor input:not([type=checkbox]),
+.chart-editor select {
+  font: inherit;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  min-width: 0;
+}
+
+.chart-editor input.bad {
+  border-color: #d93025;
+}
+
+.chart-editor .pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.chart-editor small,
+.chart-editor .chart-series-head {
+  color: var(--muted);
+}
+
+.chart-editor .chart-series {
+  display: grid;
+  gap: 4px;
+}
+
+.chart-editor .chart-series-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.chart-editor .chart-series-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  padding: 16px;
+  text-align: center;
+}
