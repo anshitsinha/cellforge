@@ -15,6 +15,10 @@ export { dateParts, parseAs, parseDateLoose, parseNumberLoose, profileColumn, ty
 export { findHeaderRow, unwrapReport, type DroppedRow, type Unwrapped } from "./clean/unwrap";
 export { alignColumns, columnKey, combineParts, type AlignedColumn, type FilePart } from "./clean/combine";
 export * from "./audit";
+export { DEFAULT_REC_SETTINGS, REC_RULES, reconcile, subsetSum, toleranceFor, type RecDuplicate, type RecFlag, type RecMatch, type RecPair, type RecPasses, type RecRecord, type RecResult, type RecRule, type RecSettings, type RecSummary } from "./recon/match";
+export { explain, type ExplainKind, type ExplainReason, type Explanation } from "./recon/explain";
+// (recon's jaroWinkler is the same measure as audit's, which is exported above)
+export { amountKeyingError, bareRef, DEFAULT_PREFIXES, isOneSlip, isTransposition, KEYING_LABEL, keyingVariants, normRef, normText, refPrefix, textSimilarity, tokenSimilarity, type KeyingError } from "./recon/text";
 export { buildTb, guessTbRoles, readTb, TB_ROLES, type TbLine, type TbResult, type TbRole } from "./clean/tb";
 export { parseStatement, rowsToLines, type Statement, type StatementCell, type StatementLine, type StatementPage, type StatementRole, type Transaction } from "./clean/bank";
 export { pageLines, readPdfText, type LineCell, type PdfPage, type TextItem } from "./pdf/read";

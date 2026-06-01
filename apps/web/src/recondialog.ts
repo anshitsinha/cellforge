@@ -7,9 +7,7 @@
 import "./recon.css";
 import type { Action } from "@cellforge/actions";
 import { dateParts, formatValue, isDateFormat, parseDateLoose, parseNumberLoose, Table, type ColumnData, type DateOrder } from "@cellforge/core";
-import { explain } from "../../../packages/core/src/recon/explain";
-import { DEFAULT_REC_SETTINGS, reconcile, type RecRecord, type RecResult, type RecRule, type RecSettings } from "../../../packages/core/src/recon/match";
-import { KEYING_LABEL } from "../../../packages/core/src/recon/text";
+import { DEFAULT_REC_SETTINGS, explain, KEYING_LABEL, reconcile, type RecRecord, type RecResult, type RecRule, type RecSettings } from "@cellforge/core";
 import { EditableSource } from "./editable";
 import type { Workbook } from "./workbook";
 

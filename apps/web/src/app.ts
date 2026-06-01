@@ -24,6 +24,7 @@ import { openSortDialog } from "./sortdialog";
 import { editRule, openCfManager } from "./cfmanager";
 import { openFindReplace } from "./finddialog";
 import { openAuditTool } from "./audittools";
+import { openRecon } from "./recondialog";
 import { chartSpecs, closeChart, openChart, refreshCharts } from "./charts/panel";
 import { registerFindActions } from "./findreplace";
 
@@ -1298,6 +1299,12 @@ function paletteCommands(): Command[] {
         ["sample", "Pick a sample…", "audit sample sampling random systematic stratified monetary unit mus seed"],
       ] as const
     ).map(([kind, title, hint]) => ({ id: `audit-${kind}`, title, hint, run: () => openAuditTool(kind, { ...statementDeps(), source: () => source, sheetName: () => workbook.get(activeId).name }) })),
+    {
+      id: "reconcile",
+      title: "Reconcile two sheets…",
+      hint: "reconciliation bank rec match ledger statement unmatched mismatched tolerance fuzzy why don't these match",
+      run: () => openRecon({ workbook: () => workbook, activeSheet: () => activeId, run: (a) => run(a), putBlob: (v) => blobs.put(v), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }),
+    },
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },

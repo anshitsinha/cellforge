@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Table, type ColumnData } from "@cellforge/core";
-import { reconcile } from "../../../packages/core/src/recon/match";
+import { reconcile } from "@cellforge/core";
 import { EditableSource } from "./editable";
 import { guessMap, readSide, reconSheets, sheetHeader } from "./recondialog";
 
