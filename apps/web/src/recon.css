@@ -1,0 +1,57 @@
+/* Reconcile two sheets (recondialog.ts) */
+.palette.recon-dialog {
+  width: min(860px, 100%);
+  max-height: 84vh;
+}
+
+.recon-map select {
+  max-width: 220px;
+}
+
+.recon-map th select {
+  margin-left: 6px;
+}
+
+.recon-passes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 4px 16px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.recon-passes legend {
+  padding: 0 4px;
+  color: var(--muted);
+}
+
+.recon-passes .opt-check {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.recon-result,
+.recon-why {
+  display: grid;
+  gap: 8px;
+}
+
+.recon-warn-row td {
+  color: #f29900;
+}
+
+.recon-why input {
+  width: 7em;
+}
+
+.recon-why ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.recon-suggest button {
+  margin-left: 6px;
+}
