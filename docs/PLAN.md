@@ -159,11 +159,11 @@ tracker shows this expanded, with the first unticked step as the current one.
   lineage view, one-click write-up
 
 ### M7: Audit, evidence, sharing 🔨
-- 🔨 Duplicate tests (exact, near, fuzzy, multi-column); sequence gaps
-- 🔨 Benford (1st and 1st-two digits) with chi-square / MAD and chart
+- ✅ Duplicate tests (exact, near, fuzzy, multi-column); sequence gaps
+- ✅ Benford (1st and 1st-two digits) with chi-square / MAD and chart
 - ⬜ Journal entry testing suite; red-flag overlaps (vendor vs employee etc.)
-- 🔨 Stratification, top-N, Pareto, ageing buckets, materiality
-- 🔨 Sampling (random, systematic, stratified, monetary-unit) with recorded seed
+- ✅ Stratification, top-N, Pareto, ageing buckets, materiality
+- ✅ Sampling (random, systematic, stratified, monetary-unit) with recorded seed
 - ⬜ Footing / cross-footing and roll-forward checks
 - ⬜ Evidence pack: workbook + recipe + input fingerprints + hash-chained action log
 - ⬜ Evidence linking: attached documents stored outside the workbook, cell ↔
@@ -174,7 +174,7 @@ tracker shows this expanded, with the first unticked step as the current one.
   check, encrypted export; clear all local data; offline bundle
 
 ### M8: Charts and reports 🔨
-- 🔨 Charts: column, bar, line, area, pie, scatter, combo, histogram, waterfall,
+- ✅ Charts: column, bar, line, area, pie, scatter, combo, histogram, waterfall,
   Pareto, Benford, ageing; millions of points downsampled; axis limits from cells
 - ⬜ Pivot charts
 - ⬜ Reports: narrative + live tables and charts, one template for many entities,

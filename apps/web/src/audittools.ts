@@ -24,7 +24,7 @@ import {
   type BenfordTest,
   type DupKey,
   type SampleResult,
-} from "../../../packages/core/src/audit";
+} from "@cellforge/core";
 import { namedHeader } from "./cleanup";
 import { EditableSource } from "./editable";
 import "./audittools.css";

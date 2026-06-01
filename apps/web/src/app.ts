@@ -1,4 +1,5 @@
 import "./style.css";
+import type { ChartSpec } from "./charts/model";
 import { type CellRange, Grid, columnLetter } from "@cellforge/grid";
 import { parseTsv, rangeSize, rangeToTsv } from "./clipboard";
 import { computeStats } from "./stats";
@@ -22,6 +23,8 @@ import { closeFilterMenu, openFilterMenu } from "./filtermenu";
 import { openSortDialog } from "./sortdialog";
 import { editRule, openCfManager } from "./cfmanager";
 import { openFindReplace } from "./finddialog";
+import { openAuditTool } from "./audittools";
+import { chartSpecs, closeChart, openChart, refreshCharts } from "./charts/panel";
 import { registerFindActions } from "./findreplace";
 
 const statementDeps = () => ({
@@ -345,6 +348,28 @@ function syncFilterButtons() {
   grid.setFilterButtons(buttons);
 }
 
+// charts live on the workbook; their windows follow it after every action (so undo works)
+let syncingCharts = false;
+const chartDeps = {
+  source: (id: string) => (workbook.has(id) ? workbook.get(id).source : null),
+  activeSheet: () => activeId,
+  range: () => grid.range,
+  onChange: (id: string, spec: ChartSpec | null) => {
+    if (!syncingCharts) void run({ type: "chart.set", params: { id, spec } });
+  },
+};
+function syncCharts() {
+  syncingCharts = true;
+  try {
+    const want = new Map(workbook.charts.map((c) => [c.id, c]));
+    for (const open of chartSpecs()) if (!want.has(open.id)) closeChart(open.id);
+    const open = new Map(chartSpecs().map((c) => [c.id, JSON.stringify(c)]));
+    for (const c of workbook.charts) if (open.get(c.id) !== JSON.stringify(c)) openChart(chartDeps, c);
+  } finally {
+    syncingCharts = false;
+  }
+  refreshCharts();
+}
 const findDeps = () => ({
   workbook: () => workbook,
   activeSheet: () => activeId,
@@ -396,6 +421,7 @@ function refresh() {
   settleActiveSheet();
   syncFilterButtons();
   source.invalidateCondFormats();
+  syncCharts();
   showHint();
   tabs.render();
   grid.syncShape();
@@ -1260,6 +1286,19 @@ function paletteCommands(): Command[] {
           { id: "filter-clear", title: "Clear filter (show all rows)", hint: "remove filter show all", run: () => run({ type: "filter.clear", params: {} }) },
         ]
       : []),
+    ...(
+      [
+        ["duplicates", "Find duplicates…", "audit duplicate exact near fuzzy similar vendor invoice double payment"],
+        ["sequence", "Find gaps in a sequence…", "audit sequence gap missing invoice cheque number duplicate out of order"],
+        ["benford", "Benford's law test…", "audit benford first digit two digits chi-square mad fraud"],
+        ["stratify", "Stratify values into bands…", "audit stratify strata bands value ranges profile"],
+        ["topn", "Largest items (top N)…", "audit top n largest biggest items"],
+        ["pareto", "Pareto analysis…", "audit pareto 80/20 cumulative share vendor customer concentration"],
+        ["ageing", "Ageing buckets…", "audit ageing aging days overdue receivables payables 30 60 90"],
+        ["sample", "Pick a sample…", "audit sample sampling random systematic stratified monetary unit mus seed"],
+      ] as const
+    ).map(([kind, title, hint]) => ({ id: `audit-${kind}`, title, hint, run: () => openAuditTool(kind, { ...statementDeps(), source: () => source, sheetName: () => workbook.get(activeId).name }) })),
+    { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },
     { id: "cf-manager", title: "Conditional formatting: manage rules…", hint: "highlight rules colour scale data bars icons", run: () => openCfManager(cfDeps()) },

@@ -14,6 +14,7 @@ import { type ColumnRemoval, type EditableSource, effectiveShift, type Fill, typ
 import { BlankSource, EditableSource as Source } from "./editable";
 import { CLEAR_ALL, type ColumnStyles, type StylePatch } from "./styles";
 import { captureVersion, versionSheets, type Version } from "./versions";
+import type { ChartSpec } from "./charts/model";
 import { checkRule, describeRule, newRuleId, type CfRule } from "./condformat";
 import { describeCondition, type FilterCondition, type FilterSpec, type FilterView } from "./filter";
 import { buildClean, buildDropped, namedHeader, planCleanup, sheetText } from "./cleanup";
@@ -486,6 +487,26 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         return { type: "rows.order", params: { sheet: id, order: current ? ctx.blobs.put(current) : null } };
       },
     });
+
+  // ------------------------------------------------------------- charts --
+  registry.register<{ id: string; spec: ChartSpec | null }>({
+    type: "chart.set",
+    title: "Add, change or remove a chart (spec null removes it)",
+    schema: s.object({ id: s.string("chart id"), spec: s.anyOf({ type: "object", properties: {}, additionalProperties: true }, s.null()) }),
+    describe: (p) => (p.spec ? "chart" : "delete chart"),
+    recordable: true,
+    apply(ctx, p) {
+      const list = ctx.workbook.charts;
+      const i = list.findIndex((c) => c.id === p.id);
+      const before = i >= 0 ? structuredClone(list[i]) : null;
+      if (!p.spec && !before) return null;
+      if (p.spec && before && JSON.stringify(p.spec) === JSON.stringify(before)) return null;
+      const next = list.filter((c) => c.id !== p.id);
+      if (p.spec) next.splice(i >= 0 ? i : next.length, 0, { ...structuredClone(p.spec), id: p.id });
+      ctx.workbook.charts = next;
+      return { type: "chart.set", params: { id: p.id, spec: before } };
+    },
+  });
 
   // ------------------------------------------------------------ filter --
   const cond = s.anyOf(

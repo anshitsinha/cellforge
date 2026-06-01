@@ -136,6 +136,7 @@ describe("sheet actions", () => {
       "cells.set",
       "fill.down",
       "rows.sort",
+      "chart.set",
       "filter.set",
       "filter.clear",
       "filter.reapply",

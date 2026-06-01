@@ -12,6 +12,7 @@
  * last snapshot is loaded and the journal replayed through the same
  * actions, which also rebuilds undo.
  */
+import type { ChartSpec } from "./charts/model";
 import type { Action } from "@cellforge/actions";
 import { Table, type ColumnData } from "@cellforge/core";
 import type { DataSource } from "@cellforge/grid";
@@ -36,6 +37,8 @@ export interface WorkbookState {
   iterative?: { max: number; change: number };
   /** defined names (added after v1 shipped) */
   names?: { name: string; formula: string; comment?: string }[];
+  /** charts (added after v1 shipped) */
+  charts?: ChartSpec[];
   /** named versions (added after v1 shipped; missing means none) */
   versions?: { name: string; at: number; sheets: SavedSheet[] }[];
 }
@@ -137,7 +140,7 @@ export function packWorkbook(wb: Workbook, active: string, name: string): Packed
   }));
   const names = wb.definedNames;
   const iterative = wb.iterative;
-  return { meta: { format: "cellforge", v: 1, name, active, bases, sheets, ...(versions.length ? { versions } : {}), ...(names.length ? { names } : {}), ...(iterative ? { iterative } : {}) }, files };
+  return { meta: { format: "cellforge", v: 1, name, active, bases, sheets, ...(versions.length ? { versions } : {}), ...(names.length ? { names } : {}), ...(iterative ? { iterative } : {}), ...(wb.charts.length ? { charts: structuredClone(wb.charts) } : {}) }, files };
 }
 
 /** Rebuild a workbook from its metadata, reading files as needed. */
@@ -201,6 +204,7 @@ export async function unpackWorkbook(
   workbook.versions = versions;
   if (meta.names?.length) workbook.restoreNames(meta.names);
   if (meta.iterative) workbook.iterative = meta.iterative;
+  if (meta.charts?.length) workbook.charts = structuredClone(meta.charts);
   const active = workbook.has(meta.active) ? meta.active : workbook.sheets[0].id;
   return { workbook, active, name: meta.name };
 }

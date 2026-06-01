@@ -4,6 +4,7 @@
  * view state, not part of the workbook's data, so switching isn't undoable,
  * just as in Excel.
  */
+import type { ChartSpec } from "./charts/model";
 import { BlankSource, EditableSource } from "./editable";
 import type { Version } from "./versions";
 import { formatFormula, parseFormula, type Node } from "@cellforge/core";
@@ -47,6 +48,8 @@ export class Workbook {
   private nextId = 1;
   /** named versions, oldest first; saved with the workbook */
   versions: Version[] = [];
+  /** charts (floating windows over the sheets); saved with the workbook */
+  charts: ChartSpec[] = [];
 
   /** iterative calculation for circular references (off by default, as in Excel) */
   private iter: { max: number; change: number } | null = null;
