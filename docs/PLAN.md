@@ -126,24 +126,24 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Find & replace (regex, in formulas)
 - 🔨 Conditional formatting with a proper rules manager
 - ⬜ Data validation and dropdowns; date, currency and checkbox column types
-- ⬜ Remove duplicates, text to columns, unpivot / pivot, extract by pattern
-- ⬜ Goal Seek
+- 🔨 Remove duplicates, text to columns, unpivot / pivot, extract by pattern
+- 🔨 Goal Seek
 - ⬜ Notes on cells, hyperlinks
 
 ### M5: Query engine, explore, reconcile 🔨
 - ⬜ Query engine (DuckDB-WASM, loaded on demand) over sheet columns
-- ⬜ Pivot tables (drag fields, drill-down to rows), slicers
-- ⬜ Column profiles
-- ⬜ Join doctor (match rate, duplicate keys, orphans) and guided joins
-- ⬜ "Why don't these match?" inspector with one-click normalisation
+- 🔨 Pivot tables (drag fields, drill-down to rows), slicers
+- 🔨 Column profiles
+- 🔨 Join doctor (match rate, duplicate keys, orphans) and guided joins
+- 🔨 "Why don't these match?" inspector with one-click normalisation
 - ✅ Reconciliation: keys, tolerances, fuzzy text, 1:N and N:1, matched /
   unmatched / mismatched outputs, exception export
 - ✅ Reference normalisation, sum matching, keying-error flags, in-side duplicates
 - ⬜ Proposed adjusting entries, roll-forward of outstanding items, rec statement
 - ⬜ Open-item matching for balance sheet accounts; supplier / customer statement recs
-- ⬜ Trial balance compare; GL → TB tie-out
-- ⬜ Fuzzy name matching incl. name order; mapping tables
-- ⬜ Key-based file compare
+- 🔨 Trial balance compare; GL → TB tie-out
+- 🔨 Fuzzy name matching incl. name order; mapping tables
+- 🔨 Key-based file compare
 - ⬜ Scenarios (copy-on-write sheets) compared side by side
 - ⬜ Acceptance test: synthetic bank/ledger month modelled on real data at 6K and 6M rows
 
@@ -161,16 +161,16 @@ tracker shows this expanded, with the first unticked step as the current one.
 ### M7: Audit, evidence, sharing 🔨
 - ✅ Duplicate tests (exact, near, fuzzy, multi-column); sequence gaps
 - ✅ Benford (1st and 1st-two digits) with chi-square / MAD and chart
-- ⬜ Journal entry testing suite; red-flag overlaps (vendor vs employee etc.)
+- 🔨 Journal entry testing suite; red-flag overlaps (vendor vs employee etc.)
 - ✅ Stratification, top-N, Pareto, ageing buckets, materiality
 - ✅ Sampling (random, systematic, stratified, monetary-unit) with recorded seed
-- ⬜ Footing / cross-footing and roll-forward checks
+- 🔨 Footing / cross-footing and roll-forward checks
 - ⬜ Evidence pack: workbook + recipe + input fingerprints + hash-chained action log
 - ⬜ Evidence linking: attached documents stored outside the workbook, cell ↔
   document-region links, validation that compares values
 - ⬜ Review mode: tick marks with legend, reviewed-by, notes that block sign-off,
   workpaper references
-- ⬜ Share safely: PII scan, mask / hash / pseudonymise / redact, hidden-content
+- 🔨 Share safely: PII scan, mask / hash / pseudonymise / redact, hidden-content
   check, encrypted export; clear all local data; offline bundle
 
 ### M8: Charts and reports 🔨
