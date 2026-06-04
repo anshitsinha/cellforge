@@ -15,6 +15,7 @@ import { BlankSource, EditableSource as Source } from "./editable";
 import { CLEAR_ALL, type ColumnStyles, type StylePatch } from "./styles";
 import { captureVersion, versionSheets, type Version } from "./versions";
 import type { ChartSpec } from "./charts/model";
+import { checkDv, subtractRange, type DvRule } from "./validation";
 import { checkRule, describeRule, newRuleId, type CfRule } from "./condformat";
 import { describeCondition, type FilterCondition, type FilterSpec, type FilterView } from "./filter";
 import { buildClean, buildDropped, namedHeader, planCleanup, sheetText } from "./cleanup";
@@ -815,6 +816,86 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         const { id, data } = target(ctx, p.sheet);
         const undo = cfUndo(id, data, ctx);
         data.setCondFormats(ctx.blobs.get<CfRule[]>(p.rules));
+        return undo;
+      },
+    });
+
+  // ---------------------------------------------------------- validation --
+  const dvRange = s.object({ top: s.int(undefined, 0), left: s.int(undefined, 0), bottom: s.int(undefined, 0), right: s.int(undefined, 0) });
+  const dvSchema = s.object(
+    {
+      kind: s.string("what's allowed", { enum: ["list", "whole", "decimal", "date", "textLength", "custom", "checkbox"] }),
+      ranges: s.array(dvRange, "cells the rule is for (0-based)", 1),
+      op: s.string(undefined, { enum: ["between", "notBetween", "=", "!=", ">", "<", ">=", "<="] }),
+      a: s.number("value to compare with (dates as serial numbers)"),
+      b: s.number("upper end for between"),
+      list: s.array(s.string(), "list: the choices"),
+      source: s.string("list: a range holding the choices, e.g. Lists!$A$2:$A$20"),
+      formula: s.string("custom: a formula for the first cell that must be TRUE"),
+      allowBlank: s.bool(),
+      dropdown: s.bool("list: show the dropdown (default true)"),
+      inputTitle: s.string(),
+      inputMessage: s.string("shown when the cell is selected"),
+      errorStyle: s.string(undefined, { enum: ["stop", "warning", "info"] }),
+      errorTitle: s.string(),
+      errorMessage: s.string(),
+    },
+    ["kind", "ranges"],
+  );
+  const dvUndo = (id: string, data: EditableSource, ctx: SheetCtx) => ({ type: "validation.restore", params: { sheet: id, rules: ctx.blobs.put(structuredClone([...data.validations])) } });
+  /** A new rule replaces older rules where they overlap (one rule per cell, as in Excel). */
+  const withoutRanges = (rules: readonly DvRule[], ranges: readonly CellRange[]): DvRule[] => {
+    let out = [...rules];
+    for (const cut of ranges) out = out.flatMap((r) => {
+      const left = r.ranges.flatMap((x) => subtractRange(x, cut));
+      return left.length ? [{ ...r, ranges: left }] : [];
+    });
+    return out;
+  };
+  registry
+    .register<{ rule: Omit<DvRule, "id">; sheet?: string }>({
+      type: "validation.add",
+      title: "Add a data validation rule (dropdown list, number or date limits, text length, custom formula, or tick boxes); it replaces older rules on the same cells",
+      schema: withSheet({ rule: dvSchema }, ["rule"]),
+      describe: (p) => (p.rule.kind === "list" ? "dropdown list" : p.rule.kind === "checkbox" ? "tick boxes" : "data validation"),
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const existing = data.validations;
+        let n = existing.length + 1;
+        while (existing.some((r) => r.id === `dv${n}`)) n++;
+        const rule = checkDv({ ...(p.rule as DvRule), id: `dv${n}` });
+        const undo = dvUndo(id, data, ctx);
+        data.setValidations([...withoutRanges(existing, rule.ranges), rule]);
+        return undo;
+      },
+    })
+    .register<{ range?: CellRange; id?: string; sheet?: string }>({
+      type: "validation.clear",
+      title: "Remove data validation from a range (or one rule by id, or all on the sheet)",
+      schema: withSheet({ range: dvRange, id: s.string("rule id") }, []),
+      describe: () => "clear data validation",
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const before = data.validations;
+        const next = p.id ? before.filter((r) => r.id !== p.id) : p.range ? withoutRanges(before, [p.range]) : [];
+        if (JSON.stringify(next) === JSON.stringify(before)) return null;
+        const undo = dvUndo(id, data, ctx);
+        data.setValidations(next);
+        return undo;
+      },
+    })
+    .register<{ rules: string; sheet?: string }>({
+      type: "validation.restore",
+      title: "Put data validation back",
+      internal: true,
+      schema: withSheet({ rules: s.string() }, ["rules"]),
+      describe: () => "data validation",
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const undo = dvUndo(id, data, ctx);
+        data.setValidations(ctx.blobs.get<DvRule[]>(p.rules));
         return undo;
       },
     });

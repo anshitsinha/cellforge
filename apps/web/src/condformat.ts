@@ -9,6 +9,7 @@
 import { moveFormula, parseFormula, type Node } from "@cellforge/core";
 import type { CellRange, CellStyle, CellValue } from "@cellforge/grid";
 import { valueKey } from "./filter";
+import { spliceRanged } from "./validation";
 
 export interface CfFormat {
   fill?: string;
@@ -462,37 +463,7 @@ export function checkRule(rule: CfRule): CfRule {
 
 /** Ranges after rows or columns are inserted / deleted (a range that loses all its cells goes). */
 export function spliceRules(rules: readonly CfRule[], axis: "row" | "col", at: number, remove: number, insert: number): CfRule[] {
-  const lo = axis === "row" ? "top" : "left";
-  const hi = axis === "row" ? "bottom" : "right";
-  const out: CfRule[] = [];
-  for (const rule of rules) {
-    const ranges: CellRange[] = [];
-    for (const r0 of rule.ranges) {
-      const r = { ...r0 };
-      if (remove) {
-        const end = at + remove - 1;
-        if (r[lo] > end) {
-          r[lo] -= remove;
-          r[hi] -= remove;
-        } else if (r[hi] >= at) {
-          const keepBefore = Math.max(0, at - r[lo]);
-          const keepAfter = Math.max(0, r[hi] - end);
-          if (keepBefore + keepAfter === 0) continue;
-          r[lo] = Math.min(r[lo], at);
-          r[hi] = r[lo] + keepBefore + keepAfter - 1;
-        }
-      }
-      if (insert) {
-        if (r[lo] >= at) {
-          r[lo] += insert;
-          r[hi] += insert;
-        } else if (r[hi] >= at) r[hi] += insert; // inserted inside: the range grows
-      }
-      ranges.push(r);
-    }
-    if (ranges.length) out.push({ ...rule, ranges });
-  }
-  return out;
+  return spliceRanged(rules, axis, at, remove, insert);
 }
 
 /** A short description for the rules manager. */

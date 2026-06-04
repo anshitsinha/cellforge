@@ -21,6 +21,8 @@ export interface DataSource {
   getEditText?(row: number, col: number): string;
   /** Optional cell formatting; null or undefined means the default look. */
   getStyle?(row: number, col: number): CellStyle | null | undefined;
+  /** The cell offers a list of choices (data validation): the grid shows a dropdown button when it's active. */
+  hasDropdown?(row: number, col: number): boolean;
   /** The style to draw with, when it differs from getStyle (conditional formatting on top). */
   getDisplayStyle?(row: number, col: number): CellStyle | null | undefined;
   /**
@@ -108,4 +110,6 @@ export interface CellStyle {
   icon?: { glyph: string; color: string };
   /** conditional formatting: show only the bar / icon */
   hideValue?: boolean;
+  /** draw the value as a tick box (TRUE ticked) */
+  checkbox?: boolean;
 }

@@ -25,6 +25,7 @@ import { editRule, openCfManager } from "./cfmanager";
 import { openFindReplace } from "./finddialog";
 import { openAuditTool } from "./audittools";
 import { openRecon } from "./recondialog";
+import { askAboutInvalid, closeDropdown, dvContext, invalidCells, invalidInputs, openDropdown, openValidationDialog, showInputMessage } from "./dvui";
 import { chartSpecs, closeChart, openChart, refreshCharts } from "./charts/panel";
 import { registerFindActions } from "./findreplace";
 
@@ -138,6 +139,13 @@ async function updateSelectionStats() {
 
 // keep the name box, formula bar and stats in sync with the selection
 grid.onSelectionChange = () => {
+  closeDropdown();
+  {
+    const { row, col } = grid.selection;
+    const rule = source.validationAt(row, col);
+    const r = rule?.inputMessage || rule?.inputTitle ? grid.cellPageRect(row, col) : null;
+    showInputMessage(rule, r?.x ?? 0, (r?.y ?? 0) + (r?.height ?? 0));
+  }
   showHint();
   syncFormulaBar();
   updateSelectionStats();
@@ -362,10 +370,11 @@ const chartDeps = {
 function syncCharts() {
   syncingCharts = true;
   try {
-    const want = new Map(workbook.charts.map((c) => [c.id, c]));
+    // a chart shows on the sheet its data is on, like Excel's charts on a worksheet
+    const want = new Map(workbook.charts.filter((c) => c.range.sheetId === activeId).map((c) => [c.id, c]));
     for (const open of chartSpecs()) if (!want.has(open.id)) closeChart(open.id);
     const open = new Map(chartSpecs().map((c) => [c.id, JSON.stringify(c)]));
-    for (const c of workbook.charts) if (open.get(c.id) !== JSON.stringify(c)) openChart(chartDeps, c);
+    for (const c of want.values()) if (open.get(c.id) !== JSON.stringify(c)) openChart(chartDeps, c);
   } finally {
     syncingCharts = false;
   }
@@ -393,6 +402,7 @@ document.addEventListener("keydown", (e) => {
   e.preventDefault();
   openFindReplace(findDeps(), k === "f" ? "find" : "replace");
 });
+const dvDeps = () => ({ workbook: () => workbook, source: () => source, range: () => grid.range, selection: () => grid.selection, run: (a: Action) => run(a), focusGrid: () => grid.focus() });
 const cfDeps = () => ({ source: () => source, range: () => grid.range, run: (a: Action) => run(a), focusGrid: () => grid.focus() });
 const filterDeps = () => ({ source: () => source, run: (a: Action) => run(a), focusGrid: () => grid.focus() });
 
@@ -591,9 +601,46 @@ function attachKernelReporting(s: EditableSource) {
 }
 attachKernelReporting(source);
 
-grid.onCellEdit = ({ row, col }, text) => {
+grid.onCellEdit = async ({ row, col }, text) => {
+  // data validation: a value that breaks the cell's rule is stopped, or asked about
+  const bad = invalidInputs(source, dvContext(workbook, source), [{ row, col, input: text }]);
+  if (bad.length && !(await askAboutInvalid(bad[0].rule))) {
+    grid.select(row, col);
+    grid.focus();
+    if ((bad[0].rule.errorStyle ?? "stop") !== "info") grid.startEditing(text); // try again, as Excel's Retry
+    return;
+  }
   writeCells([{ row, col, input: text }], `edit in ${columnLetter(col)}${row + 1}`);
 };
+
+// list cells' dropdowns and tick boxes
+const pickFromList = (cell: { row: number; col: number }, x: number, y: number) =>
+  openDropdown(source, dvContext(workbook, source), cell, x, y, (v) => void grid.onCellEdit?.(cell, v), () => grid.focus());
+const toggleTick = (cell: { row: number; col: number }) => {
+  const on = source.getCell(cell.row, cell.col) === "TRUE";
+  writeCells([{ row: cell.row, col: cell.col, input: on ? "FALSE" : "TRUE" }], on ? "untick" : "tick");
+};
+grid.onCellButton = (cell, kind, x, y) => (kind === "checkbox" ? toggleTick(cell) : pickFromList(cell, x, y));
+document.addEventListener(
+  "keydown",
+  (e) => {
+    if (!gridHasFocus() || grid.isEditing) return;
+    const { row, col } = grid.selection;
+    const rule = source.validationAt(row, col);
+    if (!rule) return;
+    if (e.key === " " && !e.ctrlKey && !e.metaKey && !e.altKey && rule.kind === "checkbox") {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleTick({ row, col });
+    } else if (e.altKey && e.key === "ArrowDown" && source.hasDropdown(row, col)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const r = grid.cellPageRect(row, col);
+      pickFromList({ row, col }, r.x, r.y + r.height);
+    }
+  },
+  true,
+);
 
 // Clearing goes cell by cell into the sparse edit map, so a whole 100M row
 // column would mean 100M map entries. Cap it until there's a column-level op.
@@ -1308,6 +1355,24 @@ function paletteCommands(): Command[] {
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },
+    { id: "validation", title: "Data validation (dropdown list, allowed values)…", hint: "validation dropdown list choices allowed values restrict input checkbox tick box", run: () => openValidationDialog(dvDeps()) },
+    {
+      id: "validation-circle",
+      title: "Circle invalid data",
+      hint: "validation invalid circles check",
+      run: () => {
+        const bad = invalidCells(source, dvContext(workbook, source));
+        grid.setHighlights(bad.map((range) => ({ range, color: "#d93025" })));
+        statusLeft.textContent = bad.length ? `${bad.length.toLocaleString()} cell${bad.length === 1 ? " breaks" : "s break"} a validation rule (circled in red)` : "Every cell keeps its validation rule.";
+      },
+    },
+    { id: "validation-uncircle", title: "Clear validation circles", hint: "validation invalid circles remove", run: () => grid.setHighlights([]) },
+    {
+      id: "validation-tick",
+      title: "Tick boxes in the selection",
+      hint: "checkbox check box tick boxes true false column type",
+      run: () => run({ type: "validation.add", params: { rule: { kind: "checkbox", ranges: [grid.range] } } }),
+    },
     { id: "cf-manager", title: "Conditional formatting: manage rules…", hint: "highlight rules colour scale data bars icons", run: () => openCfManager(cfDeps()) },
     { id: "cf-new", title: "Conditional formatting: new rule for the selection…", hint: "highlight cells greater than duplicates top 10 colour scale data bar icon set", run: () => void editRule(cfDeps(), null).then((rule) => rule && run({ type: "format.conditionalAdd", params: { rule } })) },
     { id: "sort-dialog", title: "Sort by several columns…", hint: "multi-level sort order custom sort", run: () => openSortDialog({ ...filterDeps(), activeCol: () => grid.selection.col }) },

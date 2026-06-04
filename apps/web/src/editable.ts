@@ -25,6 +25,7 @@ import { CellArray, type ErrorHint, parseTableSpec, formatGeneral, formatValue a
 import { DepIndex, type Rect } from "./deps";
 import { filteredOutRows, type FilterSpec, type FilterView } from "./filter";
 import { CondFormatter, spliceRules, type CfRule } from "./condformat";
+import { ruleAt, spliceRanged, type DvRule } from "./validation";
 import { SheetStyles, type ColumnStyles, type StylesState } from "./styles";
 
 /** A table: a named block whose first row holds its column headers. */
@@ -189,6 +190,8 @@ export class EditableSource implements DataSource {
   filterViews: FilterView[] = [];
   // conditional formatting rules, in priority order
   private cfRules: CfRule[] = [];
+  // data validation rules (the last one covering a cell applies)
+  private dvRules: DvRule[] = [];
   private cf: CondFormatter | null = null;
   /** the last sort, for saving in a filter view (not saved with the file) */
   lastSort: { col: number; descending: boolean }[] | null = null;
@@ -304,6 +307,7 @@ export class EditableSource implements DataSource {
       ...(this.filterSpec ? { filter: structuredClone(this.filterSpec), filtered: [...this.filteredIds] } : {}),
       ...(this.filterViews.length ? { filterViews: structuredClone(this.filterViews) } : {}),
       ...(this.cfRules.length ? { condFormats: structuredClone(this.cfRules) } : {}),
+      ...(this.dvRules.length ? { validations: structuredClone(this.dvRules) } : {}),
     };
     return { state, binary: this.order?.isArray ? { order: this.order.toArray() } : {} };
   }
@@ -341,6 +345,7 @@ export class EditableSource implements DataSource {
     s.filteredIds = new Set(state.filtered ?? []);
     s.filterViews = state.filterViews ? structuredClone(state.filterViews) : [];
     if (state.condFormats?.length) s.setCondFormats(state.condFormats);
+    if (state.validations?.length) s.dvRules = structuredClone(state.validations);
     s.rebuildDeps();
     return s;
   }
@@ -373,6 +378,7 @@ export class EditableSource implements DataSource {
     copy.filteredIds = new Set(this.filteredIds);
     copy.filterViews = structuredClone(this.filterViews);
     if (this.cfRules.length) copy.setCondFormats(this.cfRules);
+    copy.dvRules = structuredClone(this.dvRules);
     copy.rebuildDeps();
     return copy;
   }
@@ -685,6 +691,7 @@ export class EditableSource implements DataSource {
     if (at < 0 || at + remove > n) throw new Error("rows out of range");
     if (this.merges.length) this.merges = spliceMerges(this.merges, "row", at, remove, runsLength(insert));
     if (this.cfRules.length) this.setCondFormats(spliceRules(this.cfRules, "row", at, remove, runsLength(insert)));
+    if (this.dvRules.length) this.dvRules = spliceRanged(this.dvRules, "row", at, remove, runsLength(insert));
     if (this.tables.length) this.tables = spliceMerges(this.tables, "row", at, remove, runsLength(insert)) as TableDef[];
     const current = this.order ?? RowMap.identity(n);
     const { map, removed } = current.splice(at, remove, insert);
@@ -929,6 +936,7 @@ export class EditableSource implements DataSource {
     this.shiftColumns(at, count);
     if (this.merges.length) this.merges = spliceMerges(this.merges, "col", at, 0, count);
     if (this.cfRules.length) this.setCondFormats(spliceRules(this.cfRules, "col", at, 0, count));
+    if (this.dvRules.length) this.dvRules = spliceRanged(this.dvRules, "col", at, 0, count);
     if (this.tables.length) this.tables = spliceMerges(this.tables, "col", at, 0, count) as TableDef[];
     this.spliceColMap(at, 0, new Array(count).fill(-1));
     this.columnsChanged();
@@ -951,6 +959,7 @@ export class EditableSource implements DataSource {
     for (const [c] of widths) this.colWidths.delete(c);
     if (this.merges.length) this.merges = spliceMerges(this.merges, "col", at, count, 0);
     if (this.cfRules.length) this.setCondFormats(spliceRules(this.cfRules, "col", at, count, 0));
+    if (this.dvRules.length) this.dvRules = spliceRanged(this.dvRules, "col", at, count, 0);
     if (this.tables.length) this.tables = spliceMerges(this.tables, "col", at, count, 0) as TableDef[];
     this.shiftColumns(at + count, -count);
     const map = this.spliceColMap(at, count, []);
@@ -963,6 +972,7 @@ export class EditableSource implements DataSource {
     this.shiftColumns(at, removed.map.length);
     if (this.merges.length) this.merges = spliceMerges(this.merges, "col", at, 0, removed.map.length);
     if (this.cfRules.length) this.setCondFormats(spliceRules(this.cfRules, "col", at, 0, removed.map.length));
+    if (this.dvRules.length) this.dvRules = spliceRanged(this.dvRules, "col", at, 0, removed.map.length);
     if (this.tables.length) this.tables = spliceMerges(this.tables, "col", at, 0, removed.map.length) as TableDef[];
     this.spliceColMap(at, 0, removed.map);
     for (const e of removed.edits) this.putEdit(e.id, e.col, e.value);
@@ -1372,9 +1382,31 @@ export class EditableSource implements DataSource {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // data validation
+
+  get validations(): readonly DvRule[] {
+    return this.dvRules;
+  }
+
+  setValidations(rules: readonly DvRule[]): void {
+    this.dvRules = structuredClone([...rules]);
+  }
+
+  /** The validation rule for a cell, if any. */
+  validationAt(row: number, col: number): DvRule | null {
+    return this.dvRules.length ? ruleAt(this.dvRules, row, col) : null;
+  }
+
+  hasDropdown(row: number, col: number): boolean {
+    const r = this.validationAt(row, col);
+    return !!r && r.kind === "list" && r.dropdown !== false;
+  }
+
   /** The style the grid draws: the cell's own, with conditional formatting on top. */
   getDisplayStyle(row: number, col: number): CellStyle | null {
-    const own = this.getStyle(row, col);
+    let own = this.getStyle(row, col);
+    if (this.dvRules.length && this.validationAt(row, col)?.kind === "checkbox") own = { ...own, checkbox: true };
     const r = this.cf?.apply(row, col);
     if (!r) return own;
     return { ...own, ...r.style, ...(r.bar ? { bar: r.bar } : {}), ...(r.icon ? { icon: r.icon } : {}), ...(r.hideValue ? { hideValue: true } : {}) };
@@ -2022,6 +2054,7 @@ export interface SheetState {
   filtered?: number[];
   filterViews?: FilterView[];
   condFormats?: CfRule[];
+  validations?: DvRule[];
 }
 
 export interface FormulaSnapshot {

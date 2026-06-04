@@ -69,8 +69,8 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Data validation and dropdowns; date, currency and checkbox column types
-- [ ] Rules: list (typed or from a range), whole / decimal number, date, text length, custom formula; ignore blanks; input message; error style stop / warning / info
-- [ ] Editing: dropdown on list cells (button + Alt+Down), typed values checked on entry, paste checked, invalid cells circled on request
+- [x] Rules: list (typed or from a range), whole / decimal number, date, text length, custom formula; ignore blanks; input message; error style stop / warning / info
+- [x] Editing: dropdown on list cells (button + Alt+Down), typed values checked on entry, paste checked, invalid cells circled on request
 - [ ] Column types: date (picker), currency, checkbox (toggle with click / Space) on ranges
 - [ ] Actions, saved with the file, Excel import / export; tests, user guide
 

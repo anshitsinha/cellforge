@@ -14,6 +14,8 @@ const CELL_PADDING = 6;
 const SCROLLBAR_SIZE = 10;
 /** size of the filter button drawn in a column header */
 const FILTER_BUTTON = 14;
+/** width of a list cell's dropdown button */
+const DROPDOWN_BUTTON = 16;
 const MIN_THUMB = 24;
 const RESIZE_HANDLE = 4; // px either side of a column border that counts as "grab"
 const MIN_COLUMN_WIDTH = 30;
@@ -149,6 +151,8 @@ export class Grid {
   /** A row was resized by dragging its border or auto-fitted (height in px). */
   onRowResize: ((row: number, height: number) => void) | null = null;
 
+  /** A cell's own button was used: its dropdown (x / y: page coordinates under the cell) or its tick box. */
+  onCellButton: ((cell: CellRef, kind: "dropdown" | "checkbox", x: number, y: number) => void) | null = null;
   /** A column's filter button was clicked; x / y are page coordinates under the button. */
   onFilterButton: ((col: number, x: number, y: number) => void) | null = null;
   // columns that show a filter button, and whether their filter is on
@@ -294,6 +298,28 @@ export class Grid {
   setFilterButtons(buttons: ReadonlyMap<number, boolean>): void {
     this.filterButtons = buttons;
     this.invalidate();
+  }
+
+  /** A tick box, or the active cell's dropdown button, under (x, y) on the canvas. */
+  private cellButtonAt(x: number, y: number): { cell: CellRef; kind: "dropdown" | "checkbox"; x: number; y: number } | null {
+    if (y < this.headerHeight || x < this.rowHeaderWidth) return null;
+    const cell = this.hitTest(x, y);
+    if (!cell) return null;
+    const e = this.cellRect(cell.row, cell.col);
+    const r = { x: e.x, y: e.y, w: e.width, h: e.height };
+    const style = (this.source.getDisplayStyle ?? this.source.getStyle)?.call(this.source, cell.row, cell.col);
+    if (style?.checkbox) {
+      const box = Math.min(14, r.h - 6);
+      const bx = r.x + (r.w - box) / 2;
+      const by = r.y + (r.h - box) / 2;
+      if (x >= bx - 3 && x <= bx + box + 3 && y >= by - 3 && y <= by + box + 3) return { cell, kind: "checkbox", x: bx, y: by + box };
+      return null;
+    }
+    const { active } = this;
+    if (cell.row === active.row && cell.col === active.col && this.source.hasDropdown?.(cell.row, cell.col) && x >= r.x + r.w - DROPDOWN_BUTTON) {
+      return { cell, kind: "dropdown", x: r.x, y: r.y + r.h };
+    }
+    return null;
   }
 
   /** The column whose filter button is under (x, y) on the canvas, or null. */
@@ -533,6 +559,13 @@ export class Grid {
     const text =
       initialText ?? this.source.getEditText?.(row, col) ?? formatCell(this.source.getCell(row, col));
     this.editor.open(this.cellRect(row, col), text, this.theme, this.editorFontSize);
+  }
+
+  /** A cell's bounds in page coordinates (for popups next to it). */
+  cellPageRect(row: number, col: number): { x: number; y: number; width: number; height: number } {
+    const r = this.cellRect(row, col);
+    const c = this.canvas.getBoundingClientRect();
+    return { x: c.left + r.x, y: c.top + r.y, width: r.width, height: r.height };
   }
 
   /** Cell bounds in css px relative to the container. */
@@ -835,6 +868,16 @@ export class Grid {
     if (y >= this.height - SCROLLBAR_SIZE && x >= this.rowHeaderWidth) {
       e.preventDefault();
       this.onScrollbarDown("hscroll", x, e.clientX);
+      return;
+    }
+
+    // a tick box toggles; the active cell's dropdown button opens its list
+    const button = this.cellButtonAt(x, y);
+    if (button) {
+      e.preventDefault();
+      this.canvas.focus();
+      this.select(button.cell.row, button.cell.col);
+      this.onCellButton?.(button.cell, button.kind, rect.left + button.x, rect.top + button.y);
       return;
     }
 
@@ -1340,6 +1383,32 @@ export class Grid {
       ctx.restore();
     }
     const value = this.source.getCell(row, col);
+    if (style?.checkbox) {
+      // a tick box, centred; ticked for TRUE
+      const box = Math.min(14, h - 6);
+      const bx = Math.round(x + (w - box) / 2) + 0.5;
+      const by = Math.round(y + (h - box) / 2) + 0.5;
+      const on = value === "TRUE" || value === 1;
+      ctx.save();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = on ? this.theme.accent : this.theme.mutedText;
+      if (on) {
+        ctx.fillStyle = this.theme.accent;
+        ctx.fillRect(bx, by, box, box);
+      }
+      ctx.strokeRect(bx, by, box, box);
+      if (on) {
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(bx + box * 0.22, by + box * 0.52);
+        ctx.lineTo(bx + box * 0.42, by + box * 0.72);
+        ctx.lineTo(bx + box * 0.78, by + box * 0.3);
+        ctx.stroke();
+      }
+      ctx.restore();
+      return;
+    }
     if (value === null || style?.hideValue) return;
     // a cell with something to explain gets a small corner triangle
     if (!spanText && this.source.hasNote?.(row, col)) {
@@ -1619,6 +1688,19 @@ export class Grid {
           ctx.strokeStyle = theme.accent;
           ctx.lineWidth = 2;
           ctx.strokeRect(Math.round(x) + 1, Math.round(y) + 1, w - 1, h - 1);
+          // a list cell: the dropdown button sits at its right edge
+          if (this.source.hasDropdown?.(activeRow, ac)) {
+            const bx = x + w - DROPDOWN_BUTTON;
+            ctx.fillStyle = theme.headerBackground;
+            ctx.fillRect(bx, y + 2, DROPDOWN_BUTTON - 2, h - 4);
+            ctx.fillStyle = theme.mutedText;
+            ctx.beginPath();
+            ctx.moveTo(bx + 4, y + h / 2 - 2);
+            ctx.lineTo(bx + DROPDOWN_BUTTON - 6, y + h / 2 - 2);
+            ctx.lineTo(bx + DROPDOWN_BUTTON / 2 - 1, y + h / 2 + 3);
+            ctx.closePath();
+            ctx.fill();
+          }
         }
         ctx.restore();
       }

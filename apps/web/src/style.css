@@ -1197,3 +1197,43 @@ button:disabled {
   align-items: center;
   gap: 4px;
 }
+
+/* ---- data validation ---- */
+.dv-list {
+  position: fixed;
+  z-index: 60;
+  min-width: 140px;
+  max-height: 240px;
+  overflow: auto;
+  background: var(--bg, #fff);
+  color: var(--text, #1f2328);
+  border: 1px solid var(--border, #dadce0);
+  border-radius: 4px;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 22%);
+  font-size: 13px;
+  outline: none;
+}
+
+.dv-item {
+  padding: 4px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dv-item[aria-selected="true"] {
+  background: var(--accent, #1a73e8);
+  color: #fff;
+}
+
+.dv-tip {
+  position: fixed;
+  z-index: 55;
+  max-width: 250px;
+  padding: 6px 8px;
+  background: #fff8c5;
+  color: #1f2328;
+  border: 1px solid #d4a72c;
+  border-radius: 4px;
+  font-size: 12px;
+  pointer-events: none;
+}
