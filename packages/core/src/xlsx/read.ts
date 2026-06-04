@@ -6,7 +6,7 @@
 import { moveFormula } from "../formula/move";
 import { parseFormula } from "../formula/parser";
 import { formatFormula } from "../formula/print";
-import { parseA1, pointsToPx, widthToPx, type XBorder, type XCell, type XRange, type XSheet, type XStyle, type XWorkbook } from "./model";
+import { parseA1, pointsToPx, widthToPx, type XBorder, type XCell, type XCondFormat, type XDxf, type XRange, type XSheet, type XStyle, type XWorkbook } from "./model";
 import { text, unzip } from "./zip";
 
 const ENTITY: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
@@ -122,7 +122,66 @@ function rangeOf(ref: string): XRange {
   return { top: Math.min(r0, r1), left: Math.min(c0, c1), bottom: Math.max(r0, r1), right: Math.max(c0, c1) };
 }
 
-export function readSheet(xml: string, name: string, shared: string[]): XSheet {
+/** The looks conditional formats refer to by dxfId. */
+export function readDxfs(xml: string): XDxf[] {
+  return [...each(first(xml, "dxfs")?.[1] ?? "", "dxf")].map(([, inner]) => {
+    const d: XDxf = {};
+    const font = first(inner, "font")?.[1] ?? "";
+    if (/<b\b(?![^>]*val="(0|false)")/.test(font)) d.bold = true;
+    if (/<i\b(?![^>]*val="(0|false)")/.test(font)) d.italic = true;
+    if (/<strike\b(?![^>]*val="(0|false)")/.test(font)) d.strike = true;
+    const color = colorOf(first(font, "color")?.[0]);
+    if (color) d.color = color;
+    const fill = first(inner, "fill")?.[1] ?? "";
+    // a dxf's solid fill colour is its bgColor (fgColor in some writers)
+    const bg = colorOf(first(fill, "bgColor")?.[0]) ?? colorOf(first(fill, "fgColor")?.[0]);
+    if (bg) d.fill = bg;
+    return d;
+  });
+}
+
+const bool = (v: string | undefined) => v === "1" || v === "true";
+
+/** A sheet's conditional formatting, highest priority first. */
+export function readCondFormats(xml: string, dxfs: XDxf[]): XCondFormat[] {
+  const out: (XCondFormat & { priority: number })[] = [];
+  for (const [a, inner] of each(xml, "conditionalFormatting")) {
+    const ranges = (a.sqref ?? "").split(/\s+/).filter(Boolean).map(rangeOf);
+    if (!ranges.length) continue;
+    for (const [r, body] of each(inner, "cfRule")) {
+      const cf: XCondFormat & { priority: number } = {
+        ranges,
+        type: r.type,
+        formulas: [...each(body, "formula")].map(([, f]) => cleanFormula(unescapeXml(f))),
+        priority: Number(r.priority ?? 1e9),
+      };
+      if (r.operator) cf.operator = r.operator;
+      if (r.text !== undefined) cf.text = r.text;
+      if (r.timePeriod) cf.timePeriod = r.timePeriod;
+      if (r.rank) cf.rank = Number(r.rank);
+      if (bool(r.percent)) cf.percent = true;
+      if (bool(r.bottom)) cf.bottom = true;
+      if (r.aboveAverage !== undefined) cf.aboveAverage = bool(r.aboveAverage);
+      if (bool(r.equalAverage)) cf.equalAverage = true;
+      if (bool(r.stopIfTrue)) cf.stopIfTrue = true;
+      if (r.dxfId !== undefined && dxfs[Number(r.dxfId)]) cf.dxf = { ...dxfs[Number(r.dxfId)] };
+      const scale = first(body, "colorScale") ?? first(body, "dataBar") ?? first(body, "iconSet");
+      if (scale) {
+        cf.cfvos = [...each(scale[1], "cfvo")].map(([v]) => ({ type: v.type, ...(v.val !== undefined ? { val: v.val } : {}) }));
+        const colors = [...each(scale[1], "color")].map(([c]) => colorOf(c)).filter((c): c is string => !!c);
+        if (colors.length) cf.colors = colors;
+        if (scale[0].showValue !== undefined) cf.showValue = bool(scale[0].showValue);
+        if (scale[0].iconSet) cf.iconSet = scale[0].iconSet;
+        if (cf.type === "iconSet" && !cf.iconSet) cf.iconSet = "3TrafficLights1"; // Excel's default
+        if (bool(scale[0].reverse)) cf.reverse = true;
+      }
+      out.push(cf);
+    }
+  }
+  return out.sort((x, y) => x.priority - y.priority).map(({ priority: _p, ...cf }) => cf);
+}
+
+export function readSheet(xml: string, name: string, shared: string[], dxfs: XDxf[] = []): XSheet {
   const cells: XCell[] = [];
   const rowHeights: [number, number][] = [];
   const hiddenRows: number[] = [];
@@ -217,7 +276,8 @@ export function readSheet(xml: string, name: string, shared: string[]): XSheet {
     rows = Math.max(rows, m.bottom + 1);
     cols = Math.max(cols, m.right + 1);
   }
-  return { name, cells, merges, colWidths, hiddenCols, rowHeights, hiddenRows, frozen, rows, cols };
+  const condFormats = xml.includes("conditionalFormatting") ? readCondFormats(xml, dxfs) : [];
+  return { name, cells, merges, colWidths, hiddenCols, rowHeights, hiddenRows, frozen, rows, cols, ...(condFormats.length ? { condFormats } : {}) };
 }
 
 /** Read an .xlsx file. */
@@ -228,7 +288,9 @@ export async function readXlsx(buf: ArrayBuffer | Uint8Array): Promise<XWorkbook
   const rels = new Map<string, string>();
   for (const [a] of each(text(files.get("xl/_rels/workbook.xml.rels")), "Relationship")) rels.set(a.Id, a.Target);
   const shared = [...each(text(files.get("xl/sharedStrings.xml")), "si")].map(([, inner]) => stringOf(inner));
-  const styles = readStyles(text(files.get("xl/styles.xml")));
+  const stylesXml = text(files.get("xl/styles.xml"));
+  const styles = readStyles(stylesXml);
+  const dxfs = readDxfs(stylesXml);
   if (!styles.length) styles.push({});
   const sheets: XSheet[] = [];
   for (const [a] of each(wbXml, "sheet")) {
@@ -236,7 +298,7 @@ export async function readXlsx(buf: ArrayBuffer | Uint8Array): Promise<XWorkbook
     target = target.replace(/^\/?xl\//, "").replace(/^\//, "");
     const xml = text(files.get(`xl/${target}`));
     if (!xml) continue; // chart sheets and the like
-    const sheet = readSheet(xml, a.name, shared);
+    const sheet = readSheet(xml, a.name, shared, dxfs);
     if (a.state === "hidden" || a.state === "veryHidden") sheet.hidden = true;
     sheets.push(sheet);
   }

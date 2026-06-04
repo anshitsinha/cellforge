@@ -1,5 +1,5 @@
 /** .xlsx writer: XWorkbook -> zip bytes Excel opens. */
-import { PREFIXED, pxToPoints, pxToWidth, toA1, WORKSHEET_PREFIXED, type XBorder, type XSheet, type XStyle, type XWorkbook } from "./model";
+import { PREFIXED, pxToPoints, pxToWidth, toA1, WORKSHEET_PREFIXED, type XBorder, type XCondFormat, type XDxf, type XRange, type XSheet, type XStyle, type XWorkbook } from "./model";
 import { zip } from "./zip";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -37,7 +37,7 @@ const argb = (c: string | undefined) => {
   return m ? `FF${m[1].toUpperCase()}` : undefined;
 };
 
-function stylesXml(styles: XStyle[]): string {
+function stylesXml(styles: XStyle[], dxfs: string[] = []): string {
   const numFmts = new Map<string, number>();
   const fonts: string[] = [];
   const fills: string[] = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'];
@@ -91,11 +91,59 @@ function stylesXml(styles: XStyle[]): string {
     `<borders count="${borders.length}">${borders.join("")}</borders>` +
     '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
     `<cellXfs count="${xfs.length}">${xfs.join("")}</cellXfs>` +
-    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'
+    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+    (dxfs.length ? `<dxfs count="${dxfs.length}">${dxfs.join("")}</dxfs>` : "") +
+    "</styleSheet>"
   );
 }
 
-function sheetXml(sheet: XSheet, strings: Map<string, number>): string {
+/** A conditional format's look as Excel's dxf XML. */
+function dxfXml(d: XDxf): string {
+  const font =
+    d.bold || d.italic || d.strike || d.color
+      ? `<font>${d.bold ? "<b/>" : ""}${d.italic ? "<i/>" : ""}${d.strike ? "<strike/>" : ""}${argb(d.color) ? `<color rgb="${argb(d.color)}"/>` : ""}</font>`
+      : "";
+  const fill = argb(d.fill) ? `<fill><patternFill><bgColor rgb="${argb(d.fill)}"/></patternFill></fill>` : "";
+  return `<dxf>${font}${fill}</dxf>`;
+}
+
+/** A sheet's conditional formatting XML; looks are added to dxfs (shared by all sheets). */
+function condFormatsXml(list: readonly XCondFormat[] | undefined, dxfs: string[], priority: { n: number }): string {
+  if (!list?.length) return "";
+  const ref = (r: XRange) => (r.top === r.bottom && r.left === r.right ? toA1(r.top, r.left) : `${toA1(r.top, r.left)}:${toA1(r.bottom, r.right)}`);
+  return list
+    .map((cf) => {
+      let dxfId = "";
+      if (cf.dxf) {
+        const x = dxfXml(cf.dxf);
+        let i = dxfs.indexOf(x);
+        if (i < 0) i = dxfs.push(x) - 1;
+        dxfId = ` dxfId="${i}"`;
+      }
+      const at =
+        ` type="${esc(cf.type)}"${dxfId} priority="${++priority.n}"` +
+        (cf.stopIfTrue ? ' stopIfTrue="1"' : "") +
+        (cf.operator ? ` operator="${esc(cf.operator)}"` : "") +
+        (cf.text !== undefined ? ` text="${esc(cf.text)}"` : "") +
+        (cf.timePeriod ? ` timePeriod="${esc(cf.timePeriod)}"` : "") +
+        (cf.rank !== undefined ? ` rank="${cf.rank}"` : "") +
+        (cf.percent ? ' percent="1"' : "") +
+        (cf.bottom ? ' bottom="1"' : "") +
+        (cf.aboveAverage === false ? ' aboveAverage="0"' : "") +
+        (cf.equalAverage ? ' equalAverage="1"' : "");
+      const cfvo = (cf.cfvos ?? []).map((v) => `<cfvo type="${esc(v.type)}"${v.val !== undefined ? ` val="${esc(v.val)}"` : ""}/>`).join("");
+      const colors = (cf.colors ?? []).map((c) => `<color rgb="${argb(c)}"/>`).join("");
+      const show = cf.showValue === false ? ' showValue="0"' : "";
+      let inner = cf.formulas.map((f) => `<formula>${esc(excelFormula(f))}</formula>`).join("");
+      if (cf.type === "colorScale") inner = `<colorScale>${cfvo}${colors}</colorScale>`;
+      else if (cf.type === "dataBar") inner = `<dataBar${show}>${cfvo}${colors}</dataBar>`;
+      else if (cf.type === "iconSet") inner = `<iconSet iconSet="${esc(cf.iconSet ?? "3TrafficLights1")}"${cf.reverse ? ' reverse="1"' : ""}${show}>${cfvo}</iconSet>`;
+      return `<conditionalFormatting sqref="${cf.ranges.map(ref).join(" ")}"><cfRule${at}>${inner}</cfRule></conditionalFormatting>`;
+    })
+    .join("");
+}
+
+function sheetXml(sheet: XSheet, strings: Map<string, number>, dxfs: string[] = [], priority = { n: 0 }): string {
   const str = (s: string) => {
     let i = strings.get(s);
     if (i === undefined) strings.set(s, (i = strings.size));
@@ -156,6 +204,7 @@ function sheetXml(sheet: XSheet, strings: Map<string, number>): string {
     cols +
     `<sheetData>${rows.join("")}</sheetData>` +
     merges +
+    condFormatsXml(sheet.condFormats, dxfs, priority) +
     "</worksheet>"
   );
 }
@@ -163,7 +212,8 @@ function sheetXml(sheet: XSheet, strings: Map<string, number>): string {
 /** Write an .xlsx file. */
 export async function writeXlsx(wb: XWorkbook): Promise<Uint8Array> {
   const strings = new Map<string, number>();
-  const sheets = wb.sheets.map((s) => sheetXml(s, strings));
+  const dxfs: string[] = [];
+  const sheets = wb.sheets.map((s) => sheetXml(s, strings, dxfs, { n: 0 }));
   const sst =
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${strings.size}" uniqueCount="${strings.size}">` +
     [...strings.keys()].map((s) => `<si><t xml:space="preserve">${xmlSafe(s)}</t></si>`).join("") +
@@ -196,7 +246,7 @@ export async function writeXlsx(wb: XWorkbook): Promise<Uint8Array> {
     ["_rels/.rels", rootRels],
     ["xl/workbook.xml", workbook],
     ["xl/_rels/workbook.xml.rels", rels],
-    ["xl/styles.xml", stylesXml(wb.styles.length ? wb.styles : [{}])],
+    ["xl/styles.xml", stylesXml(wb.styles.length ? wb.styles : [{}], dxfs)],
     ["xl/sharedStrings.xml", sst],
     ...sheets.map((x, i) => [`xl/worksheets/sheet${i + 1}.xml`, x] as [string, string]),
   ]);

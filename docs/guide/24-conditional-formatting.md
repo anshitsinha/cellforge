@@ -37,3 +37,11 @@ Rules move with the cells when you insert or delete rows and columns, are
 saved with the file, and every change is one undo step. Conditional
 formatting doesn't change the cell's own format: the format bar still shows
 what you set yourself.
+
+## Excel files
+
+Rules come in with `.xlsx` files and go out with **Export Excel**: value,
+text, date, blank, error, duplicate, top / bottom, average and formula
+rules, colour scales, data bars and icon sets. A rule cellforge can't show
+yet (for example "greater than" another cell's value) is left out on
+import.

@@ -45,9 +45,49 @@ export interface XRange {
   right: number;
 }
 
+/** A conditional format's look (Excel's "dxf"). */
+export interface XDxf {
+  fill?: string;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  strike?: boolean;
+}
+
+/** A colour scale / data bar / icon set point. */
+export interface XCfvo {
+  type: string;
+  val?: string;
+}
+
+/** One conditional formatting rule as Excel stores it (formulas in Excel syntax, for the range's top-left cell). */
+export interface XCondFormat {
+  ranges: XRange[];
+  /** cellIs, expression, containsText, notContainsText, beginsWith, endsWith, timePeriod, containsBlanks, notContainsBlanks, containsErrors, notContainsErrors, duplicateValues, uniqueValues, top10, aboveAverage, colorScale, dataBar, iconSet */
+  type: string;
+  operator?: string;
+  formulas: string[];
+  text?: string;
+  timePeriod?: string;
+  rank?: number;
+  percent?: boolean;
+  bottom?: boolean;
+  aboveAverage?: boolean;
+  equalAverage?: boolean;
+  stopIfTrue?: boolean;
+  dxf?: XDxf;
+  cfvos?: XCfvo[];
+  colors?: string[];
+  iconSet?: string;
+  reverse?: boolean;
+  showValue?: boolean;
+}
+
 export interface XSheet {
   name: string;
   hidden?: boolean;
+  /** conditional formatting, in priority order */
+  condFormats?: XCondFormat[];
   cells: XCell[];
   merges: XRange[];
   /** pixels */

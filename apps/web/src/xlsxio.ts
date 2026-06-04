@@ -3,6 +3,7 @@
  * (numbers in Float64Arrays, text dictionary-coded) so a big sheet stays
  * small; formulas, TRUE/FALSE and odd cells go in as edits.
  */
+import { cfFromXlsx, cfToXlsx } from "./cfxlsx";
 import { readXlsx, Table, writeXlsx, type ColumnData, type XCell, type XStyle, type XWorkbook } from "@cellforge/core";
 import type { CellStyle } from "@cellforge/grid";
 import { EditableSource, parseInput, type Stored } from "./editable";
@@ -79,6 +80,7 @@ export function workbookFromXlsx(x: XWorkbook): Workbook {
       top = bottom;
     }
     src.merges = xs.merges.map((m) => ({ ...m }));
+    if (xs.condFormats?.length) src.setCondFormats(cfFromXlsx(xs.condFormats).rules);
     for (const [c, w] of xs.colWidths) if (c < cols) src.setColWidths([c], w);
     for (const [r, h] of xs.rowHeights) if (r < rows) src.setRowHeights(r, 1, h);
     for (const r of xs.hiddenRows) if (r < rows) src.setRowsHidden(r, 1, true);
@@ -146,6 +148,7 @@ export function workbookToXlsx(wb: Workbook): XWorkbook {
       ...(sheet.hidden ? { hidden: true } : {}),
       cells,
       merges: src.merges.map((m) => ({ ...m })),
+      ...(src.condFormats.length ? { condFormats: cfToXlsx(src.condFormats) } : {}),
       colWidths: [...src.columnWidths],
       hiddenCols: [...src.hiddenColumns],
       rowHeights: [...src.rowHeightsByView()],
