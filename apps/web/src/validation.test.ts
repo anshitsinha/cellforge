@@ -95,3 +95,22 @@ describe("data validation actions", () => {
     expect(sheet.getStyle(0, 2)).toBe(null);
   });
 });
+
+describe("data validation in Excel files", () => {
+  it("survives a round trip through .xlsx", async () => {
+    const { readXlsx, writeXlsx } = await import("@cellforge/core");
+    const { workbookFromXlsx, workbookToXlsx } = await import("./xlsxio");
+    const src = new EditableSource(new BlankSource(20, 4));
+    const rules: DvRule[] = [
+      { id: "a", kind: "list", list: ["Open", "Say \"hi\""], ranges: [cell(0, 0)], inputTitle: "Status", inputMessage: "Pick one", dropdown: false },
+      { id: "b", kind: "list", source: "Lists!$A$1:$A$3", ranges: [cell(1, 0)] },
+      { id: "c", kind: "whole", op: "between", a: 1, b: 10, ranges: [{ top: 2, left: 0, bottom: 5, right: 1 }], errorStyle: "warning", errorMessage: "1 to 10 please" },
+      { id: "d", kind: "date", op: ">=", a: dateToSerial(2024, 1, 1), ranges: [cell(6, 0)], allowBlank: false },
+      { id: "e", kind: "custom", formula: "=$B8>0", ranges: [cell(7, 0)] },
+    ];
+    src.setValidations(rules);
+    const wb = new Workbook({ name: "Data", source: src });
+    const back = workbookFromXlsx(await readXlsx(await writeXlsx(workbookToXlsx(wb))));
+    expect(back.sheets[0].source.validations.map(({ id: _id, ...r }) => r)).toEqual(rules.map(({ id: _id, ...r }) => r));
+  });
+});

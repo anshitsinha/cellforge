@@ -1,5 +1,5 @@
 /** .xlsx writer: XWorkbook -> zip bytes Excel opens. */
-import { PREFIXED, pxToPoints, pxToWidth, toA1, WORKSHEET_PREFIXED, type XBorder, type XCondFormat, type XDxf, type XRange, type XSheet, type XStyle, type XWorkbook } from "./model";
+import { PREFIXED, pxToPoints, pxToWidth, toA1, WORKSHEET_PREFIXED, type XBorder, type XCondFormat, type XDxf, type XRange, type XSheet, type XStyle, type XValidation, type XWorkbook } from "./model";
 import { zip } from "./zip";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -143,6 +143,22 @@ function condFormatsXml(list: readonly XCondFormat[] | undefined, dxfs: string[]
     .join("");
 }
 
+/** A sheet's data validation XML. */
+function validationsXml(list: readonly XValidation[] | undefined): string {
+  if (!list?.length) return "";
+  const ref = (r: XRange) => (r.top === r.bottom && r.left === r.right ? toA1(r.top, r.left) : `${toA1(r.top, r.left)}:${toA1(r.bottom, r.right)}`);
+  const attr = (k: string, v: string | undefined) => (v ? ` ${k}="${esc(v)}"` : "");
+  return `<dataValidations count="${list.length}">${list
+    .map(
+      (v) =>
+        `<dataValidation type="${esc(v.type)}"${attr("errorStyle", v.errorStyle !== "stop" ? v.errorStyle : undefined)}${attr("operator", v.operator)}` +
+        `${v.allowBlank !== false ? ' allowBlank="1"' : ""}${v.dropdown === false ? ' showDropDown="1"' : ""} showInputMessage="1" showErrorMessage="1"` +
+        `${attr("errorTitle", v.errorTitle)}${attr("error", v.error)}${attr("promptTitle", v.promptTitle)}${attr("prompt", v.prompt)} sqref="${v.ranges.map(ref).join(" ")}">` +
+        `${v.formula1 !== undefined ? `<formula1>${esc(excelFormula(v.formula1))}</formula1>` : ""}${v.formula2 !== undefined ? `<formula2>${esc(excelFormula(v.formula2))}</formula2>` : ""}</dataValidation>`,
+    )
+    .join("")}</dataValidations>`;
+}
+
 function sheetXml(sheet: XSheet, strings: Map<string, number>, dxfs: string[] = [], priority = { n: 0 }): string {
   const str = (s: string) => {
     let i = strings.get(s);
@@ -205,6 +221,7 @@ function sheetXml(sheet: XSheet, strings: Map<string, number>, dxfs: string[] = 
     `<sheetData>${rows.join("")}</sheetData>` +
     merges +
     condFormatsXml(sheet.condFormats, dxfs, priority) +
+    validationsXml(sheet.validations) +
     "</worksheet>"
   );
 }

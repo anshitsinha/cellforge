@@ -83,9 +83,28 @@ export interface XCondFormat {
   showValue?: boolean;
 }
 
+/** One data validation rule as Excel stores it. */
+export interface XValidation {
+  ranges: XRange[];
+  /** list, whole, decimal, date, time, textLength, custom (or none) */
+  type: string;
+  operator?: string;
+  formula1?: string;
+  formula2?: string;
+  allowBlank?: boolean;
+  /** false hides the in-cell dropdown (Excel's attribute is the other way round) */
+  dropdown?: boolean;
+  promptTitle?: string;
+  prompt?: string;
+  errorStyle?: string;
+  errorTitle?: string;
+  error?: string;
+}
+
 export interface XSheet {
   name: string;
   hidden?: boolean;
+  validations?: XValidation[];
   /** conditional formatting, in priority order */
   condFormats?: XCondFormat[];
   cells: XCell[];

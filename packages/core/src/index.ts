@@ -7,7 +7,7 @@ export { formatValue, formatGeneral, isDateFormat, adjustDecimals, parseTyped, s
 export { extendSeries, seriesOf, type SeriesValue } from "./series";
 export { readXlsx } from "./xlsx/read";
 export { writeXlsx } from "./xlsx/write";
-export type { XBorder, XCell, XCfvo, XCondFormat, XDxf, XRange, XSheet, XStyle, XWorkbook } from "./xlsx/model";
+export type { XBorder, XCell, XCfvo, XCondFormat, XDxf, XRange, XSheet, XStyle, XValidation, XWorkbook } from "./xlsx/model";
 export { afterLines, detectEncoding, previewCsv, type CsvOptions, type CsvPreview, type Encoding } from "./sniff";
 export { jsonToColumns } from "./json";
 export { readParquet, rleHybrid, unsnappy, type ParquetResult } from "./parquet";

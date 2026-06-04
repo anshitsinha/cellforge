@@ -6,7 +6,7 @@
 import { moveFormula } from "../formula/move";
 import { parseFormula } from "../formula/parser";
 import { formatFormula } from "../formula/print";
-import { parseA1, pointsToPx, widthToPx, type XBorder, type XCell, type XCondFormat, type XDxf, type XRange, type XSheet, type XStyle, type XWorkbook } from "./model";
+import { parseA1, pointsToPx, widthToPx, type XBorder, type XCell, type XCondFormat, type XDxf, type XRange, type XSheet, type XStyle, type XValidation, type XWorkbook } from "./model";
 import { text, unzip } from "./zip";
 
 const ENTITY: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
@@ -181,6 +181,31 @@ export function readCondFormats(xml: string, dxfs: XDxf[]): XCondFormat[] {
   return out.sort((x, y) => x.priority - y.priority).map(({ priority: _p, ...cf }) => cf);
 }
 
+/** A sheet's data validation rules. */
+export function readValidations(xml: string): XValidation[] {
+  const out: XValidation[] = [];
+  for (const [a, inner] of each(first(xml, "dataValidations")?.[1] ?? "", "dataValidation")) {
+    const ranges = (a.sqref ?? "").split(/\s+/).filter(Boolean).map(rangeOf);
+    if (!ranges.length) continue;
+    const v: XValidation = { ranges, type: a.type ?? "none" };
+    if (a.operator) v.operator = a.operator;
+    const f1 = first(inner, "formula1")?.[1];
+    const f2 = first(inner, "formula2")?.[1];
+    if (f1 !== undefined) v.formula1 = cleanFormula(unescapeXml(f1));
+    if (f2 !== undefined) v.formula2 = cleanFormula(unescapeXml(f2));
+    // Excel's default when the attribute is missing is to not allow blanks
+    v.allowBlank = bool(a.allowBlank);
+    if (bool(a.showDropDown)) v.dropdown = false;
+    if (a.promptTitle) v.promptTitle = a.promptTitle;
+    if (a.prompt) v.prompt = a.prompt;
+    if (a.errorStyle) v.errorStyle = a.errorStyle;
+    if (a.errorTitle) v.errorTitle = a.errorTitle;
+    if (a.error) v.error = a.error;
+    out.push(v);
+  }
+  return out;
+}
+
 export function readSheet(xml: string, name: string, shared: string[], dxfs: XDxf[] = []): XSheet {
   const cells: XCell[] = [];
   const rowHeights: [number, number][] = [];
@@ -277,7 +302,21 @@ export function readSheet(xml: string, name: string, shared: string[], dxfs: XDx
     cols = Math.max(cols, m.right + 1);
   }
   const condFormats = xml.includes("conditionalFormatting") ? readCondFormats(xml, dxfs) : [];
-  return { name, cells, merges, colWidths, hiddenCols, rowHeights, hiddenRows, frozen, rows, cols, ...(condFormats.length ? { condFormats } : {}) };
+  const validations = xml.includes("dataValidation") ? readValidations(xml) : [];
+  return {
+    name,
+    cells,
+    merges,
+    colWidths,
+    hiddenCols,
+    rowHeights,
+    hiddenRows,
+    frozen,
+    rows,
+    cols,
+    ...(condFormats.length ? { condFormats } : {}),
+    ...(validations.length ? { validations } : {}),
+  };
 }
 
 /** Read an .xlsx file. */
