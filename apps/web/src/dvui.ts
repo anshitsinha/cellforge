@@ -138,10 +138,83 @@ export function closeDropdown(): void {
   openList = null;
 }
 
-/** The list of choices under a list cell. */
+/** A month calendar under a date cell; picks a date as yyyy-mm-dd. */
+function openCalendar(current: unknown, rule: DvRule, x: number, y: number, choose: (value: string) => void, focusGrid: () => void): void {
+  const today = new Date();
+  const start = typeof current === "number" ? new Date(Date.UTC(1899, 11, 30) + Math.floor(current) * 86_400_000) : new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()));
+  let year = start.getUTCFullYear();
+  let month = start.getUTCMonth();
+  let picked = Date.UTC(year, month, start.getUTCDate());
+  const serial = (t: number) => Math.round((t - Date.UTC(1899, 11, 30)) / 86_400_000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const iso = (t: number) => { const d = new Date(t); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };
+  const box = document.createElement("div");
+  box.className = "dv-list dv-cal";
+  box.tabIndex = -1;
+  box.setAttribute("role", "dialog");
+  box.setAttribute("aria-label", "Pick a date");
+  const render = () => {
+    box.replaceChildren();
+    const head = document.createElement("div");
+    head.className = "dv-cal-head";
+    const prev = Object.assign(document.createElement("button"), { type: "button", textContent: "‹", title: "Previous month" });
+    const next = Object.assign(document.createElement("button"), { type: "button", textContent: "›", title: "Next month" });
+    const label = Object.assign(document.createElement("span"), { textContent: new Date(Date.UTC(year, month, 1)).toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" }) });
+    prev.addEventListener("mousedown", (e) => { e.preventDefault(); month--; if (month < 0) { month = 11; year--; } render(); });
+    next.addEventListener("mousedown", (e) => { e.preventDefault(); month++; if (month > 11) { month = 0; year++; } render(); });
+    head.append(prev, label, next);
+    const grid = document.createElement("div");
+    grid.className = "dv-cal-grid";
+    for (const d of ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]) grid.append(Object.assign(document.createElement("span"), { className: "dv-cal-dow", textContent: d }));
+    const first = new Date(Date.UTC(year, month, 1)).getUTCDay();
+    for (let i = 0; i < (first + 6) % 7; i++) grid.append(document.createElement("span"));
+    const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    for (let day = 1; day <= days; day++) {
+      const t = Date.UTC(year, month, day);
+      const b = Object.assign(document.createElement("button"), { type: "button", textContent: String(day) });
+      const ok = allowed(rule, serial(t), 0, 0, { listValues: () => [], evalAt: () => true });
+      if (!ok) b.disabled = true;
+      if (t === picked) b.setAttribute("aria-selected", "true");
+      b.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        closeDropdown();
+        choose(iso(t));
+      });
+      grid.append(b);
+    }
+    box.append(head, grid);
+  };
+  box.addEventListener("keydown", (e) => {
+    const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
+    if (step) {
+      picked += step * 86_400_000;
+      const d = new Date(picked);
+      year = d.getUTCFullYear();
+      month = d.getUTCMonth();
+      render();
+    } else if (e.key === "Enter") {
+      closeDropdown();
+      choose(iso(picked));
+    } else if (e.key === "Escape") {
+      closeDropdown();
+      focusGrid();
+    } else return;
+    e.preventDefault();
+  });
+  box.addEventListener("blur", () => setTimeout(() => { if (!box.contains(document.activeElement)) closeDropdown(); }, 100));
+  render();
+  document.body.append(box);
+  box.style.left = `${Math.max(4, Math.min(x, innerWidth - box.offsetWidth - 4))}px`;
+  box.style.top = `${Math.min(y, innerHeight - box.offsetHeight - 4)}px`;
+  openList = box;
+  box.focus();
+}
+
+/** The list of choices under a list cell (or a calendar under a date cell). */
 export function openDropdown(source: EditableSource, ctx: DvContext, cell: CellRef, x: number, y: number, choose: (value: string) => void, focusGrid: () => void): void {
   closeDropdown();
   const rule = source.validationAt(cell.row, cell.col);
+  if (rule?.kind === "date") return openCalendar(source.getCell(cell.row, cell.col), rule, x, y, choose, focusGrid);
   if (!rule || rule.kind !== "list") return;
   const choices = listChoices(rule, ctx);
   const list = document.createElement("div");

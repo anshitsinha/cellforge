@@ -1237,3 +1237,37 @@ button:disabled {
   font-size: 12px;
   pointer-events: none;
 }
+
+.dv-cal {
+  padding: 6px;
+  min-width: 0;
+  max-height: none;
+}
+
+.dv-cal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.dv-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 28px);
+  gap: 2px;
+  text-align: center;
+}
+
+.dv-cal-dow {
+  color: var(--muted, #656d76);
+  font-size: 11px;
+}
+
+.dv-cal-grid button {
+  padding: 3px 0;
+}
+
+.dv-cal-grid button[aria-selected="true"] {
+  background: var(--accent, #1a73e8);
+  color: #fff;
+}

@@ -1400,7 +1400,7 @@ export class EditableSource implements DataSource {
 
   hasDropdown(row: number, col: number): boolean {
     const r = this.validationAt(row, col);
-    return !!r && r.kind === "list" && r.dropdown !== false;
+    return !!r && ((r.kind === "list" && r.dropdown !== false) || r.kind === "date");
   }
 
   /** The style the grid draws: the cell's own, with conditional formatting on top. */

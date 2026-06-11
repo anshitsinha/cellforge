@@ -11,7 +11,9 @@ palette (Ctrl+K).
   (`=Lists!$A$2:$A$20`). The active cell shows a ▼ button; click it or press
   **Alt+↓** to pick, then ↑ ↓ and Enter.
 - **Whole number** or **Number** between, above, below… some values.
-- **Date** between, before, after… (type dates like `2024-01-31`).
+- **Date** between, before, after… (type dates like `2024-01-31`). Date cells
+  get a ▼ button too (or **Alt+↓**) that opens a calendar; dates the rule
+  doesn't allow are greyed out. Arrow keys move the day, Enter picks it.
 - **Text length** limits.
 - **Custom formula** that must be TRUE, written for the first cell, like
   `=$C2>0`; it moves for the other cells as a copied formula would.

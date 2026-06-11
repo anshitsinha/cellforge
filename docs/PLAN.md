@@ -68,11 +68,10 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Data validation and dropdowns; date, currency and checkbox column types
-- [x] Rules: list (typed or from a range), whole / decimal number, date, text length, custom formula; ignore blanks; input message; error style stop / warning / info
-- [x] Editing: dropdown on list cells (button + Alt+Down), typed values checked on entry, paste checked, invalid cells circled on request
-- [ ] Column types: date (picker), currency, checkbox (toggle with click / Space) on ranges
-- [x] Actions, saved with the file, Excel import / export; tests, user guide
+### Notes on cells, hyperlinks
+- [ ] Notes: add / edit / delete on a cell, red corner marker, shown on hover and in the inspect panel; move with the cell through sorts and inserts
+- [ ] Hyperlinks: web addresses and links to places in the workbook (Sheet!A1, names); HYPERLINK() formula; Ctrl+click opens, plain click selects
+- [ ] Actions, saved with the file, Excel import / export of notes and links; tests, user guide
 
 ## Milestones
 
@@ -125,10 +124,10 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Filters and filter views, (Blanks) first, invert selection; multi-column sort
 - ✅ Find & replace (regex, in formulas)
 - ✅ Conditional formatting with a proper rules manager
-- 🔨 Data validation and dropdowns; date, currency and checkbox column types
+- ✅ Data validation and dropdowns; date, currency and checkbox column types
 - ✅ Remove duplicates, text to columns, unpivot / pivot, extract by pattern
 - ✅ Goal Seek
-- ⬜ Notes on cells, hyperlinks
+- 🔨 Notes on cells, hyperlinks
 
 ### M5: Query engine, explore, reconcile 🔨
 - ⬜ Query engine (DuckDB-WASM, loaded on demand) over sheet columns
