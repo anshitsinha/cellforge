@@ -25,6 +25,7 @@ import { editRule, openCfManager } from "./cfmanager";
 import { openFindReplace } from "./finddialog";
 import { openAuditTool } from "./audittools";
 import { openRecon } from "./recondialog";
+import { openTransform } from "./transformtools";
 import { askAboutInvalid, closeDropdown, dvContext, invalidCells, invalidInputs, openDropdown, openValidationDialog, showInputMessage } from "./dvui";
 import { chartSpecs, closeChart, openChart, refreshCharts } from "./charts/panel";
 import { registerFindActions } from "./findreplace";
@@ -1352,6 +1353,21 @@ function paletteCommands(): Command[] {
       hint: "reconciliation bank rec match ledger statement unmatched mismatched tolerance fuzzy why don't these match",
       run: () => openRecon({ workbook: () => workbook, activeSheet: () => activeId, run: (a) => run(a), putBlob: (v) => blobs.put(v), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }),
     },
+    ...(
+      [
+        ["dedupe", "Remove duplicates…", "remove delete duplicates unique distinct dedupe"],
+        ["split", "Text to columns…", "text to columns split delimiter comma fixed width parse"],
+        ["unpivot", "Unpivot (columns to rows)…", "unpivot melt columns to rows long format months"],
+        ["pivot", "Pivot (rows to columns)…", "pivot wider rows to columns cross tab sum count"],
+        ["extract", "Extract by pattern…", "extract pattern regex email phone url amount date invoice code reference"],
+        ["goalseek", "Goal Seek…", "goal seek what-if solve target backsolve"],
+      ] as const
+    ).map(([kind, title, hint]) => ({
+      id: `transform-${kind}`,
+      title,
+      hint,
+      run: () => openTransform(kind, { ...statementDeps(), source: () => source, activeSheet: () => activeId, sheetName: () => workbook.get(activeId).name, range: () => grid.range, selection: () => grid.selection }),
+    })),
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },

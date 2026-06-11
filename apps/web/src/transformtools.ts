@@ -23,7 +23,7 @@ import {
   type PivotAgg,
   type RemoveDupOptions,
   type SplitOptions,
-} from "../../../packages/core/src/transform";
+} from "@cellforge/core";
 import { readSheet, type SheetData } from "./audittools";
 import { setCells } from "./actions";
 import { EditableSource } from "./editable";

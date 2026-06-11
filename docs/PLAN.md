@@ -126,8 +126,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Find & replace (regex, in formulas)
 - ✅ Conditional formatting with a proper rules manager
 - 🔨 Data validation and dropdowns; date, currency and checkbox column types
-- 🔨 Remove duplicates, text to columns, unpivot / pivot, extract by pattern
-- 🔨 Goal Seek
+- ✅ Remove duplicates, text to columns, unpivot / pivot, extract by pattern
+- ✅ Goal Seek
 - ⬜ Notes on cells, hyperlinks
 
 ### M5: Query engine, explore, reconcile 🔨
