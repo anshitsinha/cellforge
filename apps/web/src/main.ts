@@ -1,11 +1,31 @@
 import "./style.css";
+import { Grid } from "@cellforge/grid";
+import { SyntheticSource } from "./demo";
 
-// Just the shell for now - the grid gets mounted into #sheet once it exists.
-const status = document.getElementById("status-left")!;
+const DEMO_ROWS = 100_000_000;
 
-const hasWebGPU = "gpu" in navigator;
-document.getElementById("status-right")!.textContent = hasWebGPU
-  ? "WebGPU available"
-  : "WebGPU not available (CPU fallback)";
+const sheet = document.getElementById("sheet")!;
+const statusLeft = document.getElementById("status-left")!;
+const statusRight = document.getElementById("status-right")!;
+const fileName = document.getElementById("file-name")!;
 
-status.textContent = "Ready";
+const rowFormat = new Intl.NumberFormat();
+
+const source = new SyntheticSource(DEMO_ROWS);
+const grid = new Grid(sheet, source);
+
+fileName.textContent = "demo — synthetic sales";
+statusLeft.textContent = `${rowFormat.format(source.rowCount)} rows × ${source.colCount} columns`;
+statusRight.textContent = "gpu" in navigator ? "WebGPU available" : "WebGPU not available (CPU fallback)";
+
+document.getElementById("btn-demo")!.addEventListener("click", () => {
+  grid.setSource(new SyntheticSource(DEMO_ROWS));
+});
+
+// handy for poking at things from devtools
+declare global {
+  interface Window {
+    grid: Grid;
+  }
+}
+window.grid = grid;
