@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="A spreadsheet that stays fast at 100M rows, entirely in the browser." />
+    <title>cellforge</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="toolbar">
+        <span class="logo">cellforge</span>
+        <span class="file-name" id="file-name">Untitled</span>
+        <div class="toolbar-actions">
+          <button id="btn-open" type="button" title="Open a CSV file">Open CSV</button>
+          <button id="btn-demo" type="button" title="Load generated demo data">Demo data</button>
+        </div>
+      </header>
+
+      <div class="formula-bar">
+        <span class="cell-ref" id="cell-ref">A1</span>
+        <span class="fx">fx</span>
+        <input id="formula-input" type="text" spellcheck="false" autocomplete="off" />
+      </div>
+
+      <main class="sheet" id="sheet"></main>
+
+      <footer class="status-bar">
+        <span id="status-left">Ready</span>
+        <span id="status-right"></span>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
