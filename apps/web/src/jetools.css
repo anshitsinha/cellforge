@@ -1,0 +1,69 @@
+/* Journal entry tests, overlaps, footing and safe-copy dialogs (jetools.ts). Builds on the palette-form, import-dialog and audit styles. */
+
+.je-dialog {
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.je-section {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.je-section > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.je-section[open] > summary {
+  margin-bottom: 8px;
+}
+
+.je-map,
+.je-params {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+}
+
+.je-tests {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 12px;
+}
+
+.je-moves {
+  display: grid;
+  gap: 6px;
+}
+
+.je-move {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 6px;
+}
+
+.je-pii {
+  width: 100%;
+}
+
+.je-pii td {
+  vertical-align: middle;
+}
+
+.je-pii-hit td:first-child {
+  font-weight: 600;
+}
+
+.je-pii select {
+  width: 100%;
+}
+
+@media (max-width: 520px) {
+  .je-map,
+  .je-params,
+  .je-tests {
+    grid-template-columns: 1fr;
+  }
+}
