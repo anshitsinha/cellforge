@@ -26,6 +26,7 @@ import { openFindReplace } from "./finddialog";
 import { openAuditTool } from "./audittools";
 import { openRecon } from "./recondialog";
 import { openTransform } from "./transformtools";
+import { openJeTool } from "./jetools";
 import { askAboutInvalid, closeDropdown, dvContext, invalidCells, invalidInputs, openDropdown, openValidationDialog, showInputMessage } from "./dvui";
 import { chartSpecs, closeChart, openChart, refreshCharts } from "./charts/panel";
 import { registerFindActions } from "./findreplace";
@@ -1367,6 +1368,20 @@ function paletteCommands(): Command[] {
       title,
       hint,
       run: () => openTransform(kind, { ...statementDeps(), source: () => source, activeSheet: () => activeId, sheetName: () => workbook.get(activeId).name, range: () => grid.range, selection: () => grid.selection }),
+    })),
+    ...(
+      [
+        ["journal", "Journal entry tests…", "audit je journal entries testing manual weekend holiday after hours round amounts approval limit threshold backdated keywords unusual user seldom account period end duplicate score"],
+        ["overlaps", "Red-flag overlaps (vendor vs employee)…", "audit overlap vendor employee master same bank account address phone tax id similar names fraud"],
+        ["footing", "Foot and cross-foot this range…", "audit footing cross-footing cast add up totals check schedule"],
+        ["rollforward", "Roll-forward check…", "audit roll forward opening movements closing balance fixed assets provisions"],
+        ["pii", "PII scan and safe copy…", "privacy personal data pii gdpr mask hash pseudonymise anonymise redact share safely email phone iban card ssn"],
+      ] as const
+    ).map(([kind, title, hint]) => ({
+      id: `je-${kind}`,
+      title,
+      hint,
+      run: () => openJeTool(kind, { ...statementDeps(), workbook: () => workbook, source: () => source, activeSheet: () => activeId, range: () => grid.range, sheetName: () => workbook.get(activeId).name }),
     })),
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },

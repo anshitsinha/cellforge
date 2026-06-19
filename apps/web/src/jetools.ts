@@ -41,7 +41,7 @@ import {
   type PiiColumnScan,
   type ProtectMethod,
   type RollResult,
-} from "../../../packages/core/src/jetest/index";
+} from "@cellforge/core";
 import { readSheet, type SheetData } from "./audittools";
 import { EditableSource } from "./editable";
 import type { Workbook } from "./workbook";

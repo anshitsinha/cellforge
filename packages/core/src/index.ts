@@ -16,6 +16,7 @@ export { findHeaderRow, unwrapReport, type DroppedRow, type Unwrapped } from "./
 export { alignColumns, columnKey, combineParts, type AlignedColumn, type FilePart } from "./clean/combine";
 export * from "./audit";
 export * from "./transform";
+export * from "./jetest";
 export { DEFAULT_REC_SETTINGS, REC_RULES, reconcile, subsetSum, toleranceFor, type RecDuplicate, type RecFlag, type RecMatch, type RecPair, type RecPasses, type RecRecord, type RecResult, type RecRule, type RecSettings, type RecSummary } from "./recon/match";
 export { explain, type ExplainKind, type ExplainReason, type Explanation } from "./recon/explain";
 // (recon's jaroWinkler is the same measure as audit's, which is exported above)

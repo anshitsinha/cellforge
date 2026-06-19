@@ -20,7 +20,7 @@ import {
   readParties,
   sheetSource,
 } from "./jetools";
-import { footRange, redFlagOverlaps, runJeTests } from "../../../packages/core/src/jetest/index";
+import { footRange, redFlagOverlaps, runJeTests } from "@cellforge/core";
 
 type Cell = number | string | null;
 
