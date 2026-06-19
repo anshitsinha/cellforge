@@ -138,8 +138,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Reconciliation: keys, tolerances, fuzzy text, 1:N and N:1, matched /
   unmatched / mismatched outputs, exception export
 - ✅ Reference normalisation, sum matching, keying-error flags, in-side duplicates
-- ⬜ Proposed adjusting entries, roll-forward of outstanding items, rec statement
-- ⬜ Open-item matching for balance sheet accounts; supplier / customer statement recs
+- 🔨 Proposed adjusting entries, roll-forward of outstanding items, rec statement
+- 🔨 Open-item matching for balance sheet accounts; supplier / customer statement recs
 - 🔨 Trial balance compare; GL → TB tie-out
 - 🔨 Fuzzy name matching incl. name order; mapping tables
 - 🔨 Key-based file compare
@@ -178,8 +178,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ⬜ Pivot charts
 - ⬜ Reports: narrative + live tables and charts, one template for many entities,
   consolidation, period roll-forward, PDF report books with contents
-- ⬜ Time tools: fiscal years, MoM/YoY, rolling windows, budget vs actual, multi-currency
-- ⬜ Accrual / prepayment / deferred income schedules; accounting import export templates
+- 🔨 Time tools: fiscal years, MoM/YoY, rolling windows, budget vs actual, multi-currency
+- 🔨 Accrual / prepayment / deferred income schedules; accounting import export templates
 
 ### M9: Local AI
 - ⬜ kiln: small decoder LLMs (int4), KV cache, grammar-constrained decoding
@@ -189,8 +189,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ⬜ Ask, Do, Explain, Clean; audit assistant; category suggestions
 - ⬜ Internal eval harness for accuracy and time-to-answer
 
-### M10: Docs and launch
-- ⬜ Docs: the three hero workflows as tutorials, generated function reference,
+### M10: Docs and launch 🔨
+- 🔨 Docs: the three hero workflows as tutorials, generated function reference,
   audit test catalogue, "moving from Excel" and "moving from IDEA/ACL" guides
 - ⬜ Ask the docs with the local model
 - ⬜ Landing page around the niche; installable and offline
