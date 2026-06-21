@@ -27,6 +27,8 @@ import { openAuditTool } from "./audittools";
 import { openRecon } from "./recondialog";
 import { openTransform } from "./transformtools";
 import { openJeTool } from "./jetools";
+import { openPivot } from "./pivotpanel";
+import { openProfiles } from "./profilepanel";
 import { askAboutInvalid, closeDropdown, dvContext, invalidCells, invalidInputs, openDropdown, openValidationDialog, showInputMessage } from "./dvui";
 import { chartSpecs, closeChart, openChart, refreshCharts } from "./charts/panel";
 import { registerFindActions } from "./findreplace";
@@ -1383,6 +1385,8 @@ function paletteCommands(): Command[] {
       hint,
       run: () => openJeTool(kind, { ...statementDeps(), workbook: () => workbook, source: () => source, activeSheet: () => activeId, range: () => grid.range, sheetName: () => workbook.get(activeId).name }),
     })),
+    { id: "pivot", title: "Pivot table…", hint: "pivot summarise group by subtotal crosstab drill down slicer sum count", run: () => openPivot({ ...statementDeps(), source: () => source, sheetName: () => workbook.get(activeId).name }) },
+    { id: "profiles", title: "Column profiles", hint: "profile columns distinct blanks min max median histogram patterns data quality", run: () => openProfiles({ source: () => source, sheetName: () => workbook.get(activeId).name, focusGrid: () => grid.focus() }) },
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },
