@@ -6,7 +6,7 @@
  * fills in card by card instead of freezing the page.
  */
 import { formatValue } from "@cellforge/core";
-import { profile, type DataProfile } from "../../../packages/core/src/pivot";
+import { profile, type DataProfile } from "@cellforge/core";
 import { readSheetColumns, type ColumnSource, type SheetColumns } from "./pivotpanel";
 import "./pivot.css";
 

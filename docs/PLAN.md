@@ -131,8 +131,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 
 ### M5: Query engine, explore, reconcile 🔨
 - ⬜ Query engine (DuckDB-WASM, loaded on demand) over sheet columns
-- 🔨 Pivot tables (drag fields, drill-down to rows), slicers
-- 🔨 Column profiles
+- ✅ Pivot tables (drag fields, drill-down to rows), slicers
+- ✅ Column profiles
 - 🔨 Join doctor (match rate, duplicate keys, orphans) and guided joins
 - 🔨 "Why don't these match?" inspector with one-click normalisation
 - ✅ Reconciliation: keys, tolerances, fuzzy text, 1:N and N:1, matched /

@@ -50,9 +50,9 @@ export function unpivot(header: readonly string[], rows: readonly Row[], idCols:
   };
 }
 
-export type PivotAgg = "sum" | "count" | "first" | "avg" | "min" | "max";
+export type WiderAgg = "sum" | "count" | "first" | "avg" | "min" | "max";
 
-export interface PivotResult {
+export interface WiderResult {
   /** The row key values of each output row, in order of first appearance. */
   keys: Value[][];
   /** The new column labels, in order of first appearance ("(blank)" for a blank key). */
@@ -80,7 +80,7 @@ function asNumber(v: Value | boolean | undefined): number | null {
  * One output row per distinct combination of the row key columns, one
  * output column per distinct value of `colKey`, holding `agg` of `valueCol`.
  */
-export function pivotWider(rows: readonly Row[], rowKeys: readonly number[], colKey: number, valueCol: number, agg: PivotAgg = "sum"): PivotResult {
+export function pivotWider(rows: readonly Row[], rowKeys: readonly number[], colKey: number, valueCol: number, agg: WiderAgg = "sum"): WiderResult {
   const rowIndex = new Map<string, number>();
   const colIndex = new Map<string, number>();
   const keys: Value[][] = [];

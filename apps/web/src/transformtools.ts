@@ -20,7 +20,7 @@ import {
   type GoalSeekResult,
   type PatternKind,
   type PatternSpec,
-  type PivotAgg,
+  type WiderAgg,
   type RemoveDupOptions,
   type SplitOptions,
 } from "@cellforge/core";
@@ -282,7 +282,7 @@ export function unpivotPlan(data: SheetData, sheet: string, idCols: number[], va
   return { name: `${sheet} unpivoted`, header: r.header, rows: r.rows, numFmts: [...idCols.map((c) => data.numFmt(c)), "", valueFmt] };
 }
 
-export function pivotPlan(data: SheetData, sheet: string, rowKeys: number[], colKey: number, valueCol: number, agg: PivotAgg): SheetOut & { skipped: number } {
+export function pivotPlan(data: SheetData, sheet: string, rowKeys: number[], colKey: number, valueCol: number, agg: WiderAgg): SheetOut & { skipped: number } {
   const r = pivotWider(rowsOf(data), rowKeys, colKey, valueCol, agg);
   const header = [...rowKeys.map((c) => label(data, c) || `Column ${columnLetter(c)}`), ...r.columns];
   const valueFmt = agg === "count" ? "" : data.numFmt(valueCol);
@@ -640,7 +640,7 @@ function pivotTool(c: Ctx): Tool {
       const ck = Number(colKey.value);
       const vc = Number(valueCol.value);
       if (rk.includes(ck)) return { lines: [{ text: "The new columns can't come from a row label column.", warn: true }], apply: null, ok: "Add the sheet" };
-      const out = pivotPlan(c.data, c.sheet, rk, ck, vc, agg.value as PivotAgg);
+      const out = pivotPlan(c.data, c.sheet, rk, ck, vc, agg.value as WiderAgg);
       const width = out.header.length - rk.length;
       const lines: Preview["lines"] = [{ text: `${plural(out.rows.length, "row")} × ${plural(width, "new column")}.` }];
       if (width > 500) lines.push({ text: `That's a lot of columns: check that "${label(c.data, ck)}" is the right column to spread out.`, warn: true });

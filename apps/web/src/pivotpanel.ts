@@ -11,7 +11,7 @@
 import type { Action } from "@cellforge/actions";
 import { formatValue, isDateFormat, parseDateLoose, Table, type ColumnData } from "@cellforge/core";
 import { columnLetter } from "@cellforge/grid";
-import { AGG_LABEL, fieldMembers, pivot, type DateGroup, type PivotAgg, type PivotItem, type PivotKey, type PivotResult, type PivotSpec, type ShowAs } from "../../../packages/core/src/pivot";
+import { AGG_LABEL, fieldMembers, pivot, type DateGroup, type PivotAgg, type PivotItem, type PivotKey, type PivotResult, type PivotSpec, type ShowAs } from "@cellforge/core";
 import { namedHeader } from "./cleanup";
 import { EditableSource } from "./editable";
 import "./pivot.css";

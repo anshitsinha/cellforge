@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dateToSerial, Table, type ColumnData } from "@cellforge/core";
-import { pivot } from "../../../packages/core/src/pivot";
+import { pivot } from "@cellforge/core";
 import { EditableSource } from "./editable";
 import { defaultZone, describeCell, drillColumns, emptyLayout, looksLikeDates, pivotSheetColumns, pivotTable, placeField, readSheetColumns, toSpec, valueFormat } from "./pivotpanel";
 import { profileLines, profileOf, topLines } from "./profilepanel";
