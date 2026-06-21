@@ -1,0 +1,329 @@
+/* Pivot table builder (pivotpanel.ts) and column profiles (profilepanel.ts). Builds on palette-form and import-dialog. */
+
+.palette.pivot-dialog,
+.palette.profile-dialog {
+  width: min(1040px, 100%);
+  max-height: 84vh;
+}
+
+.palette-backdrop:has(.pivot-dialog),
+.palette-backdrop:has(.profile-dialog) {
+  padding-top: 6vh;
+}
+
+.pivot-builder {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.pivot-builder h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.pivot-fields {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 6px;
+  min-height: 0;
+}
+
+.pivot-field-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  display: grid;
+  gap: 3px;
+  align-content: start;
+}
+
+.pivot-field {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  text-align: left;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: grab;
+  font: inherit;
+}
+
+.pivot-field span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pivot-field small {
+  color: var(--muted);
+  flex: none;
+}
+
+.pivot-field.pivot-used span {
+  font-weight: 600;
+}
+
+.pivot-zones {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pivot-zone {
+  min-width: 0;
+}
+
+.pivot-drop {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-height: 64px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.pivot-drop.pivot-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+}
+
+.pivot-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pivot-chip-head {
+  cursor: grab;
+}
+
+.pivot-chip {
+  display: grid;
+  gap: 4px;
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--panel);
+}
+
+.pivot-chip-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pivot-chip-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.pivot-chip-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.palette-form .pivot-chip-controls select {
+  padding: 2px 4px;
+  font-size: 12px;
+  max-width: 100%;
+}
+
+.pivot-icon {
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.palette-form .pivot-check {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.pivot-options {
+  display: flex;
+  gap: 16px;
+}
+
+.pivot-slicer {
+  display: grid;
+  gap: 4px;
+}
+
+.pivot-slicer-all {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.pivot-slicer-all button {
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.pivot-slicer-list {
+  display: grid;
+  gap: 1px;
+  max-height: 140px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.palette-form .pivot-status {
+  margin: 0;
+  color: var(--muted);
+}
+
+.palette-form .pivot-status.cleanup-warn {
+  color: #f29900;
+}
+
+.pivot-preview {
+  max-height: 36vh;
+}
+
+.pivot-table .pivot-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pivot-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+}
+
+.pivot-table tbody th {
+  font-weight: normal;
+}
+
+.pivot-table tr.pivot-subtotal,
+.pivot-table tr.pivot-grand {
+  font-weight: 600;
+}
+
+.pivot-table tr.pivot-subtotal th,
+.pivot-table tr.pivot-grand th {
+  font-weight: 600;
+}
+
+.pivot-table tr.pivot-grand {
+  border-top: 2px solid var(--text);
+}
+
+.pivot-table td[data-r] {
+  cursor: pointer;
+}
+
+.pivot-table td.pivot-picked {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.pivot-more {
+  padding: 4px 6px;
+}
+
+/* --- column profiles ------------------------------------------------------ */
+
+.profile-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.profile-card {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.profile-card h4 {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.profile-card h4 span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-type {
+  flex: none;
+  font-weight: normal;
+  color: var(--muted);
+}
+
+.profile-card dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 1px 8px;
+  margin: 0;
+}
+
+.profile-card dt {
+  color: var(--muted);
+}
+
+.profile-card dd {
+  margin: 0;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.profile-card canvas {
+  width: 100%;
+  height: 44px;
+}
+
+.profile-card h5 {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.profile-card .profile-warn {
+  color: #f29900;
+}
+
+@media (max-width: 640px) {
+  .pivot-builder,
+  .pivot-zones {
+    grid-template-columns: 1fr;
+  }
+}
