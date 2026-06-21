@@ -16,6 +16,7 @@ import { CLEAR_ALL, type ColumnStyles, type StylePatch } from "./styles";
 import { captureVersion, versionSheets, type Version } from "./versions";
 import type { ChartSpec } from "./charts/model";
 import { checkDv, subtractRange, type DvRule } from "./validation";
+import { safeLink } from "./links";
 import { checkRule, describeRule, newRuleId, type CfRule } from "./condformat";
 import { describeCondition, type FilterCondition, type FilterSpec, type FilterView } from "./filter";
 import { buildClean, buildDropped, namedHeader, planCleanup, sheetText } from "./cleanup";
@@ -819,6 +820,33 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         return undo;
       },
     });
+
+  // ----------------------------------------------------- notes and links --
+  registry.register<{ row: number; col: number; note?: string | null; link?: string | null; sheet?: string }>({
+    type: "cells.extra",
+    title: "Put a note and / or a link on a cell (null removes it). Links are web addresses (https://…) or places in the workbook (#Sheet!A1).",
+    schema: withSheet(
+      {
+        row: s.int("row, 0-based", 0),
+        col: s.int("column, 0-based", 0),
+        note: s.anyOf(s.string("the note", { maxLength: 32_000 }), s.null()),
+        link: s.anyOf(s.string("https://…, mailto:…, or #Sheet!A1", { maxLength: 2_000 }), s.null()),
+      },
+      ["row", "col"],
+    ),
+    describe: (p) => (p.note !== undefined && p.link === undefined ? (p.note ? "note" : "delete note") : p.link ? "link" : "remove link"),
+    recordable: true,
+    apply(ctx, p) {
+      const { id, data } = target(ctx, p.sheet);
+      checkBounds(data, [{ row: p.row, col: p.col }]);
+      if (p.link && !safeLink(p.link)) throw new Error("Links can be web addresses (https://…), email (mailto:…) or places in the workbook (#Sheet!A1).");
+      const before = data.setExtra(p.row, p.col, { ...(p.note !== undefined ? { note: p.note } : {}), ...(p.link !== undefined ? { link: p.link } : {}) });
+      return {
+        type: "cells.extra",
+        params: { sheet: id, row: p.row, col: p.col, ...(p.note !== undefined ? { note: before?.note ?? null } : {}), ...(p.link !== undefined ? { link: before?.link ?? null } : {}) },
+      };
+    },
+  });
 
   // ---------------------------------------------------------- validation --
   const dvRange = s.object({ top: s.int(undefined, 0), left: s.int(undefined, 0), bottom: s.int(undefined, 0), right: s.int(undefined, 0) });

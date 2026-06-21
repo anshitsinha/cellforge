@@ -192,6 +192,8 @@ export class EditableSource implements DataSource {
   private cfRules: CfRule[] = [];
   // data validation rules (the last one covering a cell applies)
   private dvRules: DvRule[] = [];
+  // notes and links on cells, by row id then column (so they follow sorts)
+  private extras = new Map<number, Map<number, CellExtra>>();
   private cf: CondFormatter | null = null;
   /** the last sort, for saving in a filter view (not saved with the file) */
   lastSort: { col: number; descending: boolean }[] | null = null;
@@ -308,6 +310,7 @@ export class EditableSource implements DataSource {
       ...(this.filterViews.length ? { filterViews: structuredClone(this.filterViews) } : {}),
       ...(this.cfRules.length ? { condFormats: structuredClone(this.cfRules) } : {}),
       ...(this.dvRules.length ? { validations: structuredClone(this.dvRules) } : {}),
+      ...(this.extras.size ? { extras: [...this.extras].flatMap(([id, cols]) => [...cols].map(([col, x]) => [id, col, { ...x }] as [number, number, CellExtra])) } : {}),
     };
     return { state, binary: this.order?.isArray ? { order: this.order.toArray() } : {} };
   }
@@ -346,6 +349,7 @@ export class EditableSource implements DataSource {
     s.filterViews = state.filterViews ? structuredClone(state.filterViews) : [];
     if (state.condFormats?.length) s.setCondFormats(state.condFormats);
     if (state.validations?.length) s.dvRules = structuredClone(state.validations);
+    for (const [id, col, x] of state.extras ?? []) s.putExtra(id, col, x);
     s.rebuildDeps();
     return s;
   }
@@ -379,6 +383,7 @@ export class EditableSource implements DataSource {
     copy.filterViews = structuredClone(this.filterViews);
     if (this.cfRules.length) copy.setCondFormats(this.cfRules);
     copy.dvRules = structuredClone(this.dvRules);
+    for (const [id, cols] of this.extras) copy.extras.set(id, new Map([...cols].map(([c, x]) => [c, { ...x }])));
     copy.rebuildDeps();
     return copy;
   }
@@ -954,6 +959,11 @@ export class EditableSource implements DataSource {
     this.fills = this.fills.filter((f) => !fills.includes(f));
     const hidden = [...this.hiddenCols].filter((c) => c >= at && c < at + count);
     for (const c of hidden) this.hiddenCols.delete(c);
+    const extras: [number, number, CellExtra][] = [];
+    for (const [id, cols] of this.extras) {
+      for (const [c, x] of cols) if (c >= at && c < at + count) extras.push([id, c, x]);
+    }
+    for (const [id, c] of extras) this.putExtra(id, c, null);
     const styles = this.styles.remove(at, count);
     const widths = [...this.colWidths].filter(([c]) => c >= at && c < at + count);
     for (const [c] of widths) this.colWidths.delete(c);
@@ -964,7 +974,7 @@ export class EditableSource implements DataSource {
     this.shiftColumns(at + count, -count);
     const map = this.spliceColMap(at, count, []);
     this.columnsChanged();
-    return { map, edits, fills, hidden, styles, widths };
+    return { map, edits, fills, hidden, styles, widths, ...(extras.length ? { extras } : {}) };
   }
 
   /** Undo of deleteColumns. */
@@ -980,12 +990,20 @@ export class EditableSource implements DataSource {
     for (const c of removed.hidden ?? []) this.hiddenCols.add(c);
     this.styles.putBack(removed.styles ?? []);
     for (const [c, w] of removed.widths ?? []) this.colWidths.set(c, w);
+    for (const [id, c, x] of removed.extras ?? []) this.putExtra(id, c, x);
     this.widthsVersion++;
     this.columnsChanged();
   }
 
   /** Move every edit and fill at or right of `from` by `delta` columns. */
   private shiftColumns(from: number, delta: number): void {
+    if (this.extras.size) {
+      for (const cols of this.extras.values()) {
+        const moved = [...cols].filter(([c]) => c >= from);
+        for (const [c] of moved) cols.delete(c);
+        for (const [c, x] of moved) cols.set(c + delta, x);
+      }
+    }
     const moves: { id: number; col: number; value: Stored }[] = [];
     for (const [id, cols] of this.edits) {
       for (const [col, value] of cols) if (col >= from) moves.push({ id, col, value });
@@ -1338,6 +1356,53 @@ export class EditableSource implements DataSource {
     return v instanceof CellError && v.hint ? v.hint : null;
   }
 
+  // ---------------------------------------------------------------------------
+  // notes and links
+
+  private putExtra(id: number, col: number, x: CellExtra | null): void {
+    let cols = this.extras.get(id);
+    if (x && (x.note || x.link)) {
+      if (!cols) this.extras.set(id, (cols = new Map()));
+      cols.set(col, { ...(x.note ? { note: x.note } : {}), ...(x.link ? { link: x.link } : {}) });
+    } else if (cols) {
+      cols.delete(col);
+      if (!cols.size) this.extras.delete(id);
+    }
+  }
+
+  /** A cell's note and link, if it has either. */
+  extraAt(row: number, col: number): CellExtra | null {
+    if (!this.extras.size || row >= this.rowCount) return null;
+    return this.extras.get(this.toBase(row))?.get(col) ?? null;
+  }
+
+  /** Change a cell's note and / or link; returns what was there (for undo). */
+  setExtra(row: number, col: number, change: { note?: string | null; link?: string | null }): CellExtra | null {
+    const before = this.extraAt(row, col);
+    const next: CellExtra = { ...before };
+    if (change.note !== undefined) next.note = change.note ?? undefined;
+    if (change.link !== undefined) next.link = change.link ?? undefined;
+    this.putExtra(this.toBase(row), col, next);
+    return before ? { ...before } : null;
+  }
+
+  /** Every note and link, at view positions (for the inspect panel and Excel files). */
+  allExtras(): { row: number; col: number; extra: CellExtra }[] {
+    if (!this.extras.size) return [];
+    const out: { row: number; col: number; extra: CellExtra }[] = [];
+    const viewOf = this.order ? this.viewLookup() : (id: number) => (id < this.rowCount ? id : -1);
+    for (const [id, cols] of this.extras) {
+      const row = viewOf(id);
+      if (row < 0) continue; // on a deleted row (comes back with undo)
+      for (const [col, extra] of cols) out.push({ row, col, extra: { ...extra } });
+    }
+    return out.sort((a, b) => a.row - b.row || a.col - b.col);
+  }
+
+  hasUserNote(row: number, col: number): boolean {
+    return !!this.extraAt(row, col)?.note;
+  }
+
   hasNote(row: number, col: number): boolean {
     if (this.formulas === 0) return false;
     const b = this.toBase(row);
@@ -1407,6 +1472,8 @@ export class EditableSource implements DataSource {
   getDisplayStyle(row: number, col: number): CellStyle | null {
     let own = this.getStyle(row, col);
     if (this.dvRules.length && this.validationAt(row, col)?.kind === "checkbox") own = { ...own, checkbox: true };
+    // a link looks like one (unless the cell has its own colour)
+    if (this.extras.size && this.extraAt(row, col)?.link) own = { color: "#1a73e8", underline: true, ...own };
     const r = this.cf?.apply(row, col);
     if (!r) return own;
     return { ...own, ...r.style, ...(r.bar ? { bar: r.bar } : {}), ...(r.icon ? { icon: r.icon } : {}), ...(r.hideValue ? { hideValue: true } : {}) };
@@ -2055,6 +2122,15 @@ export interface SheetState {
   filterViews?: FilterView[];
   condFormats?: CfRule[];
   validations?: DvRule[];
+  /** notes and links: [row id, column, extra] */
+  extras?: [number, number, CellExtra][];
+}
+
+/** A note and / or a link on a cell. */
+export interface CellExtra {
+  note?: string;
+  /** a web address, or a place in the workbook written #Sheet!A1 (or #Name) */
+  link?: string;
 }
 
 export interface FormulaSnapshot {
@@ -2078,6 +2154,7 @@ export interface ColumnRemoval {
   hidden?: number[];
   styles?: [number, ColumnStyles][];
   widths?: [number, number][];
+  extras?: [number, number, CellExtra][];
 }
 
 /** A fill's kernel, unless it reads its own column (then it must interpret). */

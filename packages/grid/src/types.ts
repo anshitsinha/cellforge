@@ -32,6 +32,8 @@ export interface DataSource {
   formatValue?(value: CellValue, style: CellStyle | null): { text: string; color?: string };
   /** True when a cell has something to explain (a lookup near miss): drawn as a corner marker. */
   hasNote?(row: number, col: number): boolean;
+  /** A note someone wrote on the cell (drawn as a red corner; hasNote's explanations are orange). */
+  hasUserNote?(row: number, col: number): boolean;
 }
 
 export interface CellRef {

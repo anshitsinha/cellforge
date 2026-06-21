@@ -1271,3 +1271,26 @@ button:disabled {
   background: var(--accent, #1a73e8);
   color: #fff;
 }
+
+/* ---- notes and links ---- */
+.note-tip {
+  position: fixed;
+  z-index: 55;
+  max-width: 280px;
+  padding: 6px 8px;
+  background: #fff8c5;
+  color: #1f2328;
+  border: 1px solid #d4a72c;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 18%);
+  font-size: 12px;
+  pointer-events: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.note-field {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+}

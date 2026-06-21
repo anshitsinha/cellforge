@@ -28,6 +28,7 @@ import { openRecon } from "./recondialog";
 import { openTransform } from "./transformtools";
 import { openJeTool } from "./jetools";
 import { openPivot } from "./pivotpanel";
+import { cellLink, editExtra, extraAction, followLink, showNoteTip } from "./links";
 import { openProfiles } from "./profilepanel";
 import { askAboutInvalid, closeDropdown, dvContext, invalidCells, invalidInputs, openDropdown, openValidationDialog, showInputMessage } from "./dvui";
 import { chartSpecs, closeChart, openChart, refreshCharts } from "./charts/panel";
@@ -616,6 +617,33 @@ grid.onCellEdit = async ({ row, col }, text) => {
   }
   writeCells([{ row, col, input: text }], `edit in ${columnLetter(col)}${row + 1}`);
 };
+
+// notes show when the pointer rests on a cell; Ctrl+click follows a link
+grid.onCellHover = (cell, x, y) => showNoteTip(source, cell, x, y);
+grid.onCellCtrlClick = (cell) => {
+  const link = cellLink(source, cell.row, cell.col);
+  if (!link) return false;
+  followLink(link, workbook, activeId, (sheetId, row, col) => {
+    showSheet(sheetId);
+    grid.select(row, col);
+    grid.focus();
+  }, (t) => (statusLeft.textContent = t));
+  return true;
+};
+async function editCellExtra(kind: "note" | "link") {
+  const cell = { ...grid.selection };
+  const current = source.extraAt(cell.row, cell.col)?.[kind] ?? "";
+  const text = await editExtra(kind, current, `${columnLetter(cell.col)}${cell.row + 1}`);
+  grid.focus();
+  if (text !== null && text !== current) await run(extraAction(kind, cell, text));
+}
+// Excel: Shift+F2 edits the cell's note
+document.addEventListener("keydown", (e) => {
+  if (e.key === "F2" && e.shiftKey && !e.ctrlKey && !e.altKey && gridHasFocus()) {
+    e.preventDefault();
+    void editCellExtra("note");
+  }
+});
 
 // list cells' dropdowns and tick boxes
 const pickFromList = (cell: { row: number; col: number }, x: number, y: number) =>
@@ -1390,6 +1418,11 @@ function paletteCommands(): Command[] {
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },
+    { id: "note", title: source.extraAt(row, col)?.note ? "Edit note…" : "Add a note…", keys: "Shift F2", hint: "note comment annotation", run: () => editCellExtra("note") },
+    ...(source.extraAt(row, col)?.note ? [{ id: "note-delete", title: "Delete note", hint: "remove note comment", run: () => run(extraAction("note", { row, col }, "")) }] : []),
+    { id: "link", title: source.extraAt(row, col)?.link ? "Edit link…" : "Insert link…", hint: "hyperlink url web address go to sheet", run: () => editCellExtra("link") },
+    ...(source.extraAt(row, col)?.link ? [{ id: "link-remove", title: "Remove link", hint: "hyperlink", run: () => run(extraAction("link", { row, col }, "")) }] : []),
+    ...(cellLink(source, row, col) ? [{ id: "link-open", title: "Open link", keys: "Ctrl click", hint: "follow hyperlink go", run: () => grid.onCellCtrlClick?.({ row, col }) }] : []),
     { id: "validation", title: "Data validation (dropdown list, allowed values)…", hint: "validation dropdown list choices allowed values restrict input checkbox tick box", run: () => openValidationDialog(dvDeps()) },
     {
       id: "validation-circle",

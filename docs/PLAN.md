@@ -69,8 +69,8 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Notes on cells, hyperlinks
-- [ ] Notes: add / edit / delete on a cell, red corner marker, shown on hover and in the inspect panel; move with the cell through sorts and inserts
-- [ ] Hyperlinks: web addresses and links to places in the workbook (Sheet!A1, names); HYPERLINK() formula; Ctrl+click opens, plain click selects
+- [x] Notes: add / edit / delete on a cell, red corner marker, shown on hover and in the inspect panel; move with the cell through sorts and inserts
+- [x] Hyperlinks: web addresses and links to places in the workbook (Sheet!A1, names); HYPERLINK() formula; Ctrl+click opens, plain click selects
 - [ ] Actions, saved with the file, Excel import / export of notes and links; tests, user guide
 
 ## Milestones

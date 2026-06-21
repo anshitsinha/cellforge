@@ -153,6 +153,11 @@ export class Grid {
 
   /** A cell's own button was used: its dropdown (x / y: page coordinates under the cell) or its tick box. */
   onCellButton: ((cell: CellRef, kind: "dropdown" | "checkbox", x: number, y: number) => void) | null = null;
+  /** The pointer is over a cell (or none): for notes and link tips. x / y are page coordinates. */
+  onCellHover: ((cell: CellRef | null, x: number, y: number) => void) | null = null;
+  /** Ctrl / Cmd + click on a cell; return true if it was handled (a link was followed). */
+  onCellCtrlClick: ((cell: CellRef) => boolean) | null = null;
+  private hoverCell: CellRef | null = null;
   /** A column's filter button was clicked; x / y are page coordinates under the button. */
   onFilterButton: ((col: number, x: number, y: number) => void) | null = null;
   // columns that show a filter button, and whether their filter is on
@@ -218,6 +223,7 @@ export class Grid {
     this.canvas.addEventListener("keydown", this.onKeyDown);
     this.canvas.addEventListener("dblclick", this.onDoubleClick);
     this.canvas.addEventListener("mousemove", this.onHover);
+    this.canvas.addEventListener("mouseleave", this.onLeave);
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", this.onThemeChange);
 
     this.resize();
@@ -871,6 +877,15 @@ export class Grid {
       return;
     }
 
+    // Ctrl / Cmd + click follows a link
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && this.onCellCtrlClick && y >= this.headerHeight && x >= this.rowHeaderWidth) {
+      const cell = this.hitTest(x, y);
+      if (cell && this.onCellCtrlClick(cell)) {
+        e.preventDefault();
+        return;
+      }
+    }
+
     // a tick box toggles; the active cell's dropdown button opens its list
     const button = this.cellButtonAt(x, y);
     if (button) {
@@ -1144,13 +1159,28 @@ export class Grid {
     const rect = this.canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+    const cell = y >= this.headerHeight && x >= this.rowHeaderWidth ? this.hitTest(x, y) : null;
+    const linkish = !!cell && (e.ctrlKey || e.metaKey) && !!this.onCellCtrlClick;
     this.canvas.style.cursor = this.onFillHandle(x, y)
       ? "crosshair"
       : this.resizeHandleAt(x, y) !== null
         ? "col-resize"
         : this.rowResizeHandleAt(x, y) !== null
           ? "row-resize"
-          : "default";
+          : linkish
+            ? "pointer"
+            : "default";
+    if (this.onCellHover && (cell?.row !== this.hoverCell?.row || cell?.col !== this.hoverCell?.col)) {
+      this.hoverCell = cell;
+      this.onCellHover(cell, e.clientX, e.clientY);
+    }
+  };
+
+  private onLeave = (): void => {
+    if (this.hoverCell) {
+      this.hoverCell = null;
+      this.onCellHover?.(null, 0, 0);
+    }
   };
 
   /** Where the fill handle (the square on the selection's corner) is, if on screen. */
@@ -1382,6 +1412,18 @@ export class Grid {
       ctx.fillText(style.icon.glyph, x + 3, y + h / 2);
       ctx.restore();
     }
+    // (drawn even on an empty cell)
+    // a cell with a note, or something to explain, gets a small corner triangle
+    const userNote = !spanText && !!this.source.hasUserNote?.(row, col);
+    if (userNote || (!spanText && this.source.hasNote?.(row, col))) {
+      ctx.fillStyle = userNote ? "#d93025" : "#f29900";
+      ctx.beginPath();
+      ctx.moveTo(x + w - 7, y);
+      ctx.lineTo(x + w, y);
+      ctx.lineTo(x + w, y + 7);
+      ctx.closePath();
+      ctx.fill();
+    }
     const value = this.source.getCell(row, col);
     if (style?.checkbox) {
       // a tick box, centred; ticked for TRUE
@@ -1410,16 +1452,6 @@ export class Grid {
       return;
     }
     if (value === null || style?.hideValue) return;
-    // a cell with something to explain gets a small corner triangle
-    if (!spanText && this.source.hasNote?.(row, col)) {
-      ctx.fillStyle = "#f29900";
-      ctx.beginPath();
-      ctx.moveTo(x + w - 7, y);
-      ctx.lineTo(x + w, y);
-      ctx.lineTo(x + w, y + 7);
-      ctx.closePath();
-      ctx.fill();
-    }
     // centred across empty neighbours: the span pass draws the text
     if (style?.align === "centerAcross" && !spanText && this.acrossEnd(row, col) > col) return;
     const shown = this.source.formatValue ? this.source.formatValue(value, style) : { text: formatCell(value) };

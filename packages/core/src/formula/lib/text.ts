@@ -338,6 +338,29 @@ define(
 
 define(
   {
+    name: "HYPERLINK",
+    category: "Text",
+    summary: "A link: shows the friendly name (or the address), and Ctrl+click opens the address. Use #Sheet!A1 for a place in the workbook.",
+    args: [
+      { name: "link_location", description: "a web address, or #Sheet!A1" },
+      { name: "friendly_name", description: "what the cell shows", optional: true },
+    ],
+    examples: [
+      ['=HYPERLINK("https://example.com", "Example")', "Example"],
+      ['=HYPERLINK("#Sheet2!A1")', "#Sheet2!A1"],
+    ],
+  },
+  (args) => {
+    const link = txt(args[0]);
+    if (isError(link)) return link;
+    if (args.length < 2) return link;
+    const name = args[1];
+    return name.kind === "value" && typeof name.value === "number" ? name.value : txt(name);
+  },
+);
+
+define(
+  {
     name: "EXACT",
     category: "Text",
     summary: "TRUE if two texts are exactly the same, including upper and lower case (= ignores case).",
