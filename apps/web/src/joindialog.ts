@@ -32,7 +32,7 @@ import {
   type TbAccount,
   type TbCompareResult,
   type TieResult,
-} from "../../../packages/core/src/join";
+} from "@cellforge/core";
 import { setCells } from "./actions";
 import { sheetText } from "./cleanup";
 import { EditableSource } from "./editable";

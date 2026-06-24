@@ -135,16 +135,16 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ⬜ Query engine (DuckDB-WASM, loaded on demand) over sheet columns
 - ✅ Pivot tables (drag fields, drill-down to rows), slicers
 - ✅ Column profiles
-- 🔨 Join doctor (match rate, duplicate keys, orphans) and guided joins
-- 🔨 "Why don't these match?" inspector with one-click normalisation
+- ✅ Join doctor (match rate, duplicate keys, orphans) and guided joins
+- ✅ "Why don't these match?" inspector with one-click normalisation
 - ✅ Reconciliation: keys, tolerances, fuzzy text, 1:N and N:1, matched /
   unmatched / mismatched outputs, exception export
 - ✅ Reference normalisation, sum matching, keying-error flags, in-side duplicates
 - 🔨 Proposed adjusting entries, roll-forward of outstanding items, rec statement
 - 🔨 Open-item matching for balance sheet accounts; supplier / customer statement recs
-- 🔨 Trial balance compare; GL → TB tie-out
-- 🔨 Fuzzy name matching incl. name order; mapping tables
-- 🔨 Key-based file compare
+- ✅ Trial balance compare; GL → TB tie-out
+- ✅ Fuzzy name matching incl. name order; mapping tables
+- ✅ Key-based file compare
 - ⬜ Scenarios (copy-on-write sheets) compared side by side
 - ⬜ Acceptance test: synthetic bank/ledger month modelled on real data at 6K and 6M rows
 

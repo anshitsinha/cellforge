@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Table, type ColumnData } from "@cellforge/core";
-import { glToTb, tbCompare } from "../../../packages/core/src/join";
+import { glToTb, tbCompare } from "@cellforge/core";
 import { EditableSource } from "./editable";
 import {
   cellInput,

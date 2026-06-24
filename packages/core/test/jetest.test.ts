@@ -9,7 +9,7 @@ import {
   jeLines,
   luhn,
   maskValue,
-  nameSimilarity,
+  overlapNameSimilarity as nameSimilarity,
   normAddress,
   normBank,
   normName,

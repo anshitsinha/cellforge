@@ -28,6 +28,7 @@ import { openRecon } from "./recondialog";
 import { openTransform } from "./transformtools";
 import { openJeTool } from "./jetools";
 import { openPivot } from "./pivotpanel";
+import { openCompare, openGlTie, openJoin, openMapping, openTbCompare } from "./joindialog";
 import { cellLink, editExtra, extraAction, followLink, showNoteTip } from "./links";
 import { openProfiles } from "./profilepanel";
 import { askAboutInvalid, closeDropdown, dvContext, invalidCells, invalidInputs, openDropdown, openValidationDialog, showInputMessage } from "./dvui";
@@ -1413,6 +1414,16 @@ function paletteCommands(): Command[] {
       hint,
       run: () => openJeTool(kind, { ...statementDeps(), workbook: () => workbook, source: () => source, activeSheet: () => activeId, range: () => grid.range, sheetName: () => workbook.get(activeId).name }),
     })),
+    ...(() => {
+      const d = { workbook: () => workbook, activeSheet: () => activeId, run: (a: Action) => run(a), putBlob: (v: unknown) => blobs.put(v), status: (t: string) => (statusLeft.textContent = t), focusGrid: () => grid.focus() };
+      return [
+        { id: "join-sheets", title: "Join two sheets…", hint: "join merge lookup vlookup xlookup match keys doctor orphans duplicates fuzzy why don't these match", run: () => openJoin(d) },
+        { id: "compare-versions", title: "Compare two versions by key…", hint: "compare diff versions changed added removed old new key file compare", run: () => openCompare(d) },
+        { id: "tb-compare", title: "Compare trial balances…", hint: "trial balance tb compare prior period movement missing accounts", run: () => openTbCompare(d) },
+        { id: "gl-tb-tie", title: "Tie the GL out to the TB…", hint: "general ledger trial balance tie out reconcile account totals differences", run: () => openGlTie(d) },
+        { id: "mapping-table", title: "Apply a mapping table…", hint: "mapping table map values standardise names fuzzy names suggest pairs lookup replace", run: () => openMapping(d) },
+      ];
+    })(),
     { id: "pivot", title: "Pivot table…", hint: "pivot summarise group by subtotal crosstab drill down slicer sum count", run: () => openPivot({ ...statementDeps(), source: () => source, sheetName: () => workbook.get(activeId).name }) },
     { id: "profiles", title: "Column profiles", hint: "profile columns distinct blanks min max median histogram patterns data quality", run: () => openProfiles({ source: () => source, sheetName: () => workbook.get(activeId).name, focusGrid: () => grid.focus() }) },
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
