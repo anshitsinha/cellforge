@@ -319,6 +319,50 @@ export function readSheet(xml: string, name: string, shared: string[], dxfs: XDx
   };
 }
 
+/** A part's path relative to another part (../comments1.xml from xl/worksheets/sheet1.xml). */
+function resolvePart(from: string, target: string): string {
+  if (target.startsWith("/")) return target.slice(1);
+  const parts = from.split("/").slice(0, -1);
+  for (const p of target.split("/")) {
+    if (p === "..") parts.pop();
+    else if (p !== ".") parts.push(p);
+  }
+  return parts.join("/");
+}
+
+/** A sheet's links (hyperlinks) and notes (comments), from its relationships. */
+function readSheetExtras(sheet: XSheet, xml: string, files: Map<string, Uint8Array>, path: string): void {
+  const relsPath = path.replace(/([^/]+)$/, "_rels/$1.rels");
+  const rels = new Map<string, { type: string; target: string; external: boolean }>();
+  for (const [a] of each(text(files.get(relsPath)), "Relationship")) rels.set(a.Id, { type: a.Type ?? "", target: a.Target ?? "", external: a.TargetMode === "External" });
+  const links: NonNullable<XSheet["links"]> = [];
+  for (const [a] of each(first(xml, "hyperlinks")?.[1] ?? "", "hyperlink")) {
+    if (!a.ref) continue;
+    const r = rangeOf(a.ref);
+    const rel = a["r:id"] ? rels.get(a["r:id"]) : undefined;
+    let target = rel?.target ?? "";
+    if (a.location) target = target ? `${target}#${a.location}` : `#${a.location}`;
+    if (target) links.push({ row: r.top, col: r.left, target });
+  }
+  if (links.length) sheet.links = links;
+  const notes: NonNullable<XSheet["notes"]> = [];
+  for (const rel of rels.values()) {
+    if (!/\/comments$/.test(rel.type)) continue;
+    const cx = text(files.get(resolvePart(path, rel.target)));
+    const authors = [...each(first(cx, "authors")?.[1] ?? "", "author")].map(([, t]) => unescapeXml(t));
+    for (const [a, inner] of each(cx, "comment")) {
+      if (!a.ref) continue;
+      const [row, col] = parseA1(a.ref);
+      const author = authors[Number(a.authorId)];
+      let body = stringOf(first(inner, "text")?.[1] ?? inner);
+      // Excel starts a note with its author's name ("Ann:\n…")
+      if (author && body.startsWith(author + ":")) body = body.slice(author.length + 1).replace(/^\s*\n/, "");
+      notes.push({ row, col, text: body.trim(), ...(author ? { author } : {}) });
+    }
+  }
+  if (notes.length) sheet.notes = notes;
+}
+
 /** Read an .xlsx file. */
 export async function readXlsx(buf: ArrayBuffer | Uint8Array): Promise<XWorkbook> {
   const files = await unzip(buf);
@@ -338,6 +382,7 @@ export async function readXlsx(buf: ArrayBuffer | Uint8Array): Promise<XWorkbook
     const xml = text(files.get(`xl/${target}`));
     if (!xml) continue; // chart sheets and the like
     const sheet = readSheet(xml, a.name, shared, dxfs);
+    readSheetExtras(sheet, xml, files, `xl/${target}`);
     if (a.state === "hidden" || a.state === "veryHidden") sheet.hidden = true;
     sheets.push(sheet);
   }

@@ -104,6 +104,10 @@ export interface XValidation {
 export interface XSheet {
   name: string;
   hidden?: boolean;
+  /** notes (Excel's comments / notes) */
+  notes?: { row: number; col: number; text: string; author?: string }[];
+  /** links: a web address, or #Sheet!A1 for a place in the workbook */
+  links?: { row: number; col: number; target: string }[];
   validations?: XValidation[];
   /** conditional formatting, in priority order */
   condFormats?: XCondFormat[];

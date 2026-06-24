@@ -74,3 +74,23 @@ describe("notes and links", () => {
     expect(cellLink(sheet, 3, 0)).toBe("https://example.com/x");
   });
 });
+
+describe("notes and links in Excel files", () => {
+  it("survive a round trip through .xlsx, with the parts Excel needs", async () => {
+    const { readXlsx, writeXlsx } = await import("@cellforge/core");
+    const { unzip, text } = await import("../../../packages/core/src/xlsx/zip");
+    const { workbookFromXlsx, workbookToXlsx } = await import("./xlsxio");
+    const { workbook, h, sheet } = await setup();
+    await h.run(setCells([{ row: 0, col: 0, input: "x" }]));
+    await h.run({ type: "cells.extra", params: { row: 0, col: 0, note: "Checked <with> the bank & agreed" } });
+    await h.run({ type: "cells.extra", params: { row: 2, col: 1, link: "https://example.com/a?b=1&c=2" } });
+    await h.run({ type: "cells.extra", params: { row: 3, col: 1, link: "#'Data 2'!C5" } });
+    const bytes = await writeXlsx(workbookToXlsx(workbook));
+    const files = await unzip(bytes);
+    expect(text(files.get("xl/comments1.xml"))).toContain("Checked &lt;with&gt; the bank &amp; agreed");
+    expect(files.has("xl/drawings/vmlDrawing1.vml")).toBe(true);
+    expect(text(files.get("xl/worksheets/sheet1.xml"))).toContain("<legacyDrawing");
+    const back = workbookFromXlsx(await readXlsx(bytes)).sheets[0].source;
+    expect(back.allExtras()).toEqual(sheet.allExtras());
+  });
+});

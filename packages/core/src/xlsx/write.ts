@@ -226,11 +226,74 @@ function sheetXml(sheet: XSheet, strings: Map<string, number>, dxfs: string[] = 
   );
 }
 
+/** A sheet's hyperlinks XML and its relationships (external addresses). */
+function linksXml(sheet: XSheet, rels: string[]): string {
+  if (!sheet.links?.length) return "";
+  return `<hyperlinks>${sheet.links
+    .map((l) => {
+      const ref = toA1(l.row, l.col);
+      if (l.target.startsWith("#")) return `<hyperlink ref="${ref}" location="${esc(l.target.slice(1))}" display="${esc(l.target.slice(1))}"/>`;
+      rels.push(`<Relationship Id="rId${rels.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${esc(l.target)}" TargetMode="External"/>`);
+      return `<hyperlink ref="${ref}" r:id="rId${rels.length}"/>`;
+    })
+    .join("")}</hyperlinks>`;
+}
+
+/** Notes as Excel's comments part, and the VML drawing Excel needs to show them. */
+function notesParts(sheet: XSheet): { comments: string; vml: string } | null {
+  if (!sheet.notes?.length) return null;
+  const authors = [...new Set(sheet.notes.map((n) => n.author ?? ""))];
+  const comments =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+    `<authors>${authors.map((a) => `<author>${esc(a)}</author>`).join("")}</authors><commentList>` +
+    sheet.notes
+      .map((n) => `<comment ref="${toA1(n.row, n.col)}" authorId="${authors.indexOf(n.author ?? "")}"><text><t xml:space="preserve">${xmlSafe(n.text)}</t></text></comment>`)
+      .join("") +
+    "</commentList></comments>";
+  const shapes = sheet.notes
+    .map(
+      (n, i) =>
+        `<v:shape id="_x0000_s${1025 + i}" type="#_x0000_t202" style="position:absolute;margin-left:80pt;margin-top:2pt;width:120pt;height:60pt;z-index:${i + 1};visibility:hidden" fillcolor="#ffffe1" o:insetmode="auto">` +
+        '<v:fill color2="#ffffe1"/><v:shadow on="t" color="black" obscured="t"/><v:path o:connecttype="none"/><v:textbox style="mso-direction-alt:auto"><div style="text-align:left"></div></v:textbox>' +
+        `<x:ClientData ObjectType="Note"><x:MoveWithCells/><x:SizeWithCells/><x:AutoFill>False</x:AutoFill><x:Row>${n.row}</x:Row><x:Column>${n.col}</x:Column></x:ClientData></v:shape>`,
+    )
+    .join("");
+  const vml =
+    '<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">' +
+    '<o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="1"/></o:shapelayout>' +
+    '<v:shapetype id="_x0000_t202" coordsize="21600,21600" o:spt="202" path="m,l,21600r21600,l21600,xe"><v:stroke joinstyle="miter"/><v:path gradientshapeok="t" o:connecttype="rect"/></v:shapetype>' +
+    shapes +
+    "</xml>";
+  return { comments, vml };
+}
+
 /** Write an .xlsx file. */
 export async function writeXlsx(wb: XWorkbook): Promise<Uint8Array> {
   const strings = new Map<string, number>();
   const dxfs: string[] = [];
-  const sheets = wb.sheets.map((s) => sheetXml(s, strings, dxfs, { n: 0 }));
+  // per sheet: its XML, its relationships, and its notes parts
+  const extraParts: [string, string][] = [];
+  const noteOverrides: string[] = [];
+  const sheets = wb.sheets.map((s, i) => {
+    const rels: string[] = [];
+    const links = linksXml(s, rels);
+    const notes = notesParts(s);
+    let legacy = "";
+    if (notes) {
+      rels.push(`<Relationship Id="rId${rels.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments${i + 1}.xml"/>`);
+      rels.push(`<Relationship Id="rId${rels.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing${i + 1}.vml"/>`);
+      legacy = `<legacyDrawing r:id="rId${rels.length}"/>`;
+      extraParts.push([`xl/comments${i + 1}.xml`, notes.comments], [`xl/drawings/vmlDrawing${i + 1}.vml`, notes.vml]);
+      noteOverrides.push(`<Override PartName="/xl/comments${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml"/>`);
+    }
+    if (rels.length) {
+      extraParts.push([
+        `xl/worksheets/_rels/sheet${i + 1}.xml.rels`,
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + rels.join("") + "</Relationships>",
+      ]);
+    }
+    return sheetXml(s, strings, dxfs, { n: 0 }).replace("</worksheet>", links + legacy + "</worksheet>");
+  });
   const sst =
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${strings.size}" uniqueCount="${strings.size}">` +
     [...strings.keys()].map((s) => `<si><t xml:space="preserve">${xmlSafe(s)}</t></si>`).join("") +
@@ -252,6 +315,8 @@ export async function writeXlsx(wb: XWorkbook): Promise<Uint8Array> {
   const types =
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
     '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' +
+    '<Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/>' +
+    noteOverrides.join("") +
     '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
     wb.sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("") +
     '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
@@ -266,5 +331,6 @@ export async function writeXlsx(wb: XWorkbook): Promise<Uint8Array> {
     ["xl/styles.xml", stylesXml(wb.styles.length ? wb.styles : [{}], dxfs)],
     ["xl/sharedStrings.xml", sst],
     ...sheets.map((x, i) => [`xl/worksheets/sheet${i + 1}.xml`, x] as [string, string]),
+    ...extraParts,
   ]);
 }

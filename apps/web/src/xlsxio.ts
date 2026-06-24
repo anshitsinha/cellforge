@@ -5,6 +5,7 @@
  */
 import { cfFromXlsx, cfToXlsx } from "./cfxlsx";
 import { dvFromXlsx, dvToXlsx } from "./dvxlsx";
+import { safeLink } from "./links";
 import { readXlsx, Table, writeXlsx, type ColumnData, type XCell, type XStyle, type XWorkbook } from "@cellforge/core";
 import type { CellStyle } from "@cellforge/grid";
 import { EditableSource, parseInput, type Stored } from "./editable";
@@ -83,6 +84,8 @@ export function workbookFromXlsx(x: XWorkbook): Workbook {
     src.merges = xs.merges.map((m) => ({ ...m }));
     if (xs.condFormats?.length) src.setCondFormats(cfFromXlsx(xs.condFormats).rules);
     if (xs.validations?.length) src.setValidations(dvFromXlsx(xs.validations).rules);
+    for (const n of xs.notes ?? []) if (n.row < rows && n.col < cols) src.setExtra(n.row, n.col, { note: n.text });
+    for (const l of xs.links ?? []) if (l.row < rows && l.col < cols && safeLink(l.target)) src.setExtra(l.row, l.col, { link: l.target });
     for (const [c, w] of xs.colWidths) if (c < cols) src.setColWidths([c], w);
     for (const [r, h] of xs.rowHeights) if (r < rows) src.setRowHeights(r, 1, h);
     for (const r of xs.hiddenRows) if (r < rows) src.setRowsHidden(r, 1, true);
@@ -152,6 +155,7 @@ export function workbookToXlsx(wb: Workbook): XWorkbook {
       merges: src.merges.map((m) => ({ ...m })),
       ...(src.condFormats.length ? { condFormats: cfToXlsx(src.condFormats) } : {}),
       ...(src.validations.length ? { validations: dvToXlsx(src.validations) } : {}),
+      ...xlsxExtras(src),
       colWidths: [...src.columnWidths],
       hiddenCols: [...src.hiddenColumns],
       rowHeights: [...src.rowHeightsByView()],
@@ -171,4 +175,12 @@ export async function openXlsx(buf: ArrayBuffer): Promise<Workbook> {
 export async function saveXlsx(wb: Workbook): Promise<Blob> {
   const bytes = await writeXlsx(workbookToXlsx(wb));
   return new Blob([bytes as BlobPart], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+/** A sheet's notes and links in Excel's terms. */
+function xlsxExtras(src: EditableSource): { notes?: { row: number; col: number; text: string }[]; links?: { row: number; col: number; target: string }[] } {
+  const all = src.allExtras().filter((x) => x.row < EXCEL_ROWS);
+  const notes = all.flatMap((x) => (x.extra.note ? [{ row: x.row, col: x.col, text: x.extra.note }] : []));
+  const links = all.flatMap((x) => (x.extra.link ? [{ row: x.row, col: x.col, target: x.extra.link }] : []));
+  return { ...(notes.length ? { notes } : {}), ...(links.length ? { links } : {}) };
 }

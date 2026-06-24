@@ -68,10 +68,12 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Notes on cells, hyperlinks
-- [x] Notes: add / edit / delete on a cell, red corner marker, shown on hover and in the inspect panel; move with the cell through sorts and inserts
-- [x] Hyperlinks: web addresses and links to places in the workbook (Sheet!A1, names); HYPERLINK() formula; Ctrl+click opens, plain click selects
-- [ ] Actions, saved with the file, Excel import / export of notes and links; tests, user guide
+### Recipe panel: recorded steps, edit / reorder / disable, parameters,
+- [ ] Recipe model: the recordable actions a session ran, as steps with parameters; sheet and range references made relative to the recipe's inputs
+- [ ] Recipe panel: list of steps, edit a step's parameters, reorder, disable, delete; save / load recipes with the workbook
+- [ ] Live preview at every step (the workbook as it was after step N) with per-step time and memory
+- [ ] Run a recipe on the current workbook as one undo step; clear errors naming the step that failed
+- [ ] Tests, user guide
 
 ## Milestones
 
@@ -120,14 +122,14 @@ tracker shows this expanded, with the first unticked step as the current one.
   running-balance validation per page
 - ✅ Trial balance import mapper (debit/credit or signed, code/name/current/prior)
 
-### M4: Data tools 🔨
+### M4: Data tools ✅
 - ✅ Filters and filter views, (Blanks) first, invert selection; multi-column sort
 - ✅ Find & replace (regex, in formulas)
 - ✅ Conditional formatting with a proper rules manager
 - ✅ Data validation and dropdowns; date, currency and checkbox column types
 - ✅ Remove duplicates, text to columns, unpivot / pivot, extract by pattern
 - ✅ Goal Seek
-- 🔨 Notes on cells, hyperlinks
+- ✅ Notes on cells, hyperlinks
 
 ### M5: Query engine, explore, reconcile 🔨
 - ⬜ Query engine (DuckDB-WASM, loaded on demand) over sheet columns
@@ -146,8 +148,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ⬜ Scenarios (copy-on-write sheets) compared side by side
 - ⬜ Acceptance test: synthetic bank/ledger month modelled on real data at 6K and 6M rows
 
-### M6: Recipes and checks
-- ⬜ Recipe panel: recorded steps, edit / reorder / disable, parameters,
+### M6: Recipes and checks 🔨
+- 🔨 Recipe panel: recorded steps, edit / reorder / disable, parameters,
   live preview at every step, per-step time and memory profile
 - ⬜ Re-run a recipe on new files or a folder
 - ⬜ Templates for the three hero workflows: monthly close, bank rec, audit tests
