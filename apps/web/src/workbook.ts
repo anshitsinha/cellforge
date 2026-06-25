@@ -5,6 +5,7 @@
  * just as in Excel.
  */
 import type { ChartSpec } from "./charts/model";
+import type { Recipe } from "./recipe";
 import { BlankSource, EditableSource } from "./editable";
 import type { Version } from "./versions";
 import { formatFormula, parseFormula, type Node } from "@cellforge/core";
@@ -50,6 +51,8 @@ export class Workbook {
   versions: Version[] = [];
   /** charts (floating windows over the sheets); saved with the workbook */
   charts: ChartSpec[] = [];
+  /** saved recipes; saved with the workbook */
+  recipes: Recipe[] = [];
 
   /** iterative calculation for circular references (off by default, as in Excel) */
   private iter: { max: number; change: number } | null = null;

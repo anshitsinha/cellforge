@@ -149,6 +149,8 @@ describe("sheet actions", () => {
       "format.conditionalMove",
       "format.conditionalDelete",
       "recipe.run",
+      "recipe.save",
+      "recipe.delete",
       "cells.extra",
       "validation.add",
       "validation.clear",

@@ -17,7 +17,7 @@ import { captureVersion, versionSheets, type Version } from "./versions";
 import type { ChartSpec } from "./charts/model";
 import { checkDv, subtractRange, type DvRule } from "./validation";
 import { safeLink } from "./links";
-import { bindStep, type RecipeStep } from "./recipe";
+import { bindStep, type Recipe, type RecipeStep } from "./recipe";
 import { checkRule, describeRule, newRuleId, type CfRule } from "./condformat";
 import { describeCondition, type FilterCondition, type FilterSpec, type FilterView } from "./filter";
 import { buildClean, buildDropped, namedHeader, planCleanup, sheetText } from "./cleanup";
@@ -879,6 +879,48 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         if (!bound.length) return null;
         const undos = await applySteps(ctx, bound);
         return undos.length ? { type: "steps.undo", params: { steps: ctx.blobs.put(undos) } } : null;
+      },
+    })
+    .register<{ recipe: Recipe }>({
+      type: "recipe.save",
+      title: "Save a recipe with the workbook (replaces one with the same name)",
+      schema: s.object({ recipe: { type: "object", properties: {}, additionalProperties: true } }),
+      describe: (p) => `save recipe "${p.recipe.name}"`,
+      recordable: false,
+      apply(ctx, p) {
+        if (!p.recipe.name?.trim() || !Array.isArray(p.recipe.steps)) throw new Error("A recipe needs a name and steps.");
+        const before = structuredClone(ctx.workbook.recipes);
+        const i = before.findIndex((r) => r.name.toLowerCase() === p.recipe.name.toLowerCase());
+        const next = [...ctx.workbook.recipes];
+        if (i >= 0) next[i] = structuredClone(p.recipe);
+        else next.push(structuredClone(p.recipe));
+        ctx.workbook.recipes = next;
+        return { type: "recipe.restore", params: { recipes: ctx.blobs.put(before) } };
+      },
+    })
+    .register<{ name: string }>({
+      type: "recipe.delete",
+      title: "Delete a saved recipe",
+      schema: s.object({ name: s.string() }),
+      describe: (p) => `delete recipe "${p.name}"`,
+      recordable: false,
+      apply(ctx, p) {
+        const before = structuredClone(ctx.workbook.recipes);
+        ctx.workbook.recipes = before.filter((r) => r.name.toLowerCase() !== p.name.toLowerCase());
+        if (ctx.workbook.recipes.length === before.length) return null;
+        return { type: "recipe.restore", params: { recipes: ctx.blobs.put(before) } };
+      },
+    })
+    .register<{ recipes: string }>({
+      type: "recipe.restore",
+      title: "Put saved recipes back",
+      internal: true,
+      schema: s.object({ recipes: s.string() }),
+      describe: () => "recipes",
+      apply(ctx, p) {
+        const before = structuredClone(ctx.workbook.recipes);
+        ctx.workbook.recipes = ctx.blobs.get<Recipe[]>(p.recipes);
+        return { type: "recipe.restore", params: { recipes: ctx.blobs.put(before) } };
       },
     })
     .register<{ steps?: string; sheet?: string; action?: Action }>({

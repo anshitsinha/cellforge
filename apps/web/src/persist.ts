@@ -13,6 +13,7 @@
  * actions, which also rebuilds undo.
  */
 import type { ChartSpec } from "./charts/model";
+import type { Recipe } from "./recipe";
 import type { Action } from "@cellforge/actions";
 import { Table, type ColumnData } from "@cellforge/core";
 import type { DataSource } from "@cellforge/grid";
@@ -39,6 +40,8 @@ export interface WorkbookState {
   names?: { name: string; formula: string; comment?: string }[];
   /** charts (added after v1 shipped) */
   charts?: ChartSpec[];
+  /** recipes (added after v1 shipped) */
+  recipes?: Recipe[];
   /** named versions (added after v1 shipped; missing means none) */
   versions?: { name: string; at: number; sheets: SavedSheet[] }[];
 }
@@ -140,7 +143,7 @@ export function packWorkbook(wb: Workbook, active: string, name: string): Packed
   }));
   const names = wb.definedNames;
   const iterative = wb.iterative;
-  return { meta: { format: "cellforge", v: 1, name, active, bases, sheets, ...(versions.length ? { versions } : {}), ...(names.length ? { names } : {}), ...(iterative ? { iterative } : {}), ...(wb.charts.length ? { charts: structuredClone(wb.charts) } : {}) }, files };
+  return { meta: { format: "cellforge", v: 1, name, active, bases, sheets, ...(versions.length ? { versions } : {}), ...(names.length ? { names } : {}), ...(iterative ? { iterative } : {}), ...(wb.charts.length ? { charts: structuredClone(wb.charts) } : {}), ...(wb.recipes.length ? { recipes: structuredClone(wb.recipes) } : {}) }, files };
 }
 
 /** Rebuild a workbook from its metadata, reading files as needed. */
@@ -205,6 +208,7 @@ export async function unpackWorkbook(
   if (meta.names?.length) workbook.restoreNames(meta.names);
   if (meta.iterative) workbook.iterative = meta.iterative;
   if (meta.charts?.length) workbook.charts = structuredClone(meta.charts);
+  if (meta.recipes?.length) workbook.recipes = structuredClone(meta.recipes);
   const active = workbook.has(meta.active) ? meta.active : workbook.sheets[0].id;
   return { workbook, active, name: meta.name };
 }

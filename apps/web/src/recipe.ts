@@ -100,7 +100,7 @@ export function makeRecipe(name: string, steps: readonly RecipeStep[]): Recipe {
 
 /** Bytes in plain words. */
 export function memoryText(bytes: number | undefined): string {
-  if (bytes === undefined) return "";
+  if (bytes === undefined || Math.abs(bytes) < 1024) return ""; // the browser only reports memory roughly
   const abs = Math.abs(bytes);
   const t = abs < 1024 ? `${abs} B` : abs < 1024 ** 2 ? `${(abs / 1024).toFixed(0)} KB` : abs < 1024 ** 3 ? `${(abs / 1024 ** 2).toFixed(1)} MB` : `${(abs / 1024 ** 3).toFixed(2)} GB`;
   return (bytes < 0 ? "−" : "+") + t;

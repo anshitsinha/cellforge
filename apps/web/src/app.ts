@@ -4,7 +4,7 @@ import { type CellRange, Grid, columnLetter } from "@cellforge/grid";
 import { parseTsv, rangeSize, rangeToTsv } from "./clipboard";
 import { computeStats } from "./stats";
 import { SyntheticSource } from "./demo";
-import { type Action, ActionHistory, BlobStore } from "@cellforge/actions";
+import { type Action, ActionHistory, type ActionRegistry, BlobStore } from "@cellforge/actions";
 import { setCells, sheetActions, type SheetCtx } from "./actions";
 import { BlankSource, EditableSource, isFormula, type Fill } from "./editable";
 import { download, exportCsv } from "./exporter";
@@ -28,6 +28,8 @@ import { openRecon } from "./recondialog";
 import { openTransform } from "./transformtools";
 import { openJeTool } from "./jetools";
 import { openPivot } from "./pivotpanel";
+import { RecipeRecorder, unbindAction, usedMemory } from "./recipe";
+import { openRecipes } from "./recipepanel";
 import { openCompare, openGlTie, openJoin, openMapping, openTbCompare } from "./joindialog";
 import { cellLink, editExtra, extraAction, followLink, showNoteTip } from "./links";
 import { openProfiles } from "./profilepanel";
@@ -297,13 +299,30 @@ const ctx = (): SheetCtx => ({
 });
 const history = new ActionHistory(registry, ctx);
 
+// this session's recordable steps, for recipes (kept in step with undo / redo)
+const recorder = new RecipeRecorder();
+
 /** Run a user action; problems are reported in the status bar, not thrown. */
 async function run(action: Action) {
   try {
+    const sheetName = workbook.has(activeId) ? workbook.get(activeId).name : "";
+    const mem0 = usedMemory();
+    const t0 = performance.now();
     const applied = await history.run(action);
     if (applied) {
       journal({ op: "run", action });
       recordTrail(action);
+      const def = registry.get(action.type);
+      if (def?.recordable && !def.internal) {
+        const mem1 = usedMemory();
+        recorder.record({
+          action: unbindAction(action, (id) => (workbook.has(id) ? workbook.get(id).name : undefined)),
+          sheet: sheetName,
+          label: registry.describe(action),
+          ms: performance.now() - t0,
+          ...(mem0 !== undefined && mem1 !== undefined ? { memory: mem1 - mem0 } : {}),
+        });
+      }
     }
     refresh();
     return applied;
@@ -470,7 +489,10 @@ function writeCells(cells: CellInput[], label: string) {
 async function undo() {
   try {
     const label = await history.undo();
-    if (label) journal({ op: "undo" });
+    if (label) {
+      journal({ op: "undo" });
+      recorder.undo(label);
+    }
     refresh();
     if (label) statusLeft.textContent = `Undid ${label}`;
   } catch (e) {
@@ -481,7 +503,10 @@ async function undo() {
 async function redo() {
   try {
     const label = await history.redo();
-    if (label) journal({ op: "redo" });
+    if (label) {
+      journal({ op: "redo" });
+      recorder.redo(label);
+    }
     refresh();
     if (label) statusLeft.textContent = `Redid ${label}`;
   } catch (e) {
@@ -1426,6 +1451,26 @@ function paletteCommands(): Command[] {
     })(),
     { id: "pivot", title: "Pivot table…", hint: "pivot summarise group by subtotal crosstab drill down slicer sum count", run: () => openPivot({ ...statementDeps(), source: () => source, sheetName: () => workbook.get(activeId).name }) },
     { id: "profiles", title: "Column profiles", hint: "profile columns distinct blanks min max median histogram patterns data quality", run: () => openProfiles({ source: () => source, sheetName: () => workbook.get(activeId).name, focusGrid: () => grid.focus() }) },
+    {
+      id: "recipes",
+      title: "Recipes: this session's steps and saved recipes…",
+      hint: "recipe macro record replay steps automate repeat monthly",
+      run: () =>
+        openRecipes({
+          sessionSteps: () => recorder.steps,
+          recipes: () => workbook.recipes,
+          registry: registry as unknown as ActionRegistry<unknown>,
+          run: (a) => run(a),
+          showAfter: async (count) => {
+            // step back or forward through this session's recorded steps
+            while (recorder.steps.length > count && history.canUndo) await undo();
+            while (recorder.steps.length < count && history.canRedo) await redo();
+          },
+          status: (t) => (statusLeft.textContent = t),
+          focusGrid: () => grid.focus(),
+        }),
+    },
+    ...workbook.recipes.map((r) => ({ id: `recipe:${r.name}`, title: `Run recipe: ${r.name}`, hint: "recipe run replay", run: () => run({ type: "recipe.run", params: { name: r.name, steps: r.steps } }) })),
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },
