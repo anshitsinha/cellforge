@@ -17,6 +17,7 @@ import { captureVersion, versionSheets, type Version } from "./versions";
 import type { ChartSpec } from "./charts/model";
 import { checkDv, subtractRange, type DvRule } from "./validation";
 import { safeLink } from "./links";
+import { bindStep, type RecipeStep } from "./recipe";
 import { checkRule, describeRule, newRuleId, type CfRule } from "./condformat";
 import { describeCondition, type FilterCondition, type FilterSpec, type FilterView } from "./filter";
 import { buildClean, buildDropped, namedHeader, planCleanup, sheetText } from "./cleanup";
@@ -818,6 +819,87 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         const undo = cfUndo(id, data, ctx);
         data.setCondFormats(ctx.blobs.get<CfRule[]>(p.rules));
         return undo;
+      },
+    });
+
+  // -------------------------------------------------------------- recipes --
+  /** Apply actions in order; if one fails, undo the ones done and say which step it was. */
+  const applySteps = async (ctx: SheetCtx, steps: { action: Action; sheetId: string; label: string }[]): Promise<Action[]> => {
+    const inverses: { action: Action; sheetId: string }[] = [];
+    try {
+      for (const [i, step] of steps.entries()) {
+        if (step.action.type === "recipe.run" || step.action.type === "steps.undo") throw new Error("A recipe can't run another recipe.");
+        let applied;
+        try {
+          applied = await registry.apply({ ...ctx, activeSheet: step.sheetId }, step.action, "recipe");
+        } catch (e) {
+          throw new Error(`Step ${i + 1} (${step.label}) didn't work: ${(e as Error).message}`);
+        }
+        if (applied.inverse) inverses.push({ action: applied.inverse, sheetId: step.sheetId });
+      }
+    } catch (e) {
+      for (const inv of inverses.reverse()) await registry.apply({ ...ctx, activeSheet: inv.sheetId }, inv.action, "undo");
+      throw e;
+    }
+    return inverses.reverse().map((x) => ({ type: "steps.undo", params: { sheet: x.sheetId, action: x.action } }));
+  };
+  registry
+    .register<{ name?: string; steps: { action: Action; sheet: string; label?: string; enabled?: boolean }[] }>({
+      type: "recipe.run",
+      title: "Run a recipe: a list of recorded steps, in order, as one step that undoes all of them",
+      schema: s.object(
+        {
+          name: s.string("the recipe's name"),
+          steps: s.array(
+            s.object(
+              {
+                action: { type: "object", properties: {}, additionalProperties: true },
+                sheet: s.string("the sheet the step works on, by name; empty = the active sheet"),
+                label: s.string(),
+                enabled: s.bool(),
+              },
+              ["action", "sheet"],
+            ),
+            "the steps",
+            1,
+          ),
+        },
+        ["steps"],
+      ),
+      describe: (p) => (p.name ? `recipe "${p.name}"` : "recipe"),
+      recordable: false,
+      async apply(ctx, p) {
+        const byName = (name: string) => ctx.workbook.byName(name)?.id;
+        const bound = p.steps
+          .filter((st) => st.enabled !== false)
+          .map((st) => {
+            const step: RecipeStep = { action: st.action, sheet: st.sheet, label: st.label ?? st.action.type, enabled: true };
+            return { ...bindStep(step, byName, ctx.activeSheet), label: step.label };
+          });
+        if (!bound.length) return null;
+        const undos = await applySteps(ctx, bound);
+        return undos.length ? { type: "steps.undo", params: { steps: ctx.blobs.put(undos) } } : null;
+      },
+    })
+    .register<{ steps?: string; sheet?: string; action?: Action }>({
+      type: "steps.undo",
+      title: "Undo (or redo) a group of steps",
+      internal: true,
+      schema: s.object({ steps: s.string(), sheet: s.string(), action: { type: "object", properties: {}, additionalProperties: true } }, []),
+      describe: () => "recipe",
+      async apply(ctx, p) {
+        // one step: apply it on its sheet; many: apply them in order and return the group that reverses them
+        if (p.action) {
+          const applied = await registry.apply({ ...ctx, activeSheet: p.sheet ?? ctx.activeSheet }, p.action, "undo");
+          return applied.inverse ? { type: "steps.undo", params: { sheet: p.sheet ?? ctx.activeSheet, action: applied.inverse } } : null;
+        }
+        const list = ctx.blobs.get<Action[]>(p.steps!);
+        const back: Action[] = [];
+        for (const a of list) {
+          const applied = await registry.apply(ctx, a, "undo");
+          if (applied.inverse) back.push(applied.inverse);
+        }
+        return back.length ? { type: "steps.undo", params: { steps: ctx.blobs.put(back.reverse()) } } : null;
       },
     });
 

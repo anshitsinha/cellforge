@@ -69,10 +69,10 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Recipe panel: recorded steps, edit / reorder / disable, parameters,
-- [ ] Recipe model: the recordable actions a session ran, as steps with parameters; sheet and range references made relative to the recipe's inputs
+- [x] Recipe model: the recordable actions a session ran, as steps with parameters; sheet and range references made relative to the recipe's inputs
 - [ ] Recipe panel: list of steps, edit a step's parameters, reorder, disable, delete; save / load recipes with the workbook
 - [ ] Live preview at every step (the workbook as it was after step N) with per-step time and memory
-- [ ] Run a recipe on the current workbook as one undo step; clear errors naming the step that failed
+- [x] Run a recipe on the current workbook as one undo step; clear errors naming the step that failed
 - [ ] Tests, user guide
 
 ## Milestones
