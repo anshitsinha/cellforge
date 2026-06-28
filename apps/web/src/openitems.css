@@ -1,0 +1,16 @@
+/* Bank rec statement, roll-forward, open items, statement recs (openitemsdialog.ts); builds on recon.css */
+.palette.openitems-dialog .import-options small {
+  display: block;
+  color: var(--muted);
+}
+
+.openitems-summary {
+  width: auto;
+  min-width: min(520px, 100%);
+}
+
+.openitems-summary td.openitems-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
