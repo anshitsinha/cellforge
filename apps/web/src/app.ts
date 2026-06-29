@@ -25,6 +25,7 @@ import { editRule, openCfManager } from "./cfmanager";
 import { openFindReplace } from "./finddialog";
 import { openAuditTool } from "./audittools";
 import { openRecon } from "./recondialog";
+import { openOpenItems } from "./openitemsdialog";
 import { openTransform } from "./transformtools";
 import { openJeTool } from "./jetools";
 import { openPivot } from "./pivotpanel";
@@ -1471,6 +1472,19 @@ function paletteCommands(): Command[] {
         }),
     },
     ...workbook.recipes.map((r) => ({ id: `recipe:${r.name}`, title: `Run recipe: ${r.name}`, hint: "recipe run replay", run: () => run({ type: "recipe.run", params: { name: r.name, steps: r.steps } }) })),
+    ...(
+      [
+        ["bankstatement", "Bank rec statement…", "bank rec reconciliation statement deposits in transit outstanding cheques unpresented adjusting entries journal fees interest"],
+        ["rollforward", "Roll forward outstanding items…", "roll forward outstanding items cleared unpresented cheques deposits in transit stale ageing prior period"],
+        ["openitems", "Open-item matching (one account)…", "open item matching suspense clearing account ar ap control debits credits clear ageing"],
+        ["statementrec", "Supplier / customer statement rec…", "supplier customer statement reconciliation vendor creditor debtor invoice credit note payment in transit"],
+      ] as const
+    ).map(([kind, title, hint]) => ({
+      id: `openitems-${kind}`,
+      title,
+      hint,
+      run: () => openOpenItems(kind, { workbook: () => workbook, activeSheet: () => activeId, run: (a) => run(a), putBlob: (v) => blobs.put(v), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }),
+    })),
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },

@@ -139,8 +139,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Reconciliation: keys, tolerances, fuzzy text, 1:N and N:1, matched /
   unmatched / mismatched outputs, exception export
 - ✅ Reference normalisation, sum matching, keying-error flags, in-side duplicates
-- 🔨 Proposed adjusting entries, roll-forward of outstanding items, rec statement
-- 🔨 Open-item matching for balance sheet accounts; supplier / customer statement recs
+- ✅ Proposed adjusting entries, roll-forward of outstanding items, rec statement
+- ✅ Open-item matching for balance sheet accounts; supplier / customer statement recs
 - ✅ Trial balance compare; GL → TB tie-out
 - ✅ Fuzzy name matching incl. name order; mapping tables
 - ✅ Key-based file compare

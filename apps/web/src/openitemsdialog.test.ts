@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { reconcile, Table, type ColumnData, type RecRecord } from "@cellforge/core";
-import { proposeAdjustments, recStatement } from "../../../packages/core/src/recon/statement";
-import { matchOpenItems, rollOutstanding, statementRec, type StatementRecRecord } from "../../../packages/core/src/recon/openitems";
+import { proposeAdjustments, recStatement } from "@cellforge/core";
+import { matchOpenItems, rollOutstanding, statementRec, type StatementRecRecord } from "@cellforge/core";
 import { EditableSource } from "./editable";
 import {
   adjustmentsSheet,

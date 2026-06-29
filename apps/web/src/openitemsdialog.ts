@@ -9,7 +9,7 @@
 import "./openitems.css";
 import type { Action } from "@cellforge/actions";
 import { formatValue, parseDateLoose, parseNumberLoose, reconcile, Table, type ColumnData, type RecRecord, type RecRule } from "@cellforge/core";
-import { proposeAdjustments, recStatement, type AdjEntry, type RecLine, type RecStatement } from "../../../packages/core/src/recon/statement";
+import { proposeAdjustments, recStatement, type AdjEntry, type RecLine, type RecStatement } from "@cellforge/core";
 import {
   guessStatementSigns,
   matchOpenItems,
@@ -21,7 +21,7 @@ import {
   type OutstandingRoll,
   type StatementRecRecord,
   type StatementRecResult,
-} from "../../../packages/core/src/recon/openitems";
+} from "@cellforge/core";
 import { EditableSource } from "./editable";
 import { guessMap, readSide, reconSheets, RECON_ROLES, RULE_LABEL, sheetHeader, type ReconMap, type ReconRole, type ReconSheet } from "./recondialog";
 import type { Workbook } from "./workbook";

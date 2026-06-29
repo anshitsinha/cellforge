@@ -23,6 +23,8 @@ export { DEFAULT_REC_SETTINGS, REC_RULES, reconcile, subsetSum, toleranceFor, ty
 export { explain, type ExplainKind, type ExplainReason, type Explanation } from "./recon/explain";
 // (recon's jaroWinkler is the same measure as audit's, which is exported above)
 export { amountKeyingError, bareRef, DEFAULT_PREFIXES, isOneSlip, isTransposition, KEYING_LABEL, keyingVariants, normRef, normText, refPrefix, textSimilarity, tokenSimilarity, type KeyingError } from "./recon/text";
+export { accountFor, BANK_LINE_LABEL, DEFAULT_ADJ_RULES, differenceItems, payeeOf, proposeAdjustments, recStatement, type AdjEntry, type AdjLine, type AdjOptions, type AdjRule, type BankLineId, type RecItem, type RecLine, type RecStatement, type RecStatementOptions } from "./recon/statement";
+export { classifyDoc, guessStatementSigns, matchOpenItems, reconcileTwoStage, rollOutstanding, statementRec, STATEMENT_REC_LABEL, type OpenItem, type OpenItemGroup, type OpenItemOptions, type OpenItemRecord, type OpenItemResult, type OpenItemRule, type OutstandingRoll, type OutstandingStatus, type RecDocType, type RolledItem, type RollOutstandingOptions, type StatementRecLineId, type StatementRecOptions, type StatementRecRecord, type StatementRecResult } from "./recon/openitems";
 export { buildTb, guessTbRoles, readTb, TB_ROLES, type TbLine, type TbResult, type TbRole } from "./clean/tb";
 export { parseStatement, rowsToLines, type Statement, type StatementCell, type StatementLine, type StatementPage, type StatementRole, type Transaction } from "./clean/bank";
 export { pageLines, readPdfText, type LineCell, type PdfPage, type TextItem } from "./pdf/read";
