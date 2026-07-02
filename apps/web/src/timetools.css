@@ -1,0 +1,39 @@
+/* Time and schedule dialogs (timetools.ts). Builds on the palette-form, import-dialog and transform styles. */
+
+.tt-dialog {
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.tt-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+  align-items: start;
+}
+
+.tt-grid[hidden],
+.tt-side[hidden] {
+  display: none;
+}
+
+.tt-side {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px 10px;
+}
+
+.tt-side > legend {
+  font-weight: 600;
+  padding: 0 4px;
+}
+
+@media (max-width: 560px) {
+  .tt-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
