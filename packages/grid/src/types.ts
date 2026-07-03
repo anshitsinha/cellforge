@@ -13,6 +13,11 @@ export interface DataSource {
   getColumnName?(col: number): string;
 }
 
+export interface CellRef {
+  row: number;
+  col: number;
+}
+
 export interface GridOptions {
   rowHeight?: number;
   headerHeight?: number;
