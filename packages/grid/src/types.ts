@@ -9,8 +9,11 @@ export interface DataSource {
   readonly rowCount: number;
   readonly colCount: number;
   getCell(row: number, col: number): CellValue;
-  /** Optional header label. Falls back to spreadsheet letters (A, B, ... AA). */
-  getColumnName?(col: number): string;
+  /**
+   * Optional header label. Falls back to spreadsheet letters (A, B, ... AA)
+   * when missing or when it returns undefined.
+   */
+  getColumnName?(col: number): string | undefined;
 }
 
 export interface CellRef {

@@ -8,7 +8,7 @@ Rough order, subject to change.
 - [x] Vite app shell
 - [x] Virtualized canvas grid (rows/cols, headers, scrolling)
 - [x] Cell selection + keyboard navigation
-- [ ] Formula bar + in-place cell editing
+- [x] Formula bar + in-place cell editing
 - [ ] Column resize
 
 ## v0.2 — real data
