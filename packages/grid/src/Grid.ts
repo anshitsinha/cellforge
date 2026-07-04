@@ -9,6 +9,19 @@ const HEADER_FONT = '12px system-ui, -apple-system, "Segoe UI", Roboto, sans-ser
 const CELL_PADDING = 6;
 const SCROLLBAR_SIZE = 10;
 const MIN_THUMB = 24;
+const RESIZE_HANDLE = 4; // px either side of a column border that counts as "grab"
+const MIN_COLUMN_WIDTH = 30;
+
+interface Thumb {
+  start: number; // px along the track where the thumb begins
+  size: number;
+  trackStart: number;
+  trackSize: number;
+}
+
+type Drag =
+  | { kind: "resize"; col: number; startX: number; startWidth: number }
+  | { kind: "vscroll" | "hscroll"; startPos: number; startScroll: number };
 
 /**
  * Canvas-based spreadsheet grid.
@@ -41,6 +54,7 @@ export class Grid {
   private pendingFrame = 0;
 
   private active: CellRef = { row: 0, col: 0 };
+  private drag: Drag | null = null;
 
   /** Called whenever the active cell changes (click, keyboard, or select()). */
   onSelectionChange: ((cell: CellRef) => void) | null = null;
@@ -95,6 +109,7 @@ export class Grid {
     this.canvas.addEventListener("mousedown", this.onMouseDown);
     this.canvas.addEventListener("keydown", this.onKeyDown);
     this.canvas.addEventListener("dblclick", this.onDoubleClick);
+    this.canvas.addEventListener("mousemove", this.onHover);
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", this.onThemeChange);
 
     this.resize();
@@ -189,6 +204,8 @@ export class Grid {
     this.canvas.removeEventListener("mousedown", this.onMouseDown);
     this.canvas.removeEventListener("keydown", this.onKeyDown);
     this.canvas.removeEventListener("dblclick", this.onDoubleClick);
+    this.canvas.removeEventListener("mousemove", this.onHover);
+    this.endDrag();
     this.editor.destroy();
     matchMedia("(prefers-color-scheme: dark)").removeEventListener("change", this.onThemeChange);
     this.canvas.remove();
@@ -261,9 +278,36 @@ export class Grid {
   };
 
   private onMouseDown = (e: MouseEvent): void => {
+    if (e.button !== 0) return;
     const rect = this.canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+
+    // column border in the header -> start resizing
+    const resizeCol = this.resizeHandleAt(x, y);
+    if (resizeCol !== null) {
+      e.preventDefault();
+      this.startDrag({
+        kind: "resize",
+        col: resizeCol,
+        startX: e.clientX,
+        startWidth: this.columns.width(resizeCol),
+      });
+      return;
+    }
+
+    // scrollbars
+    if (x >= this.width - SCROLLBAR_SIZE && y >= this.headerHeight) {
+      e.preventDefault();
+      this.onScrollbarDown("vscroll", y, e.clientY);
+      return;
+    }
+    if (y >= this.height - SCROLLBAR_SIZE && x >= this.rowHeaderWidth) {
+      e.preventDefault();
+      this.onScrollbarDown("hscroll", x, e.clientX);
+      return;
+    }
+
     const cell = this.hitTest(x, y);
     if (!cell) return;
     // stop the browser from moving focus elsewhere / starting a text selection
@@ -339,6 +383,89 @@ export class Grid {
     e.preventDefault();
     this.select(next.row, next.col);
   };
+
+  private onScrollbarDown(kind: "vscroll" | "hscroll", pos: number, clientPos: number): void {
+    const thumb = kind === "vscroll" ? this.verticalThumb() : this.horizontalThumb();
+    if (!thumb) return;
+    const page = kind === "vscroll" ? this.bodyHeight : this.bodyWidth;
+
+    if (pos < thumb.start) {
+      // clicked the track above/left of the thumb -> page back
+      if (kind === "vscroll") this.scrollY -= page;
+      else this.scrollX -= page;
+    } else if (pos > thumb.start + thumb.size) {
+      if (kind === "vscroll") this.scrollY += page;
+      else this.scrollX += page;
+    } else {
+      this.startDrag({
+        kind,
+        startPos: clientPos,
+        startScroll: kind === "vscroll" ? this.scrollY : this.scrollX,
+      });
+      return;
+    }
+    this.clampScroll();
+    this.invalidate();
+  }
+
+  // Drags listen on window, not the canvas, so they keep working when the
+  // mouse leaves the grid (which it always does when resizing near an edge).
+  private startDrag(drag: Drag): void {
+    this.drag = drag;
+    window.addEventListener("mousemove", this.onDragMove);
+    window.addEventListener("mouseup", this.endDrag);
+  }
+
+  private onDragMove = (e: MouseEvent): void => {
+    const drag = this.drag;
+    if (!drag) return;
+
+    if (drag.kind === "resize") {
+      const width = Math.max(MIN_COLUMN_WIDTH, drag.startWidth + e.clientX - drag.startX);
+      this.columns.setWidth(drag.col, width);
+    } else {
+      const vertical = drag.kind === "vscroll";
+      const thumb = vertical ? this.verticalThumb() : this.horizontalThumb();
+      if (!thumb) return;
+      // one px of thumb movement = (scrollable distance / free track) px of
+      // content. At 100M rows that's ~thousands of rows per pixel, which is
+      // fine - nobody drags the thumb to find row 48,213,977.
+      const free = thumb.trackSize - thumb.size;
+      const max = vertical ? this.maxScrollY : this.maxScrollX;
+      const delta = (vertical ? e.clientY : e.clientX) - drag.startPos;
+      const next = drag.startScroll + (free > 0 ? (delta / free) * max : 0);
+      if (vertical) this.scrollY = next;
+      else this.scrollX = next;
+    }
+    this.clampScroll();
+    this.invalidate();
+  };
+
+  private endDrag = (): void => {
+    this.drag = null;
+    window.removeEventListener("mousemove", this.onDragMove);
+    window.removeEventListener("mouseup", this.endDrag);
+  };
+
+  /** Just updates the cursor so users can tell column borders are draggable. */
+  private onHover = (e: MouseEvent): void => {
+    if (this.drag) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const onHandle = this.resizeHandleAt(e.clientX - rect.left, e.clientY - rect.top) !== null;
+    this.canvas.style.cursor = onHandle ? "col-resize" : "default";
+  };
+
+  /** If (x, y) is on a column border inside the header, return that column. */
+  private resizeHandleAt(x: number, y: number): number | null {
+    if (y > this.headerHeight || x < this.rowHeaderWidth) return null;
+    const contentX = x - this.rowHeaderWidth + this.scrollX;
+    const col = this.columns.indexAt(contentX);
+    const right = this.columns.left(col) + this.columns.width(col);
+    if (Math.abs(contentX - right) <= RESIZE_HANDLE) return col;
+    // also grab when we're just past the left border of col (= right of col-1)
+    if (col > 0 && Math.abs(contentX - this.columns.left(col)) <= RESIZE_HANDLE) return col - 1;
+    return null;
+  }
 
   private onDoubleClick = (e: MouseEvent): void => {
     const rect = this.canvas.getBoundingClientRect();
@@ -506,7 +633,7 @@ export class Grid {
     ctx.strokeStyle = theme.gridLine;
     ctx.stroke();
 
-    this.drawScrollbars(bodyW, bodyH);
+    this.drawScrollbars();
 
     // keep the floating editor glued to its cell if we scrolled mid-edit
     if (this.editor.isEditing) {
@@ -514,32 +641,57 @@ export class Grid {
     }
   }
 
-  private drawScrollbars(bodyW: number, bodyH: number): void {
+  private drawScrollbars(): void {
     const { ctx, theme } = this;
-    const totalH = this.source.rowCount * this.rowHeight;
-    const totalW = this.columns.totalWidth;
 
     ctx.fillStyle = theme.headerBackground;
     ctx.fillRect(this.width - SCROLLBAR_SIZE, 0, SCROLLBAR_SIZE, this.height);
     ctx.fillRect(0, this.height - SCROLLBAR_SIZE, this.width, SCROLLBAR_SIZE);
 
     ctx.fillStyle = theme.mutedText;
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = this.drag && this.drag.kind !== "resize" ? 0.8 : 0.5;
 
-    if (totalH > bodyH) {
-      // thumb can't shrink proportionally at 100M rows (it'd be 0.00001px),
-      // so clamp it to a usable minimum size
-      const thumbH = Math.max(MIN_THUMB, (bodyH / totalH) * bodyH);
-      const thumbY = this.headerHeight + (this.scrollY / this.maxScrollY) * (bodyH - thumbH);
-      roundRect(ctx, this.width - SCROLLBAR_SIZE + 2, thumbY, SCROLLBAR_SIZE - 4, thumbH);
-    }
-    if (totalW > bodyW) {
-      const thumbW = Math.max(MIN_THUMB, (bodyW / totalW) * bodyW);
-      const thumbX = this.rowHeaderWidth + (this.scrollX / this.maxScrollX) * (bodyW - thumbW);
-      roundRect(ctx, thumbX, this.height - SCROLLBAR_SIZE + 2, thumbW, SCROLLBAR_SIZE - 4);
-    }
+    const v = this.verticalThumb();
+    if (v) roundRect(ctx, this.width - SCROLLBAR_SIZE + 2, v.start, SCROLLBAR_SIZE - 4, v.size);
+    const h = this.horizontalThumb();
+    if (h) roundRect(ctx, h.start, this.height - SCROLLBAR_SIZE + 2, h.size, SCROLLBAR_SIZE - 4);
     ctx.globalAlpha = 1;
   }
+
+  private verticalThumb(): Thumb | null {
+    return thumbFor(
+      this.source.rowCount * this.rowHeight,
+      this.bodyHeight,
+      this.scrollY,
+      this.maxScrollY,
+      this.headerHeight,
+    );
+  }
+
+  private horizontalThumb(): Thumb | null {
+    return thumbFor(
+      this.columns.totalWidth,
+      this.bodyWidth,
+      this.scrollX,
+      this.maxScrollX,
+      this.rowHeaderWidth,
+    );
+  }
+}
+
+function thumbFor(
+  content: number,
+  viewport: number,
+  scroll: number,
+  maxScroll: number,
+  trackStart: number,
+): Thumb | null {
+  if (content <= viewport || maxScroll <= 0) return null;
+  // the thumb can't shrink proportionally at 100M rows (it'd be a fraction of
+  // a pixel), so it's clamped to a usable minimum size
+  const size = Math.max(MIN_THUMB, (viewport / content) * viewport);
+  const start = trackStart + (scroll / maxScroll) * (viewport - size);
+  return { start, size, trackStart, trackSize: viewport };
 }
 
 function clamp(n: number, min: number, max: number): number {
