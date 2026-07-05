@@ -1,0 +1,371 @@
+/* landing page only - the app has its own style.css */
+
+:root {
+  --bg: #ffffff;
+  --panel: #f6f7f9;
+  --border: #e3e5e8;
+  --text: #16181d;
+  --muted: #5d6571;
+  --accent: #1a73e8;
+  --accent-soft: rgba(26, 115, 232, 0.1);
+
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #131417;
+    --panel: #1c1e22;
+    --border: #2d3036;
+    --text: #e8eaed;
+    --muted: #9aa0a6;
+    --accent: #8ab4f8;
+    --accent-soft: rgba(138, 180, 248, 0.12);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body.home {
+  margin: 0;
+  background: var(--bg);
+  line-height: 1.55;
+}
+
+a {
+  color: inherit;
+}
+
+code,
+kbd {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.88em;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+section,
+.hero,
+.nav,
+.footer {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+/* --- nav ------------------------------------------------------------- */
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+}
+
+.logo {
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.03em;
+  text-decoration: none;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  font-size: 14px;
+}
+
+.nav-links a:not(.btn) {
+  text-decoration: none;
+  color: var(--muted);
+}
+
+.nav-links a:not(.btn):hover {
+  color: var(--text);
+}
+
+/* --- buttons --------------------------------------------------------- */
+
+.btn {
+  display: inline-block;
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 15px;
+  transition: transform 0.1s, border-color 0.1s;
+}
+
+.btn:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+/* --- hero ------------------------------------------------------------ */
+
+.hero {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 48px;
+  align-items: center;
+  padding-top: 56px;
+  padding-bottom: 72px;
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(34px, 5vw, 52px);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+
+.accent {
+  color: var(--accent);
+}
+
+.lede {
+  font-size: 18px;
+  color: var(--muted);
+  margin: 20px 0 28px;
+}
+
+.cta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.fine-print {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 16px;
+}
+
+.hero-demo {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.35);
+  background: var(--bg);
+}
+
+.demo-chrome {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.demo-chrome span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.demo-chrome em {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.demo-grid {
+  position: relative;
+  height: 360px;
+  font-size: 13px;
+}
+
+/* --- stats ----------------------------------------------------------- */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  padding-top: 8px;
+  padding-bottom: 64px;
+}
+
+.stats div {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.stats strong {
+  display: block;
+  font-size: 32px;
+  letter-spacing: -0.03em;
+}
+
+.stats span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* --- features -------------------------------------------------------- */
+
+h2 {
+  font-size: clamp(26px, 3.4vw, 36px);
+  letter-spacing: -0.03em;
+  margin: 0 0 8px;
+}
+
+.section-lede {
+  color: var(--muted);
+  margin: 0 0 32px;
+  font-size: 17px;
+}
+
+.features,
+.how {
+  padding-top: 48px;
+  padding-bottom: 48px;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.feature-grid article {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.feature-grid h3,
+.steps h3 {
+  margin: 0 0 6px;
+  font-size: 17px;
+}
+
+.feature-grid p,
+.steps p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+/* --- how it works ---------------------------------------------------- */
+
+.steps {
+  list-style: none;
+  counter-reset: step;
+  padding: 0;
+  margin: 24px 0 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.steps li {
+  counter-increment: step;
+}
+
+.steps li::before {
+  content: counter(step, decimal-leading-zero);
+  display: block;
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.tag {
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: middle;
+  padding: 2px 6px;
+  border-radius: 99px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* --- closing + footer ------------------------------------------------ */
+
+.closing {
+  text-align: center;
+  padding-top: 72px;
+  padding-bottom: 88px;
+}
+
+.closing h2 {
+  margin-bottom: 24px;
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 24px;
+  padding-bottom: 32px;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* --- small screens --------------------------------------------------- */
+
+@media (max-width: 860px) {
+  .hero {
+    grid-template-columns: 1fr;
+    padding-top: 24px;
+  }
+
+  .feature-grid,
+  .steps {
+    grid-template-columns: 1fr;
+  }
+
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .nav-links a:not(.btn) {
+    display: none;
+  }
+
+  .demo-grid {
+    height: 280px;
+  }
+}
+
+@media (max-width: 420px) {
+  .footer {
+    flex-direction: column;
+    gap: 8px;
+  }
+}

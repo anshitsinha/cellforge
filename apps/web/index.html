@@ -3,33 +3,121 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="A spreadsheet that stays fast at 100M rows, entirely in the browser." />
-    <title>cellforge</title>
+    <meta
+      name="description"
+      content="cellforge is a spreadsheet that stays fast at 100 million rows. It runs entirely in your browser — your data never leaves your machine."
+    />
+    <title>cellforge — 100M-row spreadsheets in your browser</title>
   </head>
-  <body>
-    <div id="app">
-      <header class="toolbar">
-        <span class="logo">cellforge</span>
-        <span class="file-name" id="file-name">Untitled</span>
-        <div class="toolbar-actions">
-          <button id="btn-open" type="button" title="Open a CSV file">Open CSV</button>
-          <button id="btn-demo" type="button" title="Load generated demo data">Demo data</button>
-        </div>
-      </header>
+  <body class="home">
+    <nav class="nav">
+      <a class="logo" href="/">cellforge</a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="https://github.com/anshitsinha/cellforge" target="_blank" rel="noopener">GitHub</a>
+        <a class="btn btn-primary btn-small" href="/app.html">Open app</a>
+      </div>
+    </nav>
 
-      <div class="formula-bar">
-        <span class="cell-ref" id="cell-ref">A1</span>
-        <span class="fx">fx</span>
-        <input id="formula-input" type="text" spellcheck="false" autocomplete="off" />
+    <header class="hero">
+      <div class="hero-text">
+        <p class="eyebrow">Open source · runs 100% in your browser</p>
+        <h1>A spreadsheet that doesn't flinch at <span class="accent">100 million rows</span>.</h1>
+        <p class="lede">
+          Excel stops at 1,048,576 rows. Google Sheets at 10 million cells. cellforge stores data
+          in columns, draws only what's on screen, and never sends your files anywhere.
+        </p>
+        <div class="cta">
+          <a class="btn btn-primary" href="/app.html">Open the app</a>
+          <a class="btn" href="/app.html?demo=1">Try 100M-row demo</a>
+        </div>
+        <p class="fine-print">No sign-up. No upload. Works offline once loaded.</p>
       </div>
 
-      <main class="sheet" id="sheet"></main>
+      <!-- a real cellforge grid, auto-scrolling through 100M synthetic rows -->
+      <div class="hero-demo">
+        <div class="demo-chrome">
+          <span></span><span></span><span></span>
+          <em id="demo-label">row 1 of 100,000,000</em>
+        </div>
+        <div class="demo-grid" id="demo-grid"></div>
+      </div>
+    </header>
 
-      <footer class="status-bar">
-        <span id="status-left">Ready</span>
-        <span id="status-right"></span>
-      </footer>
-    </div>
-    <script type="module" src="/src/main.ts"></script>
+    <section class="stats">
+      <div><strong>100M</strong><span>rows, scrolled smoothly</span></div>
+      <div><strong>0</strong><span>bytes uploaded</span></div>
+      <div><strong>0</strong><span>servers to run</span></div>
+      <div><strong>MIT</strong><span>licensed</span></div>
+    </section>
+
+    <section class="features" id="features">
+      <h2>Everything you expect from a spreadsheet</h2>
+      <p class="section-lede">…minus the row limit and the upload.</p>
+      <div class="feature-grid">
+        <article>
+          <h3>Open huge CSVs</h3>
+          <p>Drag in a multi-gigabyte CSV. It's parsed in a background worker straight into
+            typed columns, so the page never freezes.</p>
+        </article>
+        <article>
+          <h3>Formulas</h3>
+          <p><code>=SUM(E1:E1000)</code>, <code>=IF(F2&gt;100, "big", "small")</code>,
+            cell references and arithmetic — the everyday stuff.</p>
+        </article>
+        <article>
+          <h3>Sort in a click</h3>
+          <p>Sorting reorders an index instead of moving data around, so millions of rows sort
+            in a moment.</p>
+        </article>
+        <article>
+          <h3>Select, copy, paste</h3>
+          <p>Range selection with live sum / average / count, and clipboard that works with
+            Excel and Google Sheets.</p>
+        </article>
+        <article>
+          <h3>Undo everything</h3>
+          <p>Every edit, paste and sort can be undone with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</p>
+        </article>
+        <article>
+          <h3>Private by design</h3>
+          <p>There's no backend. Your data lives in your browser tab and nowhere else.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="how" id="how">
+      <h2>How it works</h2>
+      <ol class="steps">
+        <li>
+          <h3>Columnar storage</h3>
+          <p>Each column is a single typed array. 100M numbers is one <code>Float64Array</code>,
+            not 100M objects for the garbage collector to chase.</p>
+        </li>
+        <li>
+          <h3>Virtualized canvas</h3>
+          <p>The grid is one <code>&lt;canvas&gt;</code> that paints only the visible cells, so
+            scrolling 100 rows and 100 million costs the same.</p>
+        </li>
+        <li>
+          <h3>Compiled formulas <span class="tag">in progress</span></h3>
+          <p>Formulas filled down a column are really vector operations. The plan is to compile
+            them to WebGPU compute shaders.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="closing">
+      <h2>Your next spreadsheet is already open.</h2>
+      <a class="btn btn-primary" href="/app.html">Open cellforge</a>
+    </section>
+
+    <footer class="footer">
+      <span>cellforge · MIT licensed</span>
+      <a href="https://github.com/anshitsinha/cellforge" target="_blank" rel="noopener">Source on GitHub</a>
+    </footer>
+
+    <script type="module" src="/src/home.ts"></script>
   </body>
 </html>
