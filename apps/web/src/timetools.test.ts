@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dateToSerial, parseTyped, Table, type ColumnData } from "@cellforge/core";
-import { rateTable } from "../../../packages/core/src/timeseries";
+import { rateTable } from "@cellforge/core";
 import { readSheet } from "./audittools";
 import { EditableSource, parseInput } from "./editable";
 import {

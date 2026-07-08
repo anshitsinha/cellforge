@@ -25,6 +25,7 @@ import { editRule, openCfManager } from "./cfmanager";
 import { openFindReplace } from "./finddialog";
 import { openAuditTool } from "./audittools";
 import { openRecon } from "./recondialog";
+import { openTimeTool } from "./timetools";
 import { openOpenItems } from "./openitemsdialog";
 import { openTransform } from "./transformtools";
 import { openJeTool } from "./jetools";
@@ -1484,6 +1485,21 @@ function paletteCommands(): Command[] {
       title,
       hint,
       run: () => openOpenItems(kind, { workbook: () => workbook, activeSheet: () => activeId, run: (a) => run(a), putBlob: (v) => blobs.put(v), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }),
+    })),
+    ...(
+      [
+        ["fiscal", "Fiscal periods…", "fiscal year quarter period 4-4-5 445 week calendar financial year column"],
+        ["periods", "Period comparison (MoM / YoY / rolling)…", "month on month year on year mom yoy qoq ytd qtd rolling average trend period summary"],
+        ["bva", "Budget vs actual…", "budget actual variance favourable unfavourable forecast plan cost centre"],
+        ["currency", "Convert currency…", "currency fx exchange rate convert revalue revaluation gain loss triangulate closing rate"],
+        ["schedule", "Accrual / prepayment schedule…", "accrual prepayment deferred income amortisation schedule straight line daily month end journal"],
+        ["journal", "Journal export template…", "journal export import template csv debit credit accounting system upload"],
+      ] as const
+    ).map(([kind, title, hint]) => ({
+      id: `time-${kind}`,
+      title,
+      hint,
+      run: () => openTimeTool(kind, { ...statementDeps(), workbook: () => workbook, source: () => source, activeSheet: () => activeId, range: () => grid.range, selection: () => grid.selection, sheetName: () => workbook.get(activeId).name }),
     })),
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },

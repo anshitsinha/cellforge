@@ -145,16 +145,16 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Fuzzy name matching incl. name order; mapping tables
 - ✅ Key-based file compare
 - ⬜ Scenarios (copy-on-write sheets) compared side by side
-- ⬜ Acceptance test: synthetic bank/ledger month modelled on real data at 6K and 6M rows
+- 🔨 Acceptance test: synthetic bank/ledger month modelled on real data at 6K and 6M rows
 
 ### M6: Recipes and checks 🔨
 - ✅ Recipe panel: recorded steps, edit / reorder / disable, parameters,
   live preview at every step, per-step time and memory profile
 - 🔨 Re-run a recipe on new files or a folder
 - ⬜ Templates for the three hero workflows: monthly close, bank rec, audit tests
-- ⬜ Data checks: column rules, master-list lookups, debits = credits; green/red
+- 🔨 Data checks: column rules, master-list lookups, debits = credits; green/red
   checklist that gates export
-- ⬜ Categorisation rules that learn from manual tagging; bulk tagging; uncategorised queue
+- 🔨 Categorisation rules that learn from manual tagging; bulk tagging; uncategorised queue
 - ⬜ Explain: where any number came from (formula chain, recipe step, source rows),
   lineage view, one-click write-up
 
@@ -179,14 +179,14 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ⬜ Pivot charts
 - ⬜ Reports: narrative + live tables and charts, one template for many entities,
   consolidation, period roll-forward, PDF report books with contents
-- 🔨 Time tools: fiscal years, MoM/YoY, rolling windows, budget vs actual, multi-currency
-- 🔨 Accrual / prepayment / deferred income schedules; accounting import export templates
+- ✅ Time tools: fiscal years, MoM/YoY, rolling windows, budget vs actual, multi-currency
+- ✅ Accrual / prepayment / deferred income schedules; accounting import export templates
 
-### M9: Local AI
+### M9: Local AI 🔨
 - ⬜ kiln: small decoder LLMs (int4), KV cache, grammar-constrained decoding
 - ⬜ Model manager: hardware detection, tiered models, OPFS cache, offline use
-- ⬜ Deterministic command parser for common phrasings
-- ⬜ Tool loop over the action catalog: context → constrained action → execute → verify → retry
+- 🔨 Deterministic command parser for common phrasings
+- 🔨 Tool loop over the action catalog: context → constrained action → execute → verify → retry
 - ⬜ Ask, Do, Explain, Clean; audit assistant; category suggestions
 - ⬜ Internal eval harness for accuracy and time-to-answer
 
@@ -204,8 +204,8 @@ Deferred on purpose, to keep the product focused. Each needs real demand first.
 - The long tail of functions (engineering, cube, rarely used statistics)
 - Sparklines, Flash Fill, data tables, subtotals tool, forecasts
 - Semantic search; OCR of scanned PDFs and screenshots
-- Watch-a-folder automation; intercompany reconciliation; 4-4-5 calendars
-- Performance doctor for imported `.xlsx`; filter by colour; custom sort lists; date picker
+- Watch-a-folder automation; intercompany reconciliation
+- Performance doctor for imported `.xlsx`; filter by colour; custom sort lists
 - SQL editor panel; a wider template gallery; a public AI benchmark
 - Translated interface
 

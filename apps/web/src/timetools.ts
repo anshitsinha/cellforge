@@ -34,7 +34,7 @@ import {
   type ScheduleMethod,
   type SignConvention,
   type WeekPattern,
-} from "../../../packages/core/src/timeseries";
+} from "@cellforge/core";
 import { readSheet, type SheetData } from "./audittools";
 import { setCells } from "./actions";
 import { EditableSource } from "./editable";
