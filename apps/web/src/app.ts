@@ -32,6 +32,8 @@ import { openJeTool } from "./jetools";
 import { openPivot } from "./pivotpanel";
 import { RecipeRecorder, unbindAction, usedMemory } from "./recipe";
 import { openRecipes } from "./recipepanel";
+import { openRunOnFiles } from "./recipefiles";
+import type { Workbook as WorkbookT } from "./workbook";
 import { openCompare, openGlTie, openJoin, openMapping, openTbCompare } from "./joindialog";
 import { cellLink, editExtra, extraAction, followLink, showNoteTip } from "./links";
 import { openProfiles } from "./profilepanel";
@@ -300,6 +302,15 @@ const ctx = (): SheetCtx => ({
   onSheetShown: (id) => (pendingShow = id),
 });
 const history = new ActionHistory(registry, ctx);
+
+const recipeFilesDeps = () => ({
+  registry,
+  addSheets: async (wb: WorkbookT, prefix: string) => {
+    for (const s of wb.sheets) await run({ type: "sheet.insert", params: { name: `${prefix} ${s.name}`.slice(0, 31), source: blobs.put(s.source) } });
+  },
+  status: (t: string) => (statusLeft.textContent = t),
+  focusGrid: () => grid.focus(),
+});
 
 // this session's recordable steps, for recipes (kept in step with undo / redo)
 const recorder = new RecipeRecorder();
@@ -1470,8 +1481,10 @@ function paletteCommands(): Command[] {
           },
           status: (t) => (statusLeft.textContent = t),
           focusGrid: () => grid.focus(),
+          runOnFiles: (recipe) => openRunOnFiles(recipeFilesDeps(), recipe),
         }),
     },
+    ...workbook.recipes.map((r) => ({ id: `recipe-files:${r.name}`, title: `Run recipe on files: ${r.name}`, hint: "recipe run files folder batch", run: () => openRunOnFiles(recipeFilesDeps(), r) })),
     ...workbook.recipes.map((r) => ({ id: `recipe:${r.name}`, title: `Run recipe: ${r.name}`, hint: "recipe run replay", run: () => run({ type: "recipe.run", params: { name: r.name, steps: r.steps } }) })),
     ...(
       [

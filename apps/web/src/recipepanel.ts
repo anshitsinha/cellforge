@@ -17,6 +17,8 @@ export interface RecipeDeps {
   run: (a: Action) => Promise<unknown>;
   /** step the workbook back (or forward) until `count` of this session's steps are applied */
   showAfter: (count: number) => Promise<void>;
+  /** run a saved recipe on new files or a folder */
+  runOnFiles?: (recipe: Recipe) => void;
   status: (t: string) => void;
   focusGrid: () => void;
 }
@@ -206,7 +208,9 @@ export function openRecipes(d: RecipeDeps): void {
           if (editing.name === r.name) editing = { name: null, steps: d.sessionSteps().map((s) => structuredClone(s)) };
           render();
         });
-        ul.append(el("li", {}, el("span", { textContent: `${r.name} (${r.steps.filter((s) => s.enabled).length} steps)` }), run, edit, del));
+        const files = el("button", { type: "button", textContent: "On files…", title: "Run it on new files or a folder" });
+        files.addEventListener("click", () => d.runOnFiles?.(r));
+        ul.append(el("li", {}, el("span", { textContent: `${r.name} (${r.steps.filter((s) => s.enabled).length} steps)` }), run, files, edit, del));
       }
       panel.append(ul);
     }

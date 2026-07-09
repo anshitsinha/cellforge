@@ -68,10 +68,10 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Re-run a recipe on new files or a folder
-- [ ] Recipe inputs: which sheets a recipe reads, named so a file can stand in for each
-- [ ] Run on files: pick a file per input (or a folder: one run per file), open each, run the recipe, keep or export the results
-- [ ] A run report: which files ran, which step failed where, and how long each took
+### Explain: where any number came from (formula chain, recipe step, source rows),
+- [ ] Lineage model: for a cell, its formula chain down to inputs, the recorded step that last wrote it, and the file / sheet rows it came from (import, combine, clean-up, pivot)
+- [ ] Lineage view: a tree you can walk, each node with its value, jump-to, and the step that made it
+- [ ] One-click write-up: the explanation as plain sentences to paste into a working paper
 - [ ] Tests, user guide
 
 ## Milestones
@@ -150,12 +150,12 @@ tracker shows this expanded, with the first unticked step as the current one.
 ### M6: Recipes and checks 🔨
 - ✅ Recipe panel: recorded steps, edit / reorder / disable, parameters,
   live preview at every step, per-step time and memory profile
-- 🔨 Re-run a recipe on new files or a folder
+- ✅ Re-run a recipe on new files or a folder
 - ⬜ Templates for the three hero workflows: monthly close, bank rec, audit tests
 - 🔨 Data checks: column rules, master-list lookups, debits = credits; green/red
   checklist that gates export
 - 🔨 Categorisation rules that learn from manual tagging; bulk tagging; uncategorised queue
-- ⬜ Explain: where any number came from (formula chain, recipe step, source rows),
+- 🔨 Explain: where any number came from (formula chain, recipe step, source rows),
   lineage view, one-click write-up
 
 ### M7: Audit, evidence, sharing 🔨

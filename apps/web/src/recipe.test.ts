@@ -84,3 +84,28 @@ describe("recipes", () => {
     expect(r.steps.length).toBe(2);
   });
 });
+
+describe("running a recipe on new files", () => {
+  it("fills the inputs by name, runs on a fresh workbook, and reports a failing step", async () => {
+    const { runOnInputs, recipeInputs, sheetFromPart } = await import("./recipefiles");
+    const { textToColumns } = await import("./combine");
+    const { workbook } = setup(["Bank", "Out"]);
+    const steps = record(workbook, [
+      { action: { type: "rows.sortBy", params: { keys: [{ col: 1, descending: true }], hasHeader: false } }, on: "Bank" },
+      { action: { type: "format.set", params: { range: { top: 0, left: 1, bottom: 2, right: 1 }, style: { numFmt: "#,##0.00" } } }, on: "Bank" },
+    ]);
+    const recipe = { name: "Tidy bank", steps, at: 0 };
+    expect(recipeInputs(recipe)).toEqual(["Bank"]);
+
+    const part = { name: "march.csv", ...textToColumns(["Payee", "Amount"], [["A", "10"], ["B", "300"], ["C", "25"]]) };
+    const ok = await runOnInputs(sheetActions(), recipe, new Map([["Bank", sheetFromPart(part)]]), "march.csv");
+    expect(ok.ok).toBe(true);
+    const out = ok.workbook!.sheets[0].source;
+    expect([0, 1, 2].map((r) => out.getCell(r, 1))).toEqual([300, 25, 10]);
+    expect(out.getStyle(0, 1)?.numFmt).toBe("#,##0.00");
+
+    const bad = await runOnInputs(sheetActions(), recipe, new Map([["Ledger", sheetFromPart(part)]]), "wrong.csv");
+    expect(bad.ok).toBe(false);
+    expect(bad.message).toMatch(/no sheet called "Bank"/);
+  });
+});
