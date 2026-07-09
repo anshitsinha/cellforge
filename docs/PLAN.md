@@ -69,10 +69,10 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Explain: where any number came from (formula chain, recipe step, source rows),
-- [ ] Lineage model: for a cell, its formula chain down to inputs, the recorded step that last wrote it, and the file / sheet rows it came from (import, combine, clean-up, pivot)
-- [ ] Lineage view: a tree you can walk, each node with its value, jump-to, and the step that made it
-- [ ] One-click write-up: the explanation as plain sentences to paste into a working paper
-- [ ] Tests, user guide
+- [x] Lineage model: for a cell, its formula chain down to inputs, the recorded step that last wrote it, and the file / sheet rows it came from (import, combine, clean-up, pivot)
+- [x] Lineage view: a tree you can walk, each node with its value, jump-to, and the step that made it
+- [x] One-click write-up: the explanation as plain sentences to paste into a working paper
+- [x] Tests, user guide
 
 ## Milestones
 

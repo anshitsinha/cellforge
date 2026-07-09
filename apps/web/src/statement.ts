@@ -144,7 +144,7 @@ export function showStatement(fileName: string, s: Statement, d: StatementDeps):
       const { columns, numFmts } = statementColumns(s);
       const source = new EditableSource(new Table(columns), 10);
       const name = fileName.replace(/\.[^.]+$/, "").slice(0, 31) || "Statement";
-      void d.run({ type: "sheet.insert", params: { name, source: d.putBlob(source), numFmts } }).then(() => {
+      void d.run({ type: "sheet.insert", params: { name, source: d.putBlob(source), numFmts, origin: `Bank statement read from ${fileName} (the Page column says which page)` } }).then(() => {
         d.status(`Added ${s.transactions.length} transactions from ${fileName}`);
         d.focusGrid();
       });

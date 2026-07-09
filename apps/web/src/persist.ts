@@ -51,6 +51,7 @@ export interface SavedSheet {
   name: string;
   color?: string;
   hidden?: boolean;
+  origin?: string;
   base: string;
   extra: number;
   state: SheetState;
@@ -119,6 +120,7 @@ export function packWorkbook(wb: Workbook, active: string, name: string): Packed
       id: s.id,
       name: s.name,
       ...(s.color ? { color: s.color } : {}),
+      ...(s.origin ? { origin: s.origin } : {}),
       ...(s.hidden ? { hidden: true } : {}),
       base: bid,
       extra: src.extraColumnCount,
@@ -185,7 +187,7 @@ export async function unpackWorkbook(
       order = new Uint32Array(copyBuffer(data));
     }
     const source = EditableSource.fromState(base, s.extra, s.state, { order });
-    sheets.push({ id: s.id, name: s.name, source, ...(s.color ? { color: s.color } : {}), ...(s.hidden ? { hidden: true } : {}) });
+    sheets.push({ id: s.id, name: s.name, source, ...(s.color ? { color: s.color } : {}), ...(s.hidden ? { hidden: true } : {}), ...(s.origin ? { origin: s.origin } : {}) });
   }
   const workbook = Workbook.restore(sheets);
   const versions: Version[] = [];

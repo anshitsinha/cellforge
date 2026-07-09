@@ -175,7 +175,10 @@ export function showAlignment(d: CombineDeps, parts: FilePart[], failed: string[
       const table = new Table(columns);
       const source = new EditableSource(table, 10);
       void d
-        .run({ type: "sheet.insert", params: { name: label, source: d.putBlob(source), numFmts: numFmts.map((f) => f ?? "") } })
+        .run({
+          type: "sheet.insert",
+          params: { name: label, source: d.putBlob(source), numFmts: numFmts.map((f) => f ?? ""), origin: `Combined ${parts.length} files: ${parts.map((p) => p.name).join(", ").slice(0, 300)} (the source file column says which)` },
+        })
         .then(() => {
           d.status(`Combined ${parts.length} files: ${table.rowCount.toLocaleString()} rows`);
           d.focusGrid();

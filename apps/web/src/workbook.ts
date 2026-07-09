@@ -33,6 +33,8 @@ export interface Sheet {
   /** tab colour, CSS colour string */
   color?: string;
   hidden?: boolean;
+  /** where the sheet's data came from ("Imported from march.csv", "Clean copy of Export"), for explaining numbers */
+  origin?: string;
 }
 
 /** Excel's rules: 1–31 characters, none of \ / ? * [ ] :, not starting or ending with '. */

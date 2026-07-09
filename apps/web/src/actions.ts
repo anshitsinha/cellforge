@@ -1399,7 +1399,9 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         if (!plan.dataRows) throw new Error("No data rows found to clean.");
         const at = ctx.workbook.indexOf(id) + 1;
         const added: string[] = [];
-        const clean = ctx.workbook.add(ctx.workbook.freeName(`${original.name} clean`.slice(0, 31)), buildClean(plan, rows).source, at);
+        const clean = ctx.workbook.add(ctx.workbook.freeName(`${original.name} clean`.slice(0, 31)), buildClean(plan, rows).source, at, undefined, {
+          origin: `Clean copy of ${original.name}: header from row ${plan.headerRow + 1}, ${plan.dropped.length} rows left out (see the dropped sheet)`,
+        });
         added.push(clean.id);
         if (plan.dropped.length) {
           const dropped = ctx.workbook.add(ctx.workbook.freeName(`${original.name} dropped`.slice(0, 31)), buildDropped(plan), at + 1);
@@ -1435,18 +1437,18 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
       },
     });
 
-  registry.register<{ name: string; source: string; numFmts?: string[] }>({
+  registry.register<{ name: string; source: string; numFmts?: string[]; origin?: string }>({
     type: "sheet.insert",
     title: "Add a sheet holding data that was read in (combined files)",
     internal: true,
-    schema: s.object({ name: s.string(), source: s.string(), numFmts: s.array(s.string()) }, ["name", "source"]),
+    schema: s.object({ name: s.string(), source: s.string(), numFmts: s.array(s.string()), origin: s.string("where the data came from") }, ["name", "source"]),
     describe: (p) => `add "${p.name}"`,
     apply(ctx, p) {
       const source = ctx.blobs.get<EditableSource>(p.source).clone();
       (p.numFmts ?? []).forEach((numFmt, col) => {
         if (numFmt) source.styles.apply(col, "all", { numFmt });
       });
-      const sheet = ctx.workbook.add(ctx.workbook.freeName(p.name.slice(0, 31)), source);
+      const sheet = ctx.workbook.add(ctx.workbook.freeName(p.name.slice(0, 31)), source, undefined, undefined, p.origin ? { origin: p.origin } : {});
       ctx.onSheetShown?.(sheet.id);
       return { type: "sheet.delete", params: { sheet: sheet.id } };
     },
@@ -2009,6 +2011,7 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         const name = p.name ?? ctx.workbook.freeName(`${original.name} (2)`);
         const copy = ctx.workbook.add(name, original.source.clone(), ctx.workbook.indexOf(p.sheet) + 1, undefined, {
           color: original.color,
+          origin: `Copy of ${original.name}`,
         });
         ctx.onSheetShown?.(copy.id);
         return { type: "sheet.delete", params: { sheet: copy.id } };

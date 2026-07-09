@@ -32,6 +32,7 @@ import { openJeTool } from "./jetools";
 import { openPivot } from "./pivotpanel";
 import { RecipeRecorder, unbindAction, usedMemory } from "./recipe";
 import { openRecipes } from "./recipepanel";
+import { openLineage } from "./lineagepanel";
 import { openRunOnFiles } from "./recipefiles";
 import type { Workbook as WorkbookT } from "./workbook";
 import { openCompare, openGlTie, openJoin, openMapping, openTbCompare } from "./joindialog";
@@ -303,6 +304,28 @@ const ctx = (): SheetCtx => ({
 });
 const history = new ActionHistory(registry, ctx);
 
+const lineageDeps = () => ({
+  workbook: () => workbook,
+  sheetId: () => activeId,
+  cell: () => ({ ...grid.selection }),
+  lastEdit: (sheetId: string, row: number, col: number) => {
+    if (!workbook.has(sheetId)) return undefined;
+    const list = trail.get(`${sheetId}:${workbook.get(sheetId).source.toBase(row)}:${col}`);
+    return list?.[list.length - 1];
+  },
+  goTo: (sheetId: string, row: number, col: number) => {
+    showSheet(sheetId);
+    grid.select(row, col);
+    grid.focus();
+  },
+  status: (t: string) => (statusLeft.textContent = t),
+});
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "e" && gridHasFocus()) {
+    e.preventDefault();
+    openLineage(lineageDeps());
+  }
+});
 const recipeFilesDeps = () => ({
   registry,
   addSheets: async (wb: WorkbookT, prefix: string) => {
@@ -1514,6 +1537,13 @@ function paletteCommands(): Command[] {
       hint,
       run: () => openTimeTool(kind, { ...statementDeps(), workbook: () => workbook, source: () => source, activeSheet: () => activeId, range: () => grid.range, selection: () => grid.selection, sheetName: () => workbook.get(activeId).name }),
     })),
+    {
+      id: "explain",
+      title: "Explain this number (where it came from)…",
+      keys: "Ctrl Shift E",
+      hint: "explain lineage trace source provenance where from audit trail write up working paper",
+      run: () => openLineage(lineageDeps()),
+    },
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },
@@ -1668,6 +1698,7 @@ setupPalette({
 
 function loadSource(next: EditableSource, name: string) {
   const wb = new Workbook({ name: sheetNameFrom(name), source: next });
+  if (/.w+$/.test(name)) wb.sheets[0].origin = `Imported from ${name}`;
   loadWorkbook(wb, wb.sheets[0].id, name);
   void snapshotNow();
 }
@@ -1761,6 +1792,7 @@ async function openFile(file: File) {
     try {
       statusLeft.textContent = `Opening ${file.name}…`;
       const wb = await openXlsx(await file.arrayBuffer());
+      for (const s of wb.sheets) s.origin ??= `Imported from ${file.name}, sheet "${s.name}"`;
       fileHandle = null;
       loadWorkbook(wb, (wb.visible[0] ?? wb.sheets[0]).id, file.name.replace(/\.xls[xm]$/i, ""));
       void snapshotNow();
