@@ -1,0 +1,419 @@
+Invoice,Invoice date,Vendor,Amount,Entered by
+INV-10001,2024-01-01,Quayside Security,6970.85,bpatel
+INV-10002,2024-01-01,Northfield Water,1190.59,bpatel
+INV-10003,2024-01-02,Harbour Property,43.17,bpatel
+INV-10004,2024-01-03,Oakridge Timber,4227.54,cwong
+INV-10005,2024-01-04,Juniper IT Services,22.14,bpatel
+INV-10006,2024-01-05,Ironbridge Engineering,50943.39,ajones
+INV-10007,2024-01-06,Baker & Sons,2149.64,cwong
+INV-10008,2024-01-07,Silverline Telecom,136.39,cwong
+INV-10009,2024-01-07,Baker & Sons,251.22,bpatel
+INV-10010,2024-01-08,Kestrel Couriers,317.13,cwong
+INV-10011,2024-01-09,Brightwater Logistics,3919.23,bpatel
+INV-10012,2024-01-10,Oakridge Timber,200.47,ajones
+INV-10013,2024-01-11,Fleet Fuel Cards,324.87,cwong
+INV-10014,2024-01-12,Lakeside Printing,524.94,cwong
+INV-10015,2024-01-13,Delta Office Supplies,697.39,bpatel
+INV-10016,2024-01-14,Quayside Security,296.47,bpatel
+INV-10017,2024-01-14,Silverline Telecom,29.11,cwong
+INV-10018,2024-01-15,Coastal Packaging,56.23,bpatel
+INV-10019,2024-01-16,Redwood Furniture,70440.57,cwong
+INV-10020,2024-01-17,Harbour Property,5042.38,ajones
+INV-10021,2024-01-18,Juniper IT Services,1688.34,ajones
+INV-10022,2024-01-19,Harbour Property,73.66,cwong
+INV-10023,2024-01-20,Greenline Waste,9847.39,bpatel
+INV-10024,2024-01-20,Metro Electric,16834.89,ajones
+INV-10025,2024-01-21,Delta Office Supplies,3294.23,ajones
+INV-10026,2024-01-22,Lakeside Printing,1813.78,cwong
+INV-10027,2024-01-23,Fleet Fuel Cards,339.09,cwong
+INV-10028,2024-01-24,Delta Office Supplies,46236.26,ajones
+INV-10029,2024-01-25,Oakridge Timber,7518.96,ajones
+INV-10030,2024-01-26,Brightwater Logistics,14953.16,bpatel
+INV-10031,2024-01-27,Oakridge Timber,1407.15,bpatel
+INV-10032,2024-01-27,Baker & Sons,78.58,bpatel
+INV-10033,2024-01-28,Quayside Security,14.12,ajones
+INV-10034,2024-01-29,Silverline Telecom,10298.58,cwong
+INV-10035,2024-01-30,Metro Electric,3197.42,bpatel
+INV-10036,2024-01-31,Lakeside Printing,11.70,ajones
+INV-10037,2024-02-01,Pinecrest Catering,1234.23,bpatel
+INV-10038,2024-02-02,Delta Office Supplies,16127.88,ajones
+INV-10039,2024-02-03,Northfield Water,9816.36,ajones
+INV-10040,2024-02-03,Harbour Property,2576.43,ajones
+INV-10041,2024-02-04,Metro Electric,13500.29,bpatel
+INV-10042,2024-02-05,Baker & Sons,11.24,ajones
+INV-10043,2024-02-06,Fleet Fuel Cards,1030.68,ajones
+INV-10044,2024-02-07,Fleet Fuel Cards,1803.08,bpatel
+INV-10045,2024-02-08,Ironbridge Engineering,118.05,ajones
+INV-10046,2024-02-09,Oakridge Timber,19505.39,ajones
+INV-10047,2024-02-09,Eastgate Cleaning,10655.29,ajones
+INV-10048,2024-02-10,Harbour Property,26872.64,bpatel
+INV-10049,2024-02-11,Ironbridge Engineering,89.47,cwong
+INV-10050,2024-02-12,Baker & Sons,833.45,ajones
+INV-10051,2024-02-13,Delta Office Supplies,86333.39,bpatel
+INV-10052,2024-02-14,Delta Office Supplies,626.87,ajones
+INV-10053,2024-02-15,Kestrel Couriers,78001.66,bpatel
+INV-10054,2024-02-16,Fleet Fuel Cards,21850.58,cwong
+INV-10055,2024-02-16,Juniper IT Services,11127.41,bpatel
+INV-10056,2024-02-17,Thornbury Legal,12.52,ajones
+INV-10057,2024-02-18,Harbour Property,6270.04,bpatel
+INV-10058,2024-02-19,Ironbridge Engineering,1548.30,cwong
+INV-10059,2024-02-20,Juniper IT Services,159.47,cwong
+INV-10060,2024-02-21,Thornbury Legal,373.13,cwong
+INV-10061,2024-02-22,Baker & Sons,14.42,ajones
+INV-10062,2024-02-23,Delta Office Supplies,9665.47,cwong
+INV-10063,2024-02-23,Thornbury Legal,76283.00,ajones
+INV-10064,2024-02-24,Fleet Fuel Cards,7531.08,bpatel
+INV-10065,2024-02-25,Thornbury Legal,141.83,ajones
+INV-10066,2024-02-26,Oakridge Timber,13427.06,bpatel
+INV-10067,2024-02-27,Quayside Security,2406.09,bpatel
+INV-10068,2024-02-28,Harbour Property,1780.85,ajones
+INV-10069,2024-02-29,Metro Electric,350.81,ajones
+INV-10070,2024-02-29,Eastgate Cleaning,20.06,bpatel
+INV-10071,2024-03-01,Baker & Sons,10.86,bpatel
+INV-10072,2024-03-02,Redwood Furniture,87612.12,bpatel
+INV-10073,2024-03-03,Juniper IT Services,78.79,bpatel
+INV-10074,2024-03-04,Metro Electric,19171.00,bpatel
+INV-10075,2024-03-05,Kestrel Couriers,13.62,cwong
+INV-10076,2024-03-06,Quayside Security,9651.45,bpatel
+INV-10077,2024-03-07,Brightwater Logistics,5577.91,ajones
+INV-10078,2024-03-07,Quayside Security,123.90,bpatel
+INV-10079,2024-03-08,Delta Office Supplies,80110.64,ajones
+INV-10080,2024-03-09,Kestrel Couriers,126.16,ajones
+INV-10081,2024-03-10,Northfield Water,2351.79,cwong
+INV-10082,2024-03-11,Redwood Furniture,3060.80,ajones
+INV-10083,2024-03-12,Fleet Fuel Cards,3513.97,cwong
+INV-10084,2024-03-13,Metro Electric,38139.68,ajones
+INV-10085,2024-03-14,Pinecrest Catering,612.34,cwong
+INV-10086,2024-03-14,Northfield Water,4616.58,ajones
+INV-10087,2024-03-15,Metro Electric,659.37,cwong
+INV-10088,2024-03-16,Silverline Telecom,1861.08,bpatel
+INV-10089,2024-03-17,Pinecrest Catering,1191.48,ajones
+INV-10090,2024-03-18,Lakeside Printing,3032.36,cwong
+INV-10091,2024-03-19,Fleet Fuel Cards,9612.54,ajones
+INV-10092,2024-03-20,Juniper IT Services,60.76,ajones
+INV-10093,2024-03-20,Metro Electric,20034.66,bpatel
+INV-10094,2024-03-21,Delta Office Supplies,13133.94,cwong
+INV-10095,2024-03-22,Redwood Furniture,34331.47,ajones
+INV-10096,2024-03-23,Lakeside Printing,18.56,cwong
+INV-10097,2024-03-24,Baker & Sons,56996.73,bpatel
+INV-10098,2024-03-25,Oakridge Timber,332.18,bpatel
+INV-10099,2024-03-26,Harbour Property,29768.32,bpatel
+INV-10100,2024-03-27,Fleet Fuel Cards,34.99,ajones
+INV-10101,2024-03-27,Metro Electric,738.86,cwong
+INV-10102,2024-03-28,Pinecrest Catering,24.09,bpatel
+INV-10103,2024-03-29,Baker & Sons,16.65,ajones
+INV-10104,2024-03-30,Thornbury Legal,122.53,cwong
+INV-10105,2024-03-31,Silverline Telecom,19819.09,cwong
+INV-10106,2024-04-01,Ironbridge Engineering,163.59,cwong
+INV-10107,2024-04-02,Delta Office Supplies,488.34,ajones
+INV-10108,2024-04-02,Silverline Telecom,11.22,ajones
+INV-10109,2024-04-03,Harbour Property,1284.35,bpatel
+INV-10110,2024-04-04,Greenline Waste,670.40,ajones
+INV-10111,2024-04-05,Eastgate Cleaning,57.21,bpatel
+INV-10112,2024-04-06,Greenline Waste,11224.66,cwong
+INV-10113,2024-04-07,Thornbury Legal,104.02,bpatel
+INV-10114,2024-04-08,Northfield Water,155.84,ajones
+INV-10115,2024-04-09,Baker & Sons,245.14,ajones
+INV-10116,2024-04-09,Oakridge Timber,37.20,bpatel
+INV-10117,2024-04-10,Lakeside Printing,2418.11,bpatel
+INV-10118,2024-04-11,Pinecrest Catering,229.41,cwong
+INV-10119,2024-04-12,Pinecrest Catering,660.12,bpatel
+INV-10120,2024-04-13,Greenline Waste,112.70,cwong
+INV-10121,2024-04-14,Lakeside Printing,196.69,cwong
+INV-10122,2024-04-15,Pinecrest Catering,70334.02,ajones
+INV-10123,2024-04-16,Thornbury Legal,44.21,cwong
+INV-10124,2024-04-16,Thornbury Legal,18243.67,cwong
+INV-10125,2024-04-17,Thornbury Legal,7469.20,cwong
+INV-10126,2024-04-18,Greenline Waste,44.07,ajones
+INV-10127,2024-04-19,Quayside Security,16543.66,ajones
+INV-10128,2024-04-20,Brightwater Logistics,9474.80,cwong
+INV-10129,2024-04-21,Ironbridge Engineering,111.95,ajones
+INV-10130,2024-04-22,Thornbury Legal,18686.36,cwong
+INV-10131,2024-04-22,Juniper IT Services,26764.35,cwong
+INV-10132,2024-04-23,Ironbridge Engineering,2041.91,cwong
+INV-10133,2024-04-24,Delta Office Supplies,47.51,ajones
+INV-10134,2024-04-25,Pinecrest Catering,104.34,ajones
+INV-10135,2024-04-26,Pinecrest Catering,5701.74,bpatel
+INV-10136,2024-04-27,Quayside Security,675.32,cwong
+INV-10137,2024-04-28,Eastgate Cleaning,339.56,cwong
+INV-10138,2024-04-29,Coastal Packaging,71.96,ajones
+INV-10139,2024-04-29,Delta Office Supplies,13.96,cwong
+INV-10140,2024-04-30,Thornbury Legal,66.25,bpatel
+INV-10141,2024-05-01,Silverline Telecom,23012.25,ajones
+INV-10142,2024-05-02,Kestrel Couriers,75243.80,ajones
+INV-10143,2024-05-03,Brightwater Logistics,5090.07,bpatel
+INV-10144,2024-05-04,Oakridge Timber,646.44,cwong
+INV-10145,2024-05-05,Metro Electric,121.20,bpatel
+INV-10146,2024-05-06,Baker & Sons,59.86,cwong
+INV-10147,2024-05-06,Greenline Waste,58446.40,cwong
+INV-10148,2024-05-07,Pinecrest Catering,882.47,cwong
+INV-10149,2024-05-08,Silverline Telecom,1488.55,bpatel
+INV-10150,2024-05-09,Pinecrest Catering,1034.93,bpatel
+INV-10151,2024-05-10,Fleet Fuel Cards,3696.78,cwong
+INV-10152,2024-05-11,Metro Electric,39.28,bpatel
+INV-10153,2024-05-12,Redwood Furniture,258.06,cwong
+INV-10154,2024-05-12,Metro Electric,1512.13,ajones
+INV-10155,2024-05-13,Northfield Water,18637.75,ajones
+INV-10156,2024-05-14,Delta Office Supplies,1996.33,cwong
+INV-10157,2024-05-15,Kestrel Couriers,12.02,ajones
+INV-10158,2024-05-16,Silverline Telecom,3796.95,cwong
+INV-10159,2024-05-17,Redwood Furniture,45969.22,cwong
+INV-10160,2024-05-18,Brightwater Logistics,17.48,bpatel
+INV-10161,2024-05-19,Delta Office Supplies,5498.09,ajones
+INV-10162,2024-05-19,Juniper IT Services,54.23,ajones
+INV-10163,2024-05-20,Baker & Sons,2098.52,bpatel
+INV-10164,2024-05-21,Delta Office Supplies,36.73,cwong
+INV-10165,2024-05-22,Fleet Fuel Cards,69.22,ajones
+INV-10166,2024-05-23,Thornbury Legal,2724.14,ajones
+INV-10167,2024-05-24,Oakridge Timber,42049.03,bpatel
+INV-10168,2024-05-25,Northfield Water,2496.01,bpatel
+INV-10169,2024-05-26,Juniper IT Services,476.27,cwong
+INV-10170,2024-05-26,Pinecrest Catering,54.10,bpatel
+INV-10171,2024-05-27,Juniper IT Services,5496.13,cwong
+INV-10172,2024-05-28,Redwood Furniture,78.07,ajones
+INV-10173,2024-05-29,Brightwater Logistics,12.01,bpatel
+INV-10174,2024-05-30,Eastgate Cleaning,53973.21,bpatel
+INV-10175,2024-05-31,Coastal Packaging,23.68,ajones
+INV-10176,2024-06-01,Coastal Packaging,1324.92,ajones
+INV-10177,2024-06-01,Lakeside Printing,35.09,ajones
+INV-10178,2024-06-02,Redwood Furniture,2554.45,cwong
+INV-10179,2024-06-03,Coastal Packaging,38547.33,ajones
+INV-10180,2024-06-04,Harbour Property,30.60,bpatel
+INV-10181,2024-06-05,Harbour Property,65.44,bpatel
+INV-10182,2024-06-06,Lakeside Printing,80.18,cwong
+INV-10183,2024-06-07,Harbour Property,55.32,cwong
+INV-10184,2024-06-08,Harbour Property,155.12,cwong
+INV-10185,2024-06-08,Quayside Security,23.58,bpatel
+INV-10186,2024-06-09,Eastgate Cleaning,17774.35,bpatel
+INV-10187,2024-06-10,Brightwater Logistics,322.81,bpatel
+INV-10188,2024-06-11,Pinecrest Catering,514.32,ajones
+INV-10189,2024-06-12,Quayside Security,848.00,ajones
+INV-10190,2024-06-13,Kestrel Couriers,26842.37,bpatel
+INV-10191,2024-06-14,Pinecrest Catering,87266.31,ajones
+INV-10192,2024-06-14,Coastal Packaging,17113.05,cwong
+INV-10193,2024-06-15,Delta Office Supplies,15.50,cwong
+INV-10194,2024-06-16,Kestrel Couriers,12338.82,ajones
+INV-10195,2024-06-17,Brightwater Logistics,666.21,bpatel
+INV-10196,2024-06-18,Harbour Property,541.21,ajones
+INV-10197,2024-06-19,Silverline Telecom,75731.20,ajones
+INV-10198,2024-06-20,Thornbury Legal,194.44,bpatel
+INV-10199,2024-06-21,Juniper IT Services,79.00,bpatel
+INV-10200,2024-06-21,Redwood Furniture,99878.64,bpatel
+INV-10201,2024-06-22,Lakeside Printing,90.27,bpatel
+INV-10202,2024-06-23,Lakeside Printing,52335.05,bpatel
+INV-10203,2024-06-24,Coastal Packaging,2030.47,bpatel
+INV-10204,2024-06-25,Greenline Waste,6467.89,bpatel
+INV-10205,2024-06-26,Ironbridge Engineering,68.30,cwong
+INV-10206,2024-06-27,Coastal Packaging,66.08,bpatel
+INV-10207,2024-06-28,Kestrel Couriers,5197.14,bpatel
+INV-10208,2024-06-28,Northfield Water,77487.71,ajones
+INV-10209,2024-06-29,Kestrel Couriers,8071.62,ajones
+INV-10210,2024-06-30,Silverline Telecom,52545.62,bpatel
+INV-10211,2024-07-01,Delta Office Supplies,50264.17,bpatel
+INV-10212,2024-07-02,Quayside Security,198.64,cwong
+INV-10216,2024-07-05,Oakridge Timber,432.34,cwong
+INV-10217,2024-07-06,Baker & Sons,2924.07,bpatel
+INV-10218,2024-07-07,Coastal Packaging,50727.61,ajones
+INV-10219,2024-07-08,Silverline Telecom,22161.24,bpatel
+INV-10220,2024-07-09,Quayside Security,144.64,ajones
+INV-10221,2024-07-10,Baker & Sons,54.52,cwong
+INV-10222,2024-07-11,Redwood Furniture,5028.03,cwong
+INV-10223,2024-07-11,Silverline Telecom,1002.81,ajones
+INV-10224,2024-07-12,Eastgate Cleaning,191.91,bpatel
+INV-10225,2024-07-13,Kestrel Couriers,17587.80,cwong
+INV-10226,2024-07-14,Brightwater Logistics,5104.39,cwong
+INV-10227,2024-07-15,Kestrel Couriers,6129.50,cwong
+INV-10228,2024-07-16,Baker & Sons,631.08,cwong
+INV-10229,2024-07-17,Greenline Waste,171.50,ajones
+INV-10230,2024-07-18,Brightwater Logistics,78738.45,cwong
+INV-10231,2024-07-18,Metro Electric,48.37,cwong
+INV-10232,2024-07-19,Delta Office Supplies,37043.12,ajones
+INV-10233,2024-07-20,Eastgate Cleaning,34.93,cwong
+INV-10234,2024-07-21,Lakeside Printing,268.37,bpatel
+INV-10235,2024-07-22,Redwood Furniture,67.24,bpatel
+INV-10236,2024-07-23,Ironbridge Engineering,432.03,ajones
+INV-10237,2024-07-24,Northfield Water,18.49,ajones
+INV-10238,2024-07-24,Pinecrest Catering,3522.45,cwong
+INV-10239,2024-07-25,Lakeside Printing,20.73,ajones
+INV-10240,2024-07-26,Eastgate Cleaning,4573.30,ajones
+INV-10241,2024-07-27,Fleet Fuel Cards,288.27,ajones
+INV-10242,2024-07-28,Fleet Fuel Cards,57725.55,bpatel
+INV-10243,2024-07-29,Lakeside Printing,20.80,cwong
+INV-10244,2024-07-30,Quayside Security,17972.55,cwong
+INV-10245,2024-07-31,Baker & Sons,13160.94,cwong
+INV-10246,2024-07-31,Coastal Packaging,78158.59,bpatel
+INV-10247,2024-08-01,Redwood Furniture,76.20,ajones
+INV-10248,2024-08-02,Baker & Sons,1504.53,cwong
+INV-10249,2024-08-03,Pinecrest Catering,239.29,bpatel
+INV-10250,2024-08-04,Oakridge Timber,10.07,bpatel
+INV-10251,2024-08-05,Ironbridge Engineering,22958.10,ajones
+INV-10252,2024-08-06,Ironbridge Engineering,1851.37,cwong
+INV-10253,2024-08-07,Coastal Packaging,2065.14,bpatel
+INV-10254,2024-08-07,Redwood Furniture,19591.55,ajones
+INV-10255,2024-08-08,Eastgate Cleaning,1275.50,bpatel
+INV-10256,2024-08-09,Northfield Water,11495.16,bpatel
+INV-10257,2024-08-10,Silverline Telecom,329.31,cwong
+INV-10258,2024-08-11,Greenline Waste,13.26,bpatel
+INV-10259,2024-08-12,Quayside Security,22867.91,ajones
+INV-10260,2024-08-13,Pinecrest Catering,841.88,ajones
+INV-10261,2024-08-13,Oakridge Timber,30.37,cwong
+INV-10262,2024-08-14,Ironbridge Engineering,43501.12,bpatel
+INV-10263,2024-08-15,Brightwatter Logistics,17478.96,ajones
+INV-10264,2024-08-16,Baker & Sons,12.81,ajones
+INV-10265,2024-08-17,Ironbridge Engineering,67890.75,cwong
+INV-10266,2024-08-18,Juniper IT Services,979.43,ajones
+INV-10267,2024-08-19,Ironbridge Engineering,2676.57,bpatel
+INV-10268,2024-08-20,Delta Office Supplies,63.74,ajones
+INV-10269,2024-08-20,Oakridge Timber,19218.59,ajones
+INV-10270,2024-08-21,Eastgate Cleaning,127.05,bpatel
+INV-10271,2024-08-22,Eastgate Cleaning,24.24,bpatel
+INV-10272,2024-08-23,Lakeside Printing,68174.09,bpatel
+INV-10273,2024-08-24,Kestrel Couriers,33.26,bpatel
+INV-10274,2024-08-25,Quayside Security,696.62,ajones
+INV-10275,2024-08-26,Delta Office Supplies,6238.83,cwong
+INV-10276,2024-08-26,Coastal Packaging,31611.45,cwong
+INV-10277,2024-08-27,Eastgate Cleaning,3168.57,bpatel
+INV-10278,2024-08-28,Oakridge Timber,51.82,bpatel
+INV-10279,2024-08-29,Northfield Water,8053.09,bpatel
+INV-10280,2024-08-30,Greenline Waste,4578.46,cwong
+INV-10281,2024-08-31,Metro Electric,81877.60,cwong
+INV-10282,2024-09-01,Greenline Waste,1307.21,cwong
+INV-10283,2024-09-02,Silverline Telecom,91.56,cwong
+INV-10284,2024-09-02,Thornbury Legal,22795.03,ajones
+INV-10285,2024-09-03,Harbour Property,21.46,ajones
+INV-10286,2024-09-04,Redwood Furniture,20.13,ajones
+INV-10287,2024-09-05,Delta Office Supplies,60.53,cwong
+INV-10288,2024-09-06,Coastal Packaging,16779.86,bpatel
+INV-10289,2024-09-07,Fleet Fuel Cards,184.29,ajones
+INV-10290,2024-09-08,Brightwater Logistics,40575.21,cwong
+INV-10291,2024-09-09,Harbour Property,83704.32,bpatel
+INV-10292,2024-09-09,Coastal Packaging,2583.32,cwong
+INV-10293,2024-09-10,Kestrel Couriers,352.66,cwong
+INV-10294,2024-09-11,Fleet Fuel Cards,464.06,ajones
+INV-10295,2024-09-12,Fleet Fuel Cards,17.73,cwong
+INV-10296,2024-09-13,Baker & Sons,13665.01,cwong
+INV-10297,2024-09-14,Eastgate Cleaning,285.22,ajones
+INV-10298,2024-09-15,Quayside Security,77.54,ajones
+INV-10299,2024-09-15,Metro Electric,1091.37,bpatel
+INV-10300,2024-09-16,Oakridge Timber,36.87,cwong
+INV-10301,2024-09-17,Metro Electric,10.44,ajones
+INV-10301,2024-09-17,Kestrel Couriers,418.60,cwong
+INV-10302,2024-09-18,Delta Office Supplies,681.33,bpatel
+INV-10303,2024-09-19,Greenline Waste,41.10,bpatel
+INV-10304,2024-09-20,Northfield Water,46698.70,cwong
+INV-10305,2024-09-21,Ironbridge Engineering,179.15,ajones
+INV-10306,2024-09-22,Lakeside Printing,2718.97,ajones
+INV-10307,2024-09-22,Redwood Furniture,335.15,cwong
+INV-10308,2024-09-23,Delta Office Supplies,1856.09,bpatel
+INV-10309,2024-09-24,Oakridge Timber,16482.89,cwong
+INV-10310,2024-09-25,Eastgate Cleaning,96.09,cwong
+INV-10311,2024-09-26,Quayside Security,247.71,bpatel
+INV-10312,2024-09-27,Delta Office Supplies,24725.94,cwong
+INV-10313,2024-09-28,Pinecrest Catering,2126.55,bpatel
+INV-10314,2024-09-29,Redwood Furniture,34.43,ajones
+INV-10315,2024-09-29,Thornbury Legal,20.51,bpatel
+INV-10316,2024-09-30,Pinecrest Catering,62.79,cwong
+INV-10317,2024-10-01,Eastgate Cleaning,547.48,cwong
+INV-10318,2024-10-02,Quayside Security,123.01,cwong
+INV-10319,2024-10-03,Kestrel Couriers,2572.46,cwong
+INV-10320,2024-10-04,Delta Office Supplies,54.84,cwong
+INV-10321,2024-10-05,Fleet Fuel Cards,53000.76,cwong
+INV-10322,2024-10-05,Coastal Packaging,112.21,cwong
+INV-10323,2024-10-06,Harbour Property,2387.19,bpatel
+INV-10324,2024-10-07,Ironbridge Engineering,78127.93,bpatel
+INV-10325,2024-10-08,Pinecrest Catering,4887.10,cwong
+INV-10326,2024-10-09,Lakeside Printing,41.86,ajones
+INV-10327,2024-10-10,Delta Office Supplies,44.84,ajones
+INV-10328,2024-10-11,Lakeside Printing,69930.80,cwong
+INV-10329,2024-10-12,Delta Office Supplies,28019.76,cwong
+INV-10330,2024-10-12,Thornbury Legal,52.53,ajones
+INV-10331,2024-10-13,Fleet Fuel Cards,32.49,cwong
+INV-10332,2024-10-14,Harbour Property,57.88,ajones
+INV-10333,2024-10-15,Brightwater Logistics,419.03,cwong
+INV-10334,2024-10-16,Harbour Property,82217.63,cwong
+INV-10335,2024-10-17,Redwood Furniture,51.47,bpatel
+INV-10336,2024-10-18,Fleet Fuel Cards,11.39,bpatel
+INV-10337,2024-10-19,Oakridge Timber,11.18,cwong
+INV-10338,2024-10-19,Ironbridge Engineering,130.04,cwong
+INV-10339,2024-10-20,Pinecrest Catering,10.50,cwong
+INV-10340,2024-10-21,Silverline Telecom,38.61,bpatel
+INV-10341,2024-10-22,Juniper IT Services,17.30,cwong
+INV-10342,2024-10-23,Quayside Security,45.99,ajones
+INV-10343,2024-10-24,Fleet Fuel Cards,23110.33,cwong
+INV-10344,2024-10-25,Quayside Security,40848.14,cwong
+INV-10345,2024-10-25,Fleet Fuel Cards,474.52,bpatel
+INV-10346,2024-10-26,Thornbury Legal,748.42,ajones
+INV-10347,2024-10-27,Juniper IT Services,10.87,bpatel
+INV-10348,2024-10-28,Quayside Security,45.99,bpatel
+INV-10349,2024-10-29,Metro Electric,11.94,bpatel
+INV-10350,2024-10-30,Baker & Sons,223.23,ajones
+INV-10351,2024-10-31,Ironbridge Engineering,216.64,ajones
+INV-10352,2024-11-01,Greenline Waste,897.18,bpatel
+INV-10353,2024-11-01,Juniper IT Services,31.25,cwong
+INV-10354,2024-11-02,Oakridge Timber,2934.19,ajones
+INV-10355,2024-11-03,Kestrel Couriers,11.50,bpatel
+INV-10356,2024-11-04,Juniper IT Services,5677.81,cwong
+INV-10357,2024-11-05,Fleet Fuel Cards,32588.05,ajones
+INV-10358,2024-11-06,Metro Electric,455.04,bpatel
+INV-10359,2024-11-07,Coastal Packaging,20.74,bpatel
+INV-10360,2024-11-07,Northfield Water,49.34,bpatel
+INV-10361,2024-11-08,Quayside Security,74286.03,bpatel
+INV-10362,2024-11-09,Harbour Property,13150.91,ajones
+INV-10363,2024-11-10,Oakridge Timber,53.18,bpatel
+INV-10364,2024-11-11,Thornbury Legal,13.74,ajones
+INV-10365,2024-11-12,Silverline Telecom,125.00,bpatel
+INV-10366,2024-11-13,Coastal Packaging,34273.66,bpatel
+INV-10367,2024-11-14,Pinecrest Catering,637.79,cwong
+INV-10368,2024-11-14,Thornbury Legal,84.78,ajones
+INV-10369,2024-11-15,Coastal Packaging,2914.30,ajones
+INV-10370,2024-11-16,Delta Office Supplies,99951.50,cwong
+INV-10371,2024-11-17,Eastgate Cleaning,1554.05,bpatel
+INV-10372,2024-11-18,Thornbury Legal,89.63,bpatel
+INV-10373,2024-11-19,Coastal Packaging,13.18,ajones
+INV-10374,2024-11-20,Kestrel Couriers,14299.84,cwong
+INV-10375,2024-11-21,Northfield Water,25.78,bpatel
+INV-10376,2024-11-21,Ironbridge Engineering,82641.07,bpatel
+INV-10377,2024-11-22,Metro Electric,11713.86,ajones
+INV-10378,2024-11-23,Harbour Property,10.53,bpatel
+INV-10379,2024-11-24,Pinecrest Catering,12387.21,cwong
+INV-10380,2024-11-25,Baker & Sons,20.43,ajones
+INV-10381,2024-11-26,Delta Office Supplies,79758.30,bpatel
+INV-10382,2024-11-27,Ironbridge Engineering,41937.67,cwong
+INV-10383,2024-11-27,Eastgate Cleaning,3768.97,ajones
+INV-10384,2024-11-28,Baker & Sons,15.14,bpatel
+INV-10385,2024-11-29,Redwood Furniture,20.56,cwong
+INV-10386,2024-11-30,Baker & Sons,1811.33,bpatel
+INV-10387,2024-12-01,Northfield Water,1487.61,cwong
+INV-10388,2024-12-02,Brightwater Logistics,82.31,ajones
+INV-10389,2024-12-03,Harbour Property,74.00,ajones
+INV-10390,2024-12-04,Redwood Furniture,1355.66,cwong
+INV-10391,2024-12-04,Quayside Security,11.15,ajones
+INV-10392,2024-12-05,Lakeside Printing,22.55,bpatel
+INV-10393,2024-12-06,Redwood Furniture,6113.19,cwong
+INV-10394,2024-12-07,Northfield Water,318.97,cwong
+INV-10395,2024-12-08,Delta Office Supplies,271.48,ajones
+INV-10396,2024-12-09,Lakeside Printing,897.57,ajones
+INV-10397,2024-12-10,Fleet Fuel Cards,7560.15,bpatel
+INV-10398,2024-12-11,Metro Electric,102.23,ajones
+INV-10399,2024-12-11,Northfield Water,257.23,bpatel
+INV-10400,2024-12-12,Ironbridge Engineering,26247.16,ajones
+INV-10401,2024-12-13,Eastgate Cleaning,2584.55,bpatel
+INV-10402,2024-12-14,Metro Electric,886.78,bpatel
+INV-10403,2024-12-15,Juniper IT Services,481.78,ajones
+INV-10404,2024-12-16,Quayside Security,7984.62,ajones
+INV-10405,2024-12-17,Kestrel Couriers,29183.07,cwong
+INV-10406,2024-12-17,Metro Electric,130.17,ajones
+INV-10407,2024-12-18,Ironbridge Engineering,63.02,bpatel
+INV-10408,2024-12-19,Kestrel Couriers,212.87,bpatel
+INV-10409,2024-12-20,Harbour Property,271.83,cwong
+INV-10410,2024-12-21,Brightwater Logistics,354.50,bpatel
+INV-10411,2024-12-22,Fleet Fuel Cards,1585.05,ajones
+INV-10412,2024-12-23,Redwood Furniture,12.64,ajones
+INV-10413,2024-12-24,Delta Office Supplies,762.64,ajones
+INV-10414,2024-12-24,Kestrel Couriers,1972.97,bpatel
+INV-10415,2024-12-25,Thornbury Legal,7016.65,ajones
+INV-10416,2024-12-26,Lakeside Printing,25.25,bpatel
+INV-10417,2024-12-27,Redwood Furniture,260.60,ajones
+INV-10418,2024-12-28,Fleet Fuel Cards,10.67,ajones
+INV-10419,2024-12-29,Northfield Water,302.18,bpatel
+INV-10420,2024-12-30,Eastgate Cleaning,408.26,bpatel

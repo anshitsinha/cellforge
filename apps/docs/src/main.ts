@@ -1,7 +1,7 @@
 import "./style.css";
 import { marked } from "marked";
 import { counts, parsePlan, type Status } from "@cellforge/plan";
-import { findPage, pages, planMarkdown, routeForLink } from "./pages";
+import { findPage, pages, planMarkdown, routeForLink, SECTIONS } from "./pages";
 import { buildIndex, search, slugify, terms } from "./search";
 
 const content = document.getElementById("content")!;
@@ -20,10 +20,10 @@ function renderNav() {
   const c = counts(all);
   nav.innerHTML = `
     ${link("#/progress", `Progress · ${c.done}/${c.total}`)}
-    <h4>User guide</h4>
-    ${pages.filter((p) => p.section === "guide").map((p) => link(`#/guide/${p.slug}`, p.title)).join("")}
-    <h4>Developer guide</h4>
-    ${pages.filter((p) => p.section === "dev").map((p) => link(`#/dev/${p.slug}`, p.title)).join("")}
+    ${SECTIONS.map(
+      (s) => `<h4>${esc(s.label)}</h4>
+    ${pages.filter((p) => p.section === s.id).map((p) => link(`#/${s.id}/${p.slug}`, p.title)).join("")}`,
+    ).join("")}
   `;
 }
 
@@ -47,7 +47,8 @@ marked.use({
       const route = routeForLink(href);
       if (route) return `<a href="${route}">${text}</a>`;
       const external = /^https?:/i.test(href);
-      return `<a href="${esc(href)}"${external ? ' target="_blank" rel="noopener"' : ""}>${text}</a>`;
+      const sample = href.startsWith("samples/"); // tutorial sample files download instead of opening
+      return `<a href="${esc(href)}"${external ? ' target="_blank" rel="noopener"' : ""}${sample ? " download" : ""}>${text}</a>`;
     },
   },
 });
@@ -174,7 +175,9 @@ function renderHome() {
       <p class="lede">A spreadsheet that runs entirely on your computer, handles data of any size,
       and proves every number. <em>Open anything. Prove everything. Upload nothing.</em></p>
       <div class="cards">
+        <a class="card" href="#/tutorial/01-monthly-close"><h3>Tutorials</h3><p>Month-end close, a bank reconciliation and a set of audit tests, step by step with sample data.</p></a>
         <a class="card" href="#/guide/01-getting-started"><h3>User guide</h3><p>Open data, edit, formulas, big files, shortcuts, privacy.</p></a>
+        <a class="card" href="#/reference/functions"><h3>Function reference</h3><p>Every function with its arguments and worked examples.</p></a>
         <a class="card" href="#/dev/development"><h3>Developer guide</h3><p>Setup, architecture, the action model, how to contribute.</p></a>
         <a class="card" href="#/progress"><h3>Progress · ${c.percent}%</h3><p>The full feature checklist and what's being built right now: ${plan.now ? esc(plan.now.title) : "—"}.</p></a>
       </div>
@@ -218,7 +221,7 @@ function renderAsk(query: string) {
           .slice(isQuestion ? 1 : 0)
           .map(
             (r) => `<li><a href="#/${r.page.section}/${r.page.slug}?h=${r.anchor}">
-              <span class="where">${r.page.section === "guide" ? "User guide" : "Developer"} › ${esc(r.page.title)}</span>
+              <span class="where">${SECTIONS.find((s) => s.id === r.page.section)?.label ?? ""} › ${esc(r.page.title)}</span>
               <b>${esc(r.heading)}</b>
               <span class="snip">${mark(r.text)}</span></a></li>`,
           )
@@ -261,7 +264,9 @@ function route() {
     if (searchInput.value.trim() !== q) searchInput.value = q;
     renderAsk(q);
     document.title = `${q} · cellforge docs`;
-  } else if ((parts[0] === "guide" || parts[0] === "dev") && parts[1]) {
+  } else if (parts[0] === "guide" && parts[1] === "functions") {
+    location.replace("#/reference/functions"); // the reference's old address
+  } else if (SECTIONS.some((s) => s.id === parts[0]) && parts[1]) {
     const page = findPage(parts[0], parts[1]);
     if (page) {
       renderMarkdown(page.markdown);

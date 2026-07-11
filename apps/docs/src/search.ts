@@ -28,6 +28,7 @@ const STOP = new Set("a an and are as at be by can do does for from how i in is 
 export function slugify(text: string) {
   return text
     .toLowerCase()
+    .replace(/\./g, "-") // so STDEV.P and STDEVP get different anchors
     .replace(/[^\w\s-]/g, "")
     .trim()
     .replace(/\s+/g, "-");
@@ -80,7 +81,7 @@ export function search(index: Section[], query: string, limit = 8): Passage[] {
     }
     if (!matched) continue;
     score *= matched / words.length; // reward covering every word
-    if (s.page.section === "guide") score *= 1.3; // user answers first
+    if (s.page.section !== "dev") score *= 1.3; // user answers first
     results.push({ page: s.page, heading: s.heading, anchor: s.anchor, text: snippet(s.text, words), score });
   }
   return results.sort((a, b) => b.score - a.score).slice(0, limit);

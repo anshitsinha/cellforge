@@ -1,0 +1,26 @@
+Harbour Lane Supplies Ltd,,,
+Trial balance as at 31 October 2024,,,
+Printed 04/11/2024 09:12,,,
+,,,
+Account,Account name,Debit,Credit
+1000,Cash at bank,"91,030.50",
+1100,Trade debtors,"128,950.00",
+1200,Inventory,"61,200.00",
+1500,Fixed assets,"150,000.00",
+1510,Accumulated depreciation,,"46,500.00"
+2000,Trade creditors,,"63,410.25"
+2100,VAT payable,,"16,850.00"
+2200,Accruals,,"18,500.00"
+3000,Share capital,,"50,000.00"
+3100,Retained earnings,,"120,000.00"
+4000,Sales,,"602,000.00"
+4100,Other income,,"3,950.00"
+5000,Cost of sales,"330,100.00",
+6000,Wages and salaries,"90,000.00",
+6100,Rent,"30,000.00",
+6200,Utilities,"6,020.00",
+6300,Marketing,"27,909.75",
+6400,Depreciation,"6,000.00",
+,Total,"921,210.25","921,210.25"
+,,,
+Page 1 of 1,,,
