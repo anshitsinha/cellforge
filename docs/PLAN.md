@@ -68,11 +68,11 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Explain: where any number came from (formula chain, recipe step, source rows),
-- [x] Lineage model: for a cell, its formula chain down to inputs, the recorded step that last wrote it, and the file / sheet rows it came from (import, combine, clean-up, pivot)
-- [x] Lineage view: a tree you can walk, each node with its value, jump-to, and the step that made it
-- [x] One-click write-up: the explanation as plain sentences to paste into a working paper
-- [x] Tests, user guide
+### Evidence pack: workbook + recipe + input fingerprints + hash-chained action log
+- [ ] Action log: every applied action with time, sheet and a SHA-256 hash chained to the one before, saved with the workbook; tampering shows as a broken chain
+- [ ] Input fingerprints: SHA-256 of every file opened, imported or combined, with name, size and time
+- [ ] Evidence pack: one file holding the workbook, its recipes, the fingerprints and the log, plus a readable summary; verify a pack (chain intact, fingerprints listed)
+- [ ] Tests, user guide
 
 ## Milestones
 
@@ -155,7 +155,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - 🔨 Data checks: column rules, master-list lookups, debits = credits; green/red
   checklist that gates export
 - 🔨 Categorisation rules that learn from manual tagging; bulk tagging; uncategorised queue
-- 🔨 Explain: where any number came from (formula chain, recipe step, source rows),
+- ✅ Explain: where any number came from (formula chain, recipe step, source rows),
   lineage view, one-click write-up
 
 ### M7: Audit, evidence, sharing 🔨
@@ -165,7 +165,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Stratification, top-N, Pareto, ageing buckets, materiality
 - ✅ Sampling (random, systematic, stratified, monetary-unit) with recorded seed
 - ✅ Footing / cross-footing and roll-forward checks
-- ⬜ Evidence pack: workbook + recipe + input fingerprints + hash-chained action log
+- 🔨 Evidence pack: workbook + recipe + input fingerprints + hash-chained action log
 - ⬜ Evidence linking: attached documents stored outside the workbook, cell ↔
   document-region links, validation that compares values
 - ⬜ Review mode: tick marks with legend, reviewed-by, notes that block sign-off,
