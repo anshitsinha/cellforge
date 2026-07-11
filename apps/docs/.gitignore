@@ -1,0 +1,2 @@
+# the tutorial sample files are part of the docs (the root ignores *.csv)
+!public/samples/*.csv
