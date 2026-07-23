@@ -21,6 +21,14 @@ export interface CellRef {
   col: number;
 }
 
+/** Inclusive rectangle of cells, always normalised so top <= bottom etc. */
+export interface CellRange {
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+}
+
 export interface GridOptions {
   rowHeight?: number;
   headerHeight?: number;
