@@ -18,7 +18,8 @@ Google Sheets and LibreOffice open.
 | Freeze panes | ✓ | ✓ |
 | Named ranges | ✓ | ✓ |
 | Tables | as plain ranges | as plain ranges, with their look |
-| Charts, pivot tables, macros, comments, conditional formatting | not yet | not yet |
+| Conditional formatting, data validation, notes (comments), links | ✓ | ✓ |
+| Charts, pivot tables, macros | not yet | not yet |
 
 Formulas using newer functions (XLOOKUP, FILTER, LET…) are written the way
 Excel expects, so they work there too. Excel files hold at most 1,048,576

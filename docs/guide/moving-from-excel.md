@@ -82,13 +82,13 @@ Some things Excel leaves to you are built in:
 
 ### Pivot tables and Power Query
 
-- **Pivot table…** builds a pivot table from a sheet *(coming soon)*.
-  Today, **Pivot (rows to columns)…** and **Unpivot (columns to rows)…**
-  reshape data, and SUMIFS does the totals.
+- **Pivot table…** builds a pivot table from a sheet: drag fields to rows,
+  columns, values and filters, and drill down to the rows behind any number.
+  **Pivot (rows to columns)…** and **Unpivot (columns to rows)…** reshape data.
 - Instead of Power Query: **Clean up this sheet (messy export)…**,
   **Combine all files in a folder…** and **Text to columns…**. **Join two
-  sheets…** will merge two tables on a key *(coming soon)*; until then,
-  XLOOKUP does it a column at a time.
+  sheets…** merges two tables on a key (after checking the keys match), and
+  XLOOKUP still works a column at a time.
 
 ## Keys that differ
 

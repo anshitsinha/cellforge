@@ -120,6 +120,8 @@ up by them:
 
 ## 5. The reconciliation statement
 
+**Bank rec statement…** in the command palette builds this statement for you from the two sheets and the closing balances, with proposed journal entries for the bank-only items. To see how the figures fit together, or to keep the statement live as formulas, build it by hand:
+
 Add a sheet with **+** and rename it `Rec statement`. Click A1 and paste
 the labels:
 

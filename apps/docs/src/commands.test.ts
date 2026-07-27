@@ -20,7 +20,8 @@ function paletteStrings(): Set<string> {
 }
 
 /** Commands the docs describe before they're built. */
-const COMING_SOON = ["Pivot table…", "Join two sheets…", "Compare two versions by key…"];
+// commands the docs may name before they exist, marked "(coming soon)"; empty while everything named is built
+const COMING_SOON: string[] = [];
 
 /** Commands without a trailing "…" that the pages below name. */
 const NAMED = ["Show history and versions", "Number format: Percent", "Number format: Number", "Export Excel (.xlsx)", "Export CSV", "Load the 100M-row demo", "Circle invalid data", "Fill down"];

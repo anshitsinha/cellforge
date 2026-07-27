@@ -38,16 +38,16 @@ type a few letters of its name.
 | Computed field | Virtual field | `COMPUTED` field | A formula in a new column, filled down with **Fill down** (Ctrl+D) |
 | Index or sort | Index, Sort | `INDEX`, `SORT` | **Sort by several columns…**, or Sort A→Z / Z→A on one column |
 | Field statistics, totals | Field Statistics | `STATISTICS`, `TOTAL` | Select a column: the status bar shows its sum, average and count |
-| Summarise by a key | Summarization | `SUMMARIZE`, `CLASSIFY` | **Pivot table…** *(coming soon)*. Today: **Pareto analysis…** totals per vendor, customer or account; or `UNIQUE` with `SUMIFS` |
+| Summarise by a key | Summarization | `SUMMARIZE`, `CLASSIFY` | **Pivot table…**; or **Pareto analysis…** for totals per vendor, customer or account |
 | Cross-tabulate | Pivot Table | `CROSSTAB` | **Pivot (rows to columns)…**: row labels, a column to spread across, sum / count / average |
 | Stratify | Stratification | `STRATIFY` | **Stratify values into bands…** |
 | Age | Aging | `AGE` | **Ageing buckets…** |
 | Top items | Top Records Extraction | `SORT` then `EXTRACT` | **Largest items (top N)…** |
 | Duplicates | Duplicate Key Detection | `DUPLICATES`, `FUZZYDUP` | **Find duplicates…**: exact, ignoring case and punctuation, similar spelling, numbers or dates within a tolerance |
 | Gaps | Gap Detection | `GAPS` | **Find gaps in a sequence…**: also flags numbers used twice and out of order |
-| Join two files | Join Databases | `JOIN`, `RELATE` | **Join two sheets…** *(coming soon)*. Today: `XLOOKUP` brings in one column at a time |
+| Join two files | Join Databases | `JOIN`, `RELATE` | **Join two sheets…** (inner, left, full or unmatched), with a key check first |
 | Matched and unmatched records | Compare Databases, Join (unmatched) | `JOIN UNMATCHED` | **Reconcile two sheets…**: matched, unmatched each side, mismatched amounts, keying errors |
-| Compare two versions of a file | Compare Databases | `JOIN` and a computed difference | **Compare two versions by key…** *(coming soon)* |
+| Compare two versions of a file | Compare Databases | `JOIN` and a computed difference | **Compare two versions by key…** |
 | Sample | Random, Systematic, Stratified Random, Monetary Unit Sampling | `SAMPLE` (record, MUS) with `SEED` | **Pick a sample…**: random, systematic, stratified, monetary unit, with a seed |
 | Benford | Benford's Law | `BENFORD` | **Benford's law test…**: first or first two digits, MAD, chi-square, z per digit |
 | Journal entry testing | JET / SmartAnalyzer tests | Journal entry scripts | **Journal entry tests…**: eleven tests scored together |

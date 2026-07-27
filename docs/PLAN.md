@@ -191,7 +191,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ⬜ Internal eval harness for accuracy and time-to-answer
 
 ### M10: Docs and launch 🔨
-- 🔨 Docs: the three hero workflows as tutorials, generated function reference,
+- ✅ Docs: the three hero workflows as tutorials, generated function reference,
   audit test catalogue, "moving from Excel" and "moving from IDEA/ACL" guides
 - ⬜ Ask the docs with the local model
 - ⬜ Landing page around the niche; installable and offline

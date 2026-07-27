@@ -135,8 +135,9 @@ formatting: manage rules…** and the highlighting follows.
 
 ## 7. Total by account type
 
-**Pivot table…** will build this summary for you *(coming soon)*. Until
-then, two SUMIF formulas do the same job.
+**Pivot table…** builds this summary for you: put the account type in
+Rows and the amount in Values. Or, to keep it live in the sheet, two SUMIF
+formulas do the same job.
 
 Add a sheet, rename it `By type`, click A1 and paste:
 
@@ -189,8 +190,8 @@ the TB is re-run later, open **Show history and versions**
 (**Ctrl+Shift+H**) and press **Compare** on that version to see every
 number that changed.
 
-**Compare two versions by key…** will compare two trial balances account
-by account, without the lookup formulas *(coming soon)*.
+**Compare trial balances…** does the same comparison account by account
+without the lookup formulas, and lists accounts that are only in one month.
 
 ## What you used
 
