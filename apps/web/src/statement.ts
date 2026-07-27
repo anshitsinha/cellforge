@@ -5,8 +5,10 @@
 import type { Action } from "@cellforge/actions";
 import { formatValue, pageLines, parseStatement, previewCsv, readPdfText, rowsToLines, Table, type ColumnData, type Statement, type StatementLine } from "@cellforge/core";
 import { EditableSource } from "./editable";
+import { noteFileRead } from "./evidence";
 
 export async function statementLines(file: File): Promise<StatementLine[]> {
+  noteFileRead(file, "statement");
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (/\.pdf$/i.test(file.name)) {
     const pages = await readPdfText(bytes);

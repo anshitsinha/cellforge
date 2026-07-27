@@ -14,6 +14,7 @@ export { readParquet, rleHybrid, unsnappy, type ParquetResult } from "./parquet"
 export { dateParts, parseAs, parseDateLoose, parseNumberLoose, profileColumn, type ColumnProfile, type ColumnType, type DateOrder, type NumberStyle } from "./clean/values";
 export { findHeaderRow, unwrapReport, type DroppedRow, type Unwrapped } from "./clean/unwrap";
 export { alignColumns, columnKey, combineParts, type AlignedColumn, type FilePart } from "./clean/combine";
+export { unzip, zip, text as zipText } from "./xlsx/zip";
 export * from "./audit";
 export * from "./transform";
 export * from "./jetest";

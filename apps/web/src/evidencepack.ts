@@ -1,0 +1,88 @@
+/** Saving and verifying an evidence pack (a .zip). */
+import { unzip, zip, zipText } from "@cellforge/core";
+import { summary, verifyLog, type Evidence, type LogEntry } from "./evidence";
+import { packWorkbook, toFile } from "./persist";
+import type { Workbook } from "./workbook";
+
+function download(blob: Blob, name: string): void {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+}
+
+/** The pack's files: the workbook, recipes, inputs, log and a readable summary. */
+export async function evidenceFiles(wb: Workbook, active: string, name: string): Promise<[string, string | Uint8Array][]> {
+  const verified = await verifyLog(wb.evidence.log);
+  const book = toFile(packWorkbook(wb, active, name));
+  return [
+    ["SUMMARY.md", summary(name, wb.evidence, wb.recipes, verified)],
+    ["log.json", JSON.stringify(wb.evidence.log, null, 1)],
+    ["inputs.json", JSON.stringify(wb.evidence.inputs, null, 1)],
+    ["recipes.json", JSON.stringify(wb.recipes, null, 1)],
+    [`${name}.cellforge`, new Uint8Array(await book.arrayBuffer())],
+  ];
+}
+
+export async function saveEvidencePack(wb: Workbook, name: string, status: (t: string) => void): Promise<void> {
+  status("Making the evidence pack…");
+  const active = wb.sheets.find((s) => !s.hidden)?.id ?? wb.sheets[0].id;
+  const bytes = await zip(await evidenceFiles(wb, active, name));
+  download(new Blob([bytes as BlobPart], { type: "application/zip" }), `${name} evidence ${new Date().toISOString().slice(0, 10)}.zip`);
+  status(`Saved the evidence pack: ${wb.evidence.log.length} log entries, ${wb.evidence.inputs.length} input file${wb.evidence.inputs.length === 1 ? "" : "s"}`);
+}
+
+/** Check a pack: the log's chain, and list what it says went in. */
+export async function verifyPack(bytes: Uint8Array): Promise<{ ok: boolean; message: string; evidence: Evidence }> {
+  const files = await unzip(bytes);
+  const logText = zipText(files.get("log.json"));
+  if (!logText) return { ok: false, message: "This isn't an evidence pack (there's no log.json in it).", evidence: { log: [], inputs: [] } };
+  const log = JSON.parse(logText) as LogEntry[];
+  const inputs = JSON.parse(zipText(files.get("inputs.json")) || "[]") as Evidence["inputs"];
+  const v = await verifyLog(log);
+  return {
+    ok: v.ok,
+    message: v.ok ? `The log's ${log.length} entries are intact (last hash ${v.head.slice(0, 16)}…).` : `The log has been changed: ${v.reason}.`,
+    evidence: { log, inputs },
+  };
+}
+
+export function openVerifyPack(_wb: Workbook, status: (t: string) => void): void {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".zip";
+  input.addEventListener("change", async () => {
+    const f = input.files?.[0];
+    if (!f) return;
+    let result;
+    try {
+      result = await verifyPack(new Uint8Array(await f.arrayBuffer()));
+    } catch (e) {
+      status(`Couldn't read ${f.name}: ${(e as Error).message}`);
+      return;
+    }
+    const back = document.createElement("div");
+    back.className = "palette-backdrop";
+    back.innerHTML = `<div class="palette import-dialog" role="dialog"><div class="palette-form"><h3></h3><p></p><div class="import-preview"></div><div class="numfmt-actions"><button type="button">Close</button></div></div></div>`;
+    back.querySelector("h3")!.textContent = `Evidence pack: ${f.name}`;
+    const p = back.querySelector("p")!;
+    p.textContent = result.message;
+    if (!result.ok) p.className = "cleanup-warn";
+    const t = document.createElement("table");
+    t.className = "cleanup-cols";
+    t.innerHTML = "<tr><th>Input file</th><th>Size</th><th>SHA-256</th></tr>";
+    for (const i of result.evidence.inputs) {
+      const tr = document.createElement("tr");
+      for (const v of [i.name, i.size.toLocaleString(), i.sha256 + (i.sampled ? " (sampled)" : "")]) tr.append(Object.assign(document.createElement("td"), { textContent: v }));
+      t.append(tr);
+    }
+    if (!result.evidence.inputs.length) t.append(Object.assign(document.createElement("tr"), { innerHTML: "<td colspan=3>No input files were recorded.</td>" }));
+    back.querySelector(".import-preview")!.append(t);
+    back.querySelector("button")!.addEventListener("click", () => back.remove());
+    back.addEventListener("keydown", (e) => e.key === "Escape" && back.remove());
+    document.body.append(back);
+    back.querySelector("button")!.focus();
+  });
+  input.click();
+}

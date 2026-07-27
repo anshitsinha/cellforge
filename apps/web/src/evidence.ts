@@ -134,3 +134,14 @@ export function summary(name: string, ev: Evidence, recipes: { name: string; ste
   ];
   return lines.join("\n");
 }
+
+/** Modules that read files tell the app here, so they can be fingerprinted. */
+let fileListener: ((file: File, kind: Fingerprint["kind"]) => void) | null = null;
+
+export function onFileRead(listener: (file: File, kind: Fingerprint["kind"]) => void): void {
+  fileListener = listener;
+}
+
+export function noteFileRead(file: File, kind: Fingerprint["kind"]): void {
+  fileListener?.(file, kind);
+}

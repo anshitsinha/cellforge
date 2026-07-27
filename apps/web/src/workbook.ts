@@ -6,6 +6,7 @@
  */
 import type { ChartSpec } from "./charts/model";
 import type { Recipe } from "./recipe";
+import type { Evidence } from "./evidence";
 import { BlankSource, EditableSource } from "./editable";
 import type { Version } from "./versions";
 import { formatFormula, parseFormula, type Node } from "@cellforge/core";
@@ -55,6 +56,8 @@ export class Workbook {
   charts: ChartSpec[] = [];
   /** saved recipes; saved with the workbook */
   recipes: Recipe[] = [];
+  /** the hash-chained action log and the fingerprints of files read into it */
+  evidence: Evidence = { log: [], inputs: [] };
 
   /** iterative calculation for circular references (off by default, as in Excel) */
   private iter: { max: number; change: number } | null = null;

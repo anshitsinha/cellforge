@@ -14,6 +14,7 @@
  */
 import type { ChartSpec } from "./charts/model";
 import type { Recipe } from "./recipe";
+import type { Evidence } from "./evidence";
 import type { Action } from "@cellforge/actions";
 import { Table, type ColumnData } from "@cellforge/core";
 import type { DataSource } from "@cellforge/grid";
@@ -42,6 +43,8 @@ export interface WorkbookState {
   charts?: ChartSpec[];
   /** recipes (added after v1 shipped) */
   recipes?: Recipe[];
+  /** the action log and input fingerprints (added after v1 shipped) */
+  evidence?: Evidence;
   /** named versions (added after v1 shipped; missing means none) */
   versions?: { name: string; at: number; sheets: SavedSheet[] }[];
 }
@@ -145,7 +148,7 @@ export function packWorkbook(wb: Workbook, active: string, name: string): Packed
   }));
   const names = wb.definedNames;
   const iterative = wb.iterative;
-  return { meta: { format: "cellforge", v: 1, name, active, bases, sheets, ...(versions.length ? { versions } : {}), ...(names.length ? { names } : {}), ...(iterative ? { iterative } : {}), ...(wb.charts.length ? { charts: structuredClone(wb.charts) } : {}), ...(wb.recipes.length ? { recipes: structuredClone(wb.recipes) } : {}) }, files };
+  return { meta: { format: "cellforge", v: 1, name, active, bases, sheets, ...(versions.length ? { versions } : {}), ...(names.length ? { names } : {}), ...(iterative ? { iterative } : {}), ...(wb.charts.length ? { charts: structuredClone(wb.charts) } : {}), ...(wb.recipes.length ? { recipes: structuredClone(wb.recipes) } : {}), ...(wb.evidence.log.length || wb.evidence.inputs.length ? { evidence: structuredClone(wb.evidence) } : {}) }, files };
 }
 
 /** Rebuild a workbook from its metadata, reading files as needed. */
@@ -211,6 +214,7 @@ export async function unpackWorkbook(
   if (meta.iterative) workbook.iterative = meta.iterative;
   if (meta.charts?.length) workbook.charts = structuredClone(meta.charts);
   if (meta.recipes?.length) workbook.recipes = structuredClone(meta.recipes);
+  if (meta.evidence) workbook.evidence = structuredClone(meta.evidence);
   const active = workbook.has(meta.active) ? meta.active : workbook.sheets[0].id;
   return { workbook, active, name: meta.name };
 }

@@ -69,10 +69,10 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Evidence pack: workbook + recipe + input fingerprints + hash-chained action log
-- [ ] Action log: every applied action with time, sheet and a SHA-256 hash chained to the one before, saved with the workbook; tampering shows as a broken chain
-- [ ] Input fingerprints: SHA-256 of every file opened, imported or combined, with name, size and time
-- [ ] Evidence pack: one file holding the workbook, its recipes, the fingerprints and the log, plus a readable summary; verify a pack (chain intact, fingerprints listed)
-- [ ] Tests, user guide
+- [x] Action log: every applied action with time, sheet and a SHA-256 hash chained to the one before, saved with the workbook; tampering shows as a broken chain
+- [x] Input fingerprints: SHA-256 of every file opened, imported or combined, with name, size and time
+- [x] Evidence pack: one file holding the workbook, its recipes, the fingerprints and the log, plus a readable summary; verify a pack (chain intact, fingerprints listed)
+- [x] Tests, user guide
 
 ## Milestones
 

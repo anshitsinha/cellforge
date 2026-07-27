@@ -6,6 +6,7 @@ import { jsonToColumns, profileColumn, parseAs, readParquet, type ColumnData, ty
 import { sheetText } from "./cleanup";
 import { importCsv } from "./importer";
 import { openXlsx } from "./xlsxio";
+import { noteFileRead } from "./evidence";
 
 export const COMBINABLE = /\.(csv|tsv|txt|xlsx|xlsm|json|jsonl|ndjson|parquet)$/i;
 
@@ -52,6 +53,7 @@ export function textToColumns(header: string[], rows: string[][]): { columns: Co
 }
 
 export async function readPart(file: File): Promise<FilePart> {
+  noteFileRead(file, "combine");
   const name = file.name;
   if (/\.xls[xm]$/i.test(name)) {
     const wb = await openXlsx(await file.arrayBuffer());

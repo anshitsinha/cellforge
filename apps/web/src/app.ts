@@ -33,6 +33,8 @@ import { openPivot } from "./pivotpanel";
 import { RecipeRecorder, unbindAction, usedMemory } from "./recipe";
 import { openRecipes } from "./recipepanel";
 import { openLineage } from "./lineagepanel";
+import { appendLog, fingerprint, onFileRead, type Fingerprint, type LogEntry } from "./evidence";
+import { openVerifyPack, saveEvidencePack } from "./evidencepack";
 import { openRunOnFiles } from "./recipefiles";
 import type { Workbook as WorkbookT } from "./workbook";
 import { openCompare, openGlTie, openJoin, openMapping, openTbCompare } from "./joindialog";
@@ -326,6 +328,24 @@ document.addEventListener("keydown", (e) => {
     openLineage(lineageDeps());
   }
 });
+// the evidence log: every change, chained by SHA-256, written in order
+let logQueue: Promise<unknown> = Promise.resolve();
+function logEvidence(entry: Pick<LogEntry, "kind" | "label" | "sheet" | "action">) {
+  const wb = workbook;
+  logQueue = logQueue.then(() => appendLog(wb.evidence.log, entry)).catch(() => undefined);
+}
+function noteInput(file: File, kind: Fingerprint["kind"]) {
+  const wb = workbook;
+  logQueue = logQueue
+    .then(async () => {
+      const fp = await fingerprint(file, kind);
+      wb.evidence.inputs.push(fp);
+      await appendLog(wb.evidence.log, { kind: kind === "open" ? "open" : "import", label: `${kind === "open" ? "opened" : "read"} ${file.name} (SHA-256 ${fp.sha256.slice(0, 12)}…)` });
+    })
+    .catch(() => undefined);
+}
+onFileRead((file, kind) => noteInput(file, kind));
+
 const recipeFilesDeps = () => ({
   registry,
   addSheets: async (wb: WorkbookT, prefix: string) => {
@@ -348,6 +368,7 @@ async function run(action: Action) {
     if (applied) {
       journal({ op: "run", action });
       recordTrail(action);
+      logEvidence({ kind: action.type === "recipe.run" ? "recipe" : "run", label: registry.describe(action), sheet: sheetName, action });
       const def = registry.get(action.type);
       if (def?.recordable && !def.internal) {
         const mem1 = usedMemory();
@@ -528,6 +549,7 @@ async function undo() {
     if (label) {
       journal({ op: "undo" });
       recorder.undo(label);
+      logEvidence({ kind: "undo", label });
     }
     refresh();
     if (label) statusLeft.textContent = `Undid ${label}`;
@@ -542,6 +564,7 @@ async function redo() {
     if (label) {
       journal({ op: "redo" });
       recorder.redo(label);
+      logEvidence({ kind: "redo", label });
     }
     refresh();
     if (label) statusLeft.textContent = `Redid ${label}`;
@@ -1544,6 +1567,13 @@ function paletteCommands(): Command[] {
       hint: "explain lineage trace source provenance where from audit trail write up working paper",
       run: () => openLineage(lineageDeps()),
     },
+    {
+      id: "evidence-pack",
+      title: "Save an evidence pack…",
+      hint: "evidence pack audit trail log hash fingerprint working papers review sign off",
+      run: () => void logQueue.then(() => saveEvidencePack(workbook, workbook.get(activeId).name, (t) => (statusLeft.textContent = t))),
+    },
+    { id: "evidence-verify", title: "Verify an evidence pack…", hint: "verify evidence pack hash chain tamper check", run: () => openVerifyPack(workbook, (t) => (statusLeft.textContent = t)) },
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },
@@ -1704,9 +1734,17 @@ function loadSource(next: EditableSource, name: string) {
 }
 
 /** Replace the whole workbook (open, new, restore). */
+/** The file being opened, fingerprinted into the workbook it becomes. */
+let openingFile: File | null = null;
+
 function loadWorkbook(next: Workbook, active: string, name: string) {
   trail.clear();
   workbook = next;
+  recorder.clear();
+  if (openingFile) {
+    noteInput(openingFile, "open");
+    openingFile = null;
+  }
   activeId = active;
   selections.clear();
   source = workbook.get(active).source;
@@ -1782,6 +1820,16 @@ document.getElementById("btn-open")!.addEventListener("click", () => fileInput.c
 let cancelImport: (() => void) | null = null;
 
 async function openFile(file: File) {
+  // fingerprinted into the workbook it becomes (see loadWorkbook); forgotten if it never loads
+  openingFile = file;
+  try {
+    await openFileInto(file);
+  } finally {
+    openingFile = null;
+  }
+}
+
+async function openFileInto(file: File) {
   cancelImport?.();
   if (/\.pdf$/i.test(file.name)) {
     // a PDF is read as a bank statement; its transactions go on a new sheet
