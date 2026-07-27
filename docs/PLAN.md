@@ -68,11 +68,12 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Evidence pack: workbook + recipe + input fingerprints + hash-chained action log
-- [x] Action log: every applied action with time, sheet and a SHA-256 hash chained to the one before, saved with the workbook; tampering shows as a broken chain
-- [x] Input fingerprints: SHA-256 of every file opened, imported or combined, with name, size and time
-- [x] Evidence pack: one file holding the workbook, its recipes, the fingerprints and the log, plus a readable summary; verify a pack (chain intact, fingerprints listed)
-- [x] Tests, user guide
+### Review mode: tick marks with legend, reviewed-by, notes that block sign-off,
+- [ ] Tick marks: a set of audit marks (agreed to source, footed, cross-footed, recalculated, traced, exception…) put on cells, drawn in the cell, with a legend sheet; custom marks
+- [ ] Review notes: open / cleared notes on cells, with who and when; open notes block sign-off
+- [ ] Sign-off: prepared-by / reviewed-by per sheet with time and the evidence log's hash at that moment; changing the sheet afterwards shows "changed since review"
+- [ ] Workpaper references (e.g. B-3) on sheets, shown on the tab and in the evidence pack
+- [ ] Actions, saved with the file; tests, user guide
 
 ## Milestones
 
@@ -165,10 +166,10 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Stratification, top-N, Pareto, ageing buckets, materiality
 - ✅ Sampling (random, systematic, stratified, monetary-unit) with recorded seed
 - ✅ Footing / cross-footing and roll-forward checks
-- 🔨 Evidence pack: workbook + recipe + input fingerprints + hash-chained action log
+- ✅ Evidence pack: workbook + recipe + input fingerprints + hash-chained action log
 - ⬜ Evidence linking: attached documents stored outside the workbook, cell ↔
   document-region links, validation that compares values
-- ⬜ Review mode: tick marks with legend, reviewed-by, notes that block sign-off,
+- 🔨 Review mode: tick marks with legend, reviewed-by, notes that block sign-off,
   workpaper references
 - ✅ Share safely: PII scan, mask / hash / pseudonymise / redact into a safe copy
 - ⬜ Hidden-content check, encrypted export; clear all local data; offline bundle
