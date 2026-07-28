@@ -26,6 +26,7 @@ import { DepIndex, type Rect } from "./deps";
 import { filteredOutRows, type FilterSpec, type FilterView } from "./filter";
 import { CondFormatter, spliceRules, type CfRule } from "./condformat";
 import { ruleAt, spliceRanged, type DvRule } from "./validation";
+import type { ReviewNote } from "./review";
 import { SheetStyles, type ColumnStyles, type StylesState } from "./styles";
 
 /** A table: a named block whose first row holds its column headers. */
@@ -192,6 +193,8 @@ export class EditableSource implements DataSource {
   private cfRules: CfRule[] = [];
   // data validation rules (the last one covering a cell applies)
   private dvRules: DvRule[] = [];
+  /** how a tick mark looks (set by the workbook, which knows custom marks) */
+  markLook: ((id: string) => { glyph: string; color: string }) | null = null;
   // notes and links on cells, by row id then column (so they follow sorts)
   private extras = new Map<number, Map<number, CellExtra>>();
   private cf: CondFormatter | null = null;
@@ -1361,9 +1364,14 @@ export class EditableSource implements DataSource {
 
   private putExtra(id: number, col: number, x: CellExtra | null): void {
     let cols = this.extras.get(id);
-    if (x && (x.note || x.link)) {
+    if (x && (x.note || x.link || x.marks?.length || x.review)) {
       if (!cols) this.extras.set(id, (cols = new Map()));
-      cols.set(col, { ...(x.note ? { note: x.note } : {}), ...(x.link ? { link: x.link } : {}) });
+      cols.set(col, {
+        ...(x.note ? { note: x.note } : {}),
+        ...(x.link ? { link: x.link } : {}),
+        ...(x.marks?.length ? { marks: [...x.marks] } : {}),
+        ...(x.review ? { review: structuredClone(x.review) } : {}),
+      });
     } else if (cols) {
       cols.delete(col);
       if (!cols.size) this.extras.delete(id);
@@ -1377,13 +1385,20 @@ export class EditableSource implements DataSource {
   }
 
   /** Change a cell's note and / or link; returns what was there (for undo). */
-  setExtra(row: number, col: number, change: { note?: string | null; link?: string | null }): CellExtra | null {
+  setExtra(row: number, col: number, change: { note?: string | null; link?: string | null; marks?: string[] | null; review?: ReviewNote | null }): CellExtra | null {
     const before = this.extraAt(row, col);
     const next: CellExtra = { ...before };
     if (change.note !== undefined) next.note = change.note ?? undefined;
     if (change.link !== undefined) next.link = change.link ?? undefined;
+    if (change.marks !== undefined) next.marks = change.marks ?? undefined;
+    if (change.review !== undefined) next.review = change.review ?? undefined;
     this.putExtra(this.toBase(row), col, next);
-    return before ? { ...before } : null;
+    return before ? structuredClone(before) : null;
+  }
+
+  /** Review notes still open on this sheet. */
+  openReviewNotes(): { row: number; col: number; note: ReviewNote }[] {
+    return this.allExtras().flatMap((x) => (x.extra.review && !x.extra.review.cleared ? [{ row: x.row, col: x.col, note: x.extra.review }] : []));
   }
 
   /** Every note and link, at view positions (for the inspect panel and Excel files). */
@@ -1472,8 +1487,13 @@ export class EditableSource implements DataSource {
   getDisplayStyle(row: number, col: number): CellStyle | null {
     let own = this.getStyle(row, col);
     if (this.dvRules.length && this.validationAt(row, col)?.kind === "checkbox") own = { ...own, checkbox: true };
-    // a link looks like one (unless the cell has its own colour)
-    if (this.extras.size && this.extraAt(row, col)?.link) own = { color: "#1a73e8", underline: true, ...own };
+    // a link looks like one (unless the cell has its own colour); tick marks and review notes show in the cell
+    if (this.extras.size) {
+      const x = this.extraAt(row, col);
+      if (x?.link) own = { color: "#1a73e8", underline: true, ...own };
+      if (x?.marks?.length) own = { ...own, marks: x.marks.map((m) => this.markLook?.(m) ?? { glyph: "?", color: "#5f6368" }) };
+      if (x?.review && !x.review.cleared) own = { ...own, openReview: true };
+    }
     const r = this.cf?.apply(row, col);
     if (!r) return own;
     return { ...own, ...r.style, ...(r.bar ? { bar: r.bar } : {}), ...(r.icon ? { icon: r.icon } : {}), ...(r.hideValue ? { hideValue: true } : {}) };
@@ -2126,11 +2146,14 @@ export interface SheetState {
   extras?: [number, number, CellExtra][];
 }
 
-/** A note and / or a link on a cell. */
+/** A note, a link, tick marks and a review note on a cell. */
 export interface CellExtra {
   note?: string;
   /** a web address, or a place in the workbook written #Sheet!A1 (or #Name) */
   link?: string;
+  /** tick mark ids (see review.ts) */
+  marks?: string[];
+  review?: ReviewNote;
 }
 
 export interface FormulaSnapshot {

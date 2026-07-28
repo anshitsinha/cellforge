@@ -114,4 +114,8 @@ export interface CellStyle {
   hideValue?: boolean;
   /** draw the value as a tick box (TRUE ticked) */
   checkbox?: boolean;
+  /** audit tick marks, drawn small in the bottom-right corner */
+  marks?: { glyph: string; color: string }[];
+  /** an open review note (a blue corner, bottom left) */
+  openReview?: boolean;
 }

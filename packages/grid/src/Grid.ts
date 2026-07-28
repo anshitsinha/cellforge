@@ -1424,6 +1424,30 @@ export class Grid {
       ctx.closePath();
       ctx.fill();
     }
+    if (!spanText && (style?.marks?.length || style?.openReview)) {
+      ctx.save();
+      if (style.openReview) {
+        ctx.fillStyle = "#1a73e8";
+        ctx.beginPath();
+        ctx.moveTo(x, y + h);
+        ctx.lineTo(x + 7, y + h);
+        ctx.lineTo(x, y + h - 7);
+        ctx.closePath();
+        ctx.fill();
+      }
+      if (style.marks?.length) {
+        ctx.font = "bold 9px system-ui, sans-serif";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "bottom";
+        let mx = x + w - 2;
+        for (const m of [...style.marks].reverse()) {
+          ctx.fillStyle = m.color;
+          ctx.fillText(m.glyph, mx, y + h - 1);
+          mx -= ctx.measureText(m.glyph).width + 2;
+        }
+      }
+      ctx.restore();
+    }
     const value = this.source.getCell(row, col);
     if (style?.checkbox) {
       // a tick box, centred; ticked for TRUE
