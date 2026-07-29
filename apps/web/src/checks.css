@@ -1,0 +1,254 @@
+/* Data checks panel and Categorise dialog (checksui.ts). Builds on the palette-form, import-dialog and audit styles. */
+
+.ck-dialog {
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.palette-backdrop:has(.ck-dialog) {
+  padding-top: 24px;
+}
+
+.ck-cat {
+  width: min(920px, 100%);
+}
+
+.ck-confirm {
+  width: min(480px, 100%);
+}
+
+.ck-confirm-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.ck-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.ck-item {
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 6px;
+  padding: 6px 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.ck-pass {
+  border-left-color: #1e8e3e;
+}
+
+.ck-fail {
+  border-left-color: #d93025;
+}
+
+.ck-warn {
+  border-left-color: #f9ab00;
+}
+
+.ck-off {
+  opacity: 0.6;
+}
+
+.ck-head {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+
+.ck-mark {
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.ck-pass .ck-mark {
+  color: #1e8e3e;
+}
+
+.ck-fail .ck-mark {
+  color: #d93025;
+}
+
+.ck-warn .ck-mark {
+  color: #b06000;
+}
+
+.ck-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.ck-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.ck-where,
+.ck-msg {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ck-fail .ck-msg {
+  color: var(--text);
+}
+
+.ck-buttons {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.ck-buttons button {
+  min-width: 26px;
+}
+
+.ck-more,
+.ck-link {
+  justify-self: start;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.ck-more:hover,
+.ck-link:hover {
+  text-decoration: underline;
+}
+
+.ck-failures {
+  margin: 0;
+  padding-left: 30px;
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.ck-summary .ck-good {
+  color: #1e8e3e;
+  font-weight: 600;
+}
+
+.ck-summary .ck-bad {
+  color: #d93025;
+  font-weight: 600;
+}
+
+.ck-form {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.ck-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 12px;
+}
+
+.ck-ticks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  grid-column: 1 / -1;
+}
+
+.ck-cols {
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.ck-cols3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 12px;
+}
+
+.palette-form h4 {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+.ck-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.ck-rule-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ck-rule-table th,
+.ck-rule-table td {
+  padding: 2px 4px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.ck-rule-table input[type="text"],
+.ck-rule-table input[type="number"],
+.ck-rule-table select {
+  width: 100%;
+  min-width: 60px;
+}
+
+.ck-rule-table .ck-priority {
+  width: 64px;
+}
+
+.ck-rule-table .num {
+  text-align: right;
+}
+
+.ck-rule-table .ck-ex {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ck-learned td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+@media (max-width: 640px) {
+  .ck-fields,
+  .ck-cols3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .ck-pass .ck-mark,
+  .ck-summary .ck-good {
+    color: #81c995;
+  }
+
+  .ck-fail .ck-mark,
+  .ck-summary .ck-bad {
+    color: #f28b82;
+  }
+
+  .ck-warn .ck-mark {
+    color: #fdd663;
+  }
+}
