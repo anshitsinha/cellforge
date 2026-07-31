@@ -7,6 +7,7 @@
 import type { ChartSpec } from "./charts/model";
 import type { Recipe } from "./recipe";
 import type { Evidence } from "./evidence";
+import type { CatRule, CheckDef } from "@cellforge/core";
 import { BlankSource, EditableSource } from "./editable";
 import type { Version } from "./versions";
 import { formatFormula, parseFormula, type Node } from "@cellforge/core";
@@ -56,6 +57,10 @@ export class Workbook {
   charts: ChartSpec[] = [];
   /** saved recipes; saved with the workbook */
   recipes: Recipe[] = [];
+  /** data checks; saved with the workbook */
+  checks: CheckDef[] = [];
+  /** categorisation rules; saved with the workbook */
+  categoryRules: CatRule[] = [];
   /** the hash-chained action log and the fingerprints of files read into it */
   evidence: Evidence = { log: [], inputs: [] };
 

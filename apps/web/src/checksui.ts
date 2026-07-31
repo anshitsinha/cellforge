@@ -38,7 +38,7 @@ import {
   type CheckTable,
   type CheckValue,
   type LearnedRule,
-} from "../../../packages/core/src/checks";
+} from "@cellforge/core";
 import { setCells, type SheetCtx } from "./actions";
 import { readSheet, type SheetData } from "./audittools";
 import type { EditableSource } from "./editable";

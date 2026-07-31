@@ -24,7 +24,7 @@ import {
   setChecks,
   uncategorisedFilter,
 } from "./checksui";
-import { categorise, type CheckDef } from "../../../packages/core/src/checks";
+import { categorise, type CheckDef } from "@cellforge/core";
 import { BlankSource, EditableSource } from "./editable";
 import { Workbook } from "./workbook";
 

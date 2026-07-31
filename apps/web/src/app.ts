@@ -25,6 +25,7 @@ import { editRule, openCfManager } from "./cfmanager";
 import { openFindReplace } from "./finddialog";
 import { openAuditTool } from "./audittools";
 import { openRecon } from "./recondialog";
+import { bindChecksStore, gateExport, openCategorise, openChecks, registerCheckActions } from "./checksui";
 import { openTimeTool } from "./timetools";
 import { openOpenItems } from "./openitemsdialog";
 import { openTransform } from "./transformtools";
@@ -268,6 +269,14 @@ const redoButton = document.getElementById("btn-redo") as HTMLButtonElement;
 
 const registry = sheetActions();
 registerFindActions(registry);
+registerCheckActions(registry);
+bindChecksStore({
+  workbook: () => workbook,
+  getChecks: () => workbook.checks,
+  setChecks: (c) => (workbook.checks = c),
+  getRules: () => workbook.categoryRules,
+  setRules: (r) => (workbook.categoryRules = r),
+});
 const blobs = new BlobStore();
 let cancelSort: (() => void) | null = null;
 
@@ -1306,7 +1315,8 @@ async function exportExcel() {
     statusLeft.textContent = `Couldn't export: ${(e as Error).message}`;
   }
 }
-document.getElementById("btn-export-xlsx")!.addEventListener("click", () => void exportExcel());
+// failing data checks ask before anything leaves the app
+document.getElementById("btn-export-xlsx")!.addEventListener("click", () => void gateExport(() => exportExcel()));
 document.addEventListener("keydown", (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
   const k = e.key.toLowerCase();
@@ -1574,6 +1584,18 @@ function paletteCommands(): Command[] {
       run: () => void logQueue.then(() => saveEvidencePack(workbook, workbook.get(activeId).name, (t) => (statusLeft.textContent = t))),
     },
     { id: "evidence-verify", title: "Verify an evidence pack…", hint: "verify evidence pack hash chain tamper check", run: () => openVerifyPack(workbook, (t) => (statusLeft.textContent = t)) },
+    {
+      id: "data-checks",
+      title: "Data checks…",
+      hint: "checks rules validate not blank unique master list lookup debits equal credits control total tolerance row count duplicate keys checklist gate export",
+      run: () => openChecks({ workbook: () => workbook, activeSheet: () => activeId, run: (a) => run(a), goTo: findDeps().goTo, status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }),
+    },
+    {
+      id: "categorise",
+      title: "Categorise…",
+      hint: "categorise categorize category tag bulk tagging rules learn uncategorised queue coding expenses",
+      run: () => openCategorise({ workbook: () => workbook, activeSheet: () => activeId, source: () => source, range: () => grid.range, run: (a) => run(a), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }),
+    },
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },
@@ -1708,7 +1730,7 @@ function paletteCommands(): Command[] {
     { id: "open", title: "Open…", keys: "Ctrl O", hint: "import csv file cellforge", run: click("btn-open") },
     { id: "save", title: "Save", keys: "Ctrl S", hint: "file cellforge", run: () => saveFile() },
     { id: "save-as", title: "Save as…", keys: "Ctrl Shift S", run: () => saveFile(true) },
-    { id: "export-xlsx", title: "Export Excel (.xlsx)", hint: "download save excel xlsx", run: () => exportExcel() },
+    { id: "export-xlsx", title: "Export Excel (.xlsx)", hint: "download save excel xlsx", run: () => gateExport(() => exportExcel()) },
     { id: "export", title: "Export CSV", hint: "download save", run: click("btn-export") },
     { id: "demo", title: "Load the 100M-row demo", run: click("btn-demo") },
   ];
@@ -1775,7 +1797,8 @@ document.getElementById("btn-demo")!.addEventListener("click", () => {
 const LARGE_EXPORT_ROWS = 5_000_000;
 let exporting = false;
 
-document.getElementById("btn-export")!.addEventListener("click", async () => {
+document.getElementById("btn-export")!.addEventListener("click", () => void gateExport(exportCsvFile));
+async function exportCsvFile() {
   if (exporting) return;
   const { rows, cols } = source.usedRange();
   if (rows === 0 || cols === 0) {
@@ -1803,7 +1826,7 @@ document.getElementById("btn-export")!.addEventListener("click", async () => {
     exporting = false;
     updateStatus();
   }
-});
+}
 
 // --- CSV import ---------------------------------------------------------------
 

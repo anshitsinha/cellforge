@@ -153,9 +153,9 @@ tracker shows this expanded, with the first unticked step as the current one.
   live preview at every step, per-step time and memory profile
 - ✅ Re-run a recipe on new files or a folder
 - ⬜ Templates for the three hero workflows: monthly close, bank rec, audit tests
-- 🔨 Data checks: column rules, master-list lookups, debits = credits; green/red
+- ✅ Data checks: column rules, master-list lookups, debits = credits; green/red
   checklist that gates export
-- 🔨 Categorisation rules that learn from manual tagging; bulk tagging; uncategorised queue
+- ✅ Categorisation rules that learn from manual tagging; bulk tagging; uncategorised queue
 - ✅ Explain: where any number came from (formula chain, recipe step, source rows),
   lineage view, one-click write-up
 

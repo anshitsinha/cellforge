@@ -15,6 +15,7 @@
 import type { ChartSpec } from "./charts/model";
 import type { Recipe } from "./recipe";
 import type { Evidence } from "./evidence";
+import type { CatRule, CheckDef } from "@cellforge/core";
 import type { Action } from "@cellforge/actions";
 import { Table, type ColumnData } from "@cellforge/core";
 import type { DataSource } from "@cellforge/grid";
@@ -43,6 +44,9 @@ export interface WorkbookState {
   charts?: ChartSpec[];
   /** recipes (added after v1 shipped) */
   recipes?: Recipe[];
+  /** data checks and categorisation rules (added after v1 shipped) */
+  checks?: CheckDef[];
+  categoryRules?: CatRule[];
   /** the action log and input fingerprints (added after v1 shipped) */
   evidence?: Evidence;
   /** named versions (added after v1 shipped; missing means none) */
@@ -148,7 +152,7 @@ export function packWorkbook(wb: Workbook, active: string, name: string): Packed
   }));
   const names = wb.definedNames;
   const iterative = wb.iterative;
-  return { meta: { format: "cellforge", v: 1, name, active, bases, sheets, ...(versions.length ? { versions } : {}), ...(names.length ? { names } : {}), ...(iterative ? { iterative } : {}), ...(wb.charts.length ? { charts: structuredClone(wb.charts) } : {}), ...(wb.recipes.length ? { recipes: structuredClone(wb.recipes) } : {}), ...(wb.evidence.log.length || wb.evidence.inputs.length ? { evidence: structuredClone(wb.evidence) } : {}) }, files };
+  return { meta: { format: "cellforge", v: 1, name, active, bases, sheets, ...(versions.length ? { versions } : {}), ...(names.length ? { names } : {}), ...(iterative ? { iterative } : {}), ...(wb.charts.length ? { charts: structuredClone(wb.charts) } : {}), ...(wb.recipes.length ? { recipes: structuredClone(wb.recipes) } : {}), ...(wb.evidence.log.length || wb.evidence.inputs.length ? { evidence: structuredClone(wb.evidence) } : {}), ...(wb.checks.length ? { checks: structuredClone(wb.checks) } : {}), ...(wb.categoryRules.length ? { categoryRules: structuredClone(wb.categoryRules) } : {}) }, files };
 }
 
 /** Rebuild a workbook from its metadata, reading files as needed. */
@@ -215,6 +219,8 @@ export async function unpackWorkbook(
   if (meta.charts?.length) workbook.charts = structuredClone(meta.charts);
   if (meta.recipes?.length) workbook.recipes = structuredClone(meta.recipes);
   if (meta.evidence) workbook.evidence = structuredClone(meta.evidence);
+  if (meta.checks?.length) workbook.checks = structuredClone(meta.checks);
+  if (meta.categoryRules?.length) workbook.categoryRules = structuredClone(meta.categoryRules);
   const active = workbook.has(meta.active) ? meta.active : workbook.sheets[0].id;
   return { workbook, active, name: meta.name };
 }
