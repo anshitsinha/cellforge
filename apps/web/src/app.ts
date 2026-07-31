@@ -1,5 +1,7 @@
 import "./style.css";
-import { Grid, columnLetter, formatCell } from "@cellforge/grid";
+import { Grid, columnLetter, formatCell, type CellValue } from "@cellforge/grid";
+import { parseTsv, rangeSize, rangeToTsv } from "./clipboard";
+import { computeStats } from "./stats";
 import { SyntheticSource } from "./demo";
 import { BlankSource, EditableSource, parseInput } from "./editable";
 import { download, exportCsv } from "./exporter";
@@ -37,15 +39,133 @@ function syncFormulaBar() {
   formulaInput.value = formatCell(source.getCell(row, col));
 }
 
-// keep the name box + formula bar in sync with whatever cell is active
-grid.onSelectionChange = syncFormulaBar;
+// --- status bar (right side) ----------------------------------------------------
+// Shows selection stats when more than one cell is selected, otherwise
+// whatever info message was set last (import time, WebGPU support...).
 
-grid.onCellEdit = ({ row, col }, text) => {
-  source.setCell(row, col, parseInput(text));
+let infoText = "gpu" in navigator ? "WebGPU available" : "WebGPU not available (CPU fallback)";
+let statsToken = 0;
+const numFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 });
+
+function setInfo(text: string) {
+  infoText = text;
+  updateSelectionStats();
+}
+
+async function updateSelectionStats() {
+  const token = ++statsToken;
+  const range = grid.range;
+  if (rangeSize(range) <= 1) {
+    statusRight.textContent = infoText;
+    return;
+  }
+  const stats = await computeStats(
+    source,
+    range,
+    () => token !== statsToken,
+    (f) => (statusRight.textContent = `Calculating… ${Math.round(f * 100)}%`),
+  );
+  if (!stats || token !== statsToken) return;
+  const parts = [];
+  if (stats.numbers) {
+    parts.push(`Sum ${numFormat.format(stats.sum)}`);
+    parts.push(`Average ${numFormat.format(stats.sum / stats.numbers)}`);
+  }
+  parts.push(`Count ${rowFormat.format(stats.count)}`);
+  statusRight.textContent = parts.join(" · ");
+}
+
+// keep the name box, formula bar and stats in sync with the selection
+grid.onSelectionChange = () => {
+  syncFormulaBar();
+  updateSelectionStats();
+};
+
+/** Write several cells at once, then refresh everything that depends on them. */
+function writeCells(changes: { row: number; col: number; value: CellValue }[]) {
+  for (const { row, col, value } of changes) source.setCell(row, col, value);
   grid.invalidate();
   syncFormulaBar();
   updateStatus();
+  updateSelectionStats();
+}
+
+grid.onCellEdit = ({ row, col }, text) => {
+  writeCells([{ row, col, value: parseInput(text) }]);
 };
+
+// Clearing goes cell by cell into the sparse edit map, so a whole 100M row
+// column would mean 100M map entries. Cap it until there's a column-level op.
+const MAX_BULK_CELLS = 1_000_000;
+
+grid.onClearRange = (range) => {
+  if (rangeSize(range) > MAX_BULK_CELLS) {
+    statusLeft.textContent = `Clearing more than ${rowFormat.format(MAX_BULK_CELLS)} cells at once isn't supported yet.`;
+    return;
+  }
+  const changes = [];
+  for (let row = range.top; row <= range.bottom; row++) {
+    for (let col = range.left; col <= range.right; col++) {
+      if (source.getCell(row, col) !== null) changes.push({ row, col, value: null });
+    }
+  }
+  writeCells(changes);
+};
+
+// --- clipboard ------------------------------------------------------------------
+// Only handle copy/paste when the grid itself has focus, so the formula bar
+// and cell editor keep normal text clipboard behaviour.
+
+function gridHasFocus() {
+  const el = document.activeElement;
+  return el instanceof HTMLCanvasElement && sheet.contains(el);
+}
+
+function copySelection(e: ClipboardEvent): boolean {
+  const range = grid.range;
+  if (rangeSize(range) > MAX_BULK_CELLS) {
+    statusLeft.textContent = `Copying more than ${rowFormat.format(MAX_BULK_CELLS)} cells isn't supported yet.`;
+    e.preventDefault();
+    return false;
+  }
+  e.clipboardData?.setData("text/plain", rangeToTsv(source, range));
+  e.preventDefault();
+  return true;
+}
+
+document.addEventListener("copy", (e) => {
+  if (gridHasFocus()) copySelection(e);
+});
+
+document.addEventListener("cut", (e) => {
+  if (gridHasFocus() && copySelection(e)) grid.onClearRange?.(grid.range);
+});
+
+document.addEventListener("paste", (e) => {
+  if (!gridHasFocus()) return;
+  const text = e.clipboardData?.getData("text/plain");
+  if (!text) return;
+  e.preventDefault();
+
+  const rows = parseTsv(text.replace(/\r?\n$/, "")); // Excel adds a trailing newline
+  const { row: top, col: left } = grid.selection;
+  const changes = [];
+  let right = left;
+  for (let i = 0; i < rows.length && top + i < source.rowCount; i++) {
+    for (let j = 0; j < rows[i].length && left + j < source.colCount; j++) {
+      changes.push({ row: top + i, col: left + j, value: parseInput(rows[i][j]) });
+      right = Math.max(right, left + j);
+    }
+  }
+  writeCells(changes);
+  // select what was pasted so it's obvious where it went
+  grid.selectRange({
+    top,
+    left,
+    bottom: Math.min(source.rowCount - 1, top + rows.length - 1),
+    right,
+  });
+});
 
 // formula bar: enter commits to the active cell, escape throws the edit away
 formulaInput.addEventListener("keydown", (e) => {
@@ -66,7 +186,7 @@ sheet.addEventListener("input", (e) => {
 });
 
 fileName.textContent = currentName;
-statusRight.textContent = "gpu" in navigator ? "WebGPU available" : "WebGPU not available (CPU fallback)";
+statusRight.textContent = infoText;
 syncFormulaBar();
 updateStatus();
 grid.focus();
@@ -119,7 +239,7 @@ document.getElementById("btn-export")!.addEventListener("click", async () => {
     });
     const base = currentName.replace(/\.(csv|tsv|txt)$/i, "").replace(/[^\w.-]+/g, "_");
     download(blob, `${base || "sheet"}.csv`);
-    statusRight.textContent = `Exported ${formatBytes(blob.size)}`;
+    setInfo(`Exported ${formatBytes(blob.size)}`);
   } finally {
     exporting = false;
     updateStatus();
@@ -155,7 +275,7 @@ async function openFile(file: File) {
   try {
     const { table, ms } = await job.result;
     loadSource(new EditableSource(table), file.name);
-    statusRight.textContent = `Imported ${formatBytes(file.size)} in ${(ms / 1000).toFixed(2)}s`;
+    setInfo(`Imported ${formatBytes(file.size)} in ${(ms / 1000).toFixed(2)}s`);
   } catch (err) {
     // a newer import cancelling this one isn't an error worth showing
     if ((err as Error).message !== "Import cancelled") {
