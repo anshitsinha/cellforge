@@ -69,8 +69,8 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Review mode: tick marks with legend, reviewed-by, notes that block sign-off,
-- [ ] Tick marks: a set of audit marks (agreed to source, footed, cross-footed, recalculated, traced, exception…) put on cells, drawn in the cell, with a legend sheet; custom marks
-- [ ] Review notes: open / cleared notes on cells, with who and when; open notes block sign-off
+- [x] Tick marks: a set of audit marks (agreed to source, footed, cross-footed, recalculated, traced, exception…) put on cells, drawn in the cell, with a legend sheet; custom marks
+- [x] Review notes: open / cleared notes on cells, with who and when; open notes block sign-off
 - [ ] Sign-off: prepared-by / reviewed-by per sheet with time and the evidence log's hash at that moment; changing the sheet afterwards shows "changed since review"
 - [ ] Workpaper references (e.g. B-3) on sheets, shown on the tab and in the evidence pack
 - [ ] Actions, saved with the file; tests, user guide

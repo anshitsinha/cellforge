@@ -17,6 +17,7 @@ import { captureVersion, versionSheets, type Version } from "./versions";
 import type { ChartSpec } from "./charts/model";
 import { checkDv, subtractRange, type DvRule } from "./validation";
 import { safeLink } from "./links";
+import { allMarks, type MarkDef, type ReviewNote, type SheetReview } from "./review";
 import { bindStep, type Recipe, type RecipeStep } from "./recipe";
 import { checkRule, describeRule, newRuleId, type CfRule } from "./condformat";
 import { describeCondition, type FilterCondition, type FilterSpec, type FilterView } from "./filter";
@@ -942,6 +943,162 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
           if (applied.inverse) back.push(applied.inverse);
         }
         return back.length ? { type: "steps.undo", params: { steps: ctx.blobs.put(back.reverse()) } } : null;
+      },
+    });
+
+  // --------------------------------------------------------------- review --
+  const revRange = s.object({ top: s.int(undefined, 0), left: s.int(undefined, 0), bottom: s.int(undefined, 0), right: s.int(undefined, 0) });
+  registry
+    .register<{ range: CellRange; mark: string; on: boolean; sheet?: string }>({
+      type: "review.mark",
+      title: "Put a tick mark on cells, or take it off (marks: agreed, footed, crossfooted, recalc, traced, vouched, pbc, exception, or a custom one)",
+      schema: withSheet({ range: revRange, mark: s.string("mark id"), on: s.bool("true to add, false to remove") }, ["range", "mark", "on"]),
+      describe: (p) => `${p.on ? "tick" : "untick"} ${p.mark}`,
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        if (!allMarks(ctx.workbook.review).some((m) => m.id === p.mark)) throw new Error(`There's no tick mark called "${p.mark}".`);
+        const r = p.range;
+        if ((r.bottom - r.top + 1) * (r.right - r.left + 1) > 100_000) throw new Error("Tick marks go on up to 100,000 cells at a time.");
+        const before: { row: number; col: number; marks: string[] | null }[] = [];
+        for (let row = r.top; row <= Math.min(r.bottom, data.rowCount - 1); row++) {
+          for (let col = r.left; col <= Math.min(r.right, data.colCount - 1); col++) {
+            const now = data.extraAt(row, col)?.marks ?? [];
+            const next = p.on ? (now.includes(p.mark) ? now : [...now, p.mark]) : now.filter((m) => m !== p.mark);
+            if (next.length === now.length && next.every((m, i) => m === now[i])) continue;
+            before.push({ row, col, marks: now.length ? now : null });
+            data.setExtra(row, col, { marks: next.length ? next : null });
+          }
+        }
+        if (!before.length) return null;
+        return { type: "review.restoreMarks", params: { sheet: id, cells: ctx.blobs.put(before) } };
+      },
+    })
+    .register<{ cells: string; sheet?: string }>({
+      type: "review.restoreMarks",
+      title: "Put tick marks back",
+      internal: true,
+      schema: withSheet({ cells: s.string() }, ["cells"]),
+      describe: () => "tick marks",
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const back: { row: number; col: number; marks: string[] | null }[] = [];
+        for (const c of ctx.blobs.get<{ row: number; col: number; marks: string[] | null }[]>(p.cells)) {
+          back.push({ row: c.row, col: c.col, marks: data.extraAt(c.row, c.col)?.marks ?? null });
+          data.setExtra(c.row, c.col, { marks: c.marks });
+        }
+        return { type: "review.restoreMarks", params: { sheet: id, cells: ctx.blobs.put(back) } };
+      },
+    })
+    .register<{ row: number; col: number; text?: string | null; by: string; clear?: boolean; reopen?: boolean; sheet?: string }>({
+      type: "review.note",
+      title: "Add a review note to a cell (it stays open until cleared, and open notes block sign-off), or clear / reopen it",
+      schema: withSheet(
+        {
+          row: s.int(undefined, 0),
+          col: s.int(undefined, 0),
+          text: s.anyOf(s.string("the note", { maxLength: 8000 }), s.null()),
+          by: s.string("who (name or initials)", { minLength: 1, maxLength: 60 }),
+          clear: s.bool("mark it dealt with"),
+          reopen: s.bool("open it again"),
+        },
+        ["row", "col", "by"],
+      ),
+      describe: (p) => (p.clear ? "clear review note" : p.reopen ? "reopen review note" : p.text === null ? "delete review note" : "review note"),
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        checkBounds(data, [{ row: p.row, col: p.col }]);
+        const was = data.extraAt(p.row, p.col)?.review ?? null;
+        let next: ReviewNote | null;
+        if (p.clear || p.reopen) {
+          if (!was) throw new Error("There's no review note on that cell.");
+          next = p.clear ? { ...was, cleared: { by: p.by, at: Date.now() } } : { text: was.text, by: was.by, at: was.at };
+        } else if (p.text === null) next = null;
+        else {
+          if (!p.text?.trim()) throw new Error("Type the review note.");
+          next = { text: p.text.trim(), by: p.by, at: Date.now() };
+        }
+        data.setExtra(p.row, p.col, { review: next });
+        return { type: "review.putNote", params: { sheet: id, row: p.row, col: p.col, note: was ? ctx.blobs.put(was) : null } };
+      },
+    })
+    .register<{ row: number; col: number; note: string | null; sheet?: string }>({
+      type: "review.putNote",
+      title: "Put a review note back",
+      internal: true,
+      schema: withSheet({ row: s.int(undefined, 0), col: s.int(undefined, 0), note: s.anyOf(s.string(), s.null()) }, ["row", "col", "note"]),
+      describe: () => "review note",
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const was = data.extraAt(p.row, p.col)?.review ?? null;
+        data.setExtra(p.row, p.col, { review: p.note ? ctx.blobs.get<ReviewNote>(p.note) : null });
+        return { type: "review.putNote", params: { sheet: id, row: p.row, col: p.col, note: was ? ctx.blobs.put(was) : null } };
+      },
+    })
+    .register<{ role: "prepared" | "reviewed"; by: string; remove?: boolean; sheet?: string }>({
+      type: "review.signoff",
+      title: "Sign off a sheet as prepared or reviewed (refused while review notes are open), or take the sign-off away",
+      schema: withSheet({ role: s.string(undefined, { enum: ["prepared", "reviewed"] }), by: s.string("who", { minLength: 1, maxLength: 60 }), remove: s.bool() }, ["role", "by"]),
+      describe: (p) => (p.remove ? `remove ${p.role} sign-off` : `sign off as ${p.role}`),
+      recordable: false,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        const before = structuredClone(ctx.workbook.review.sheets[id] ?? {});
+        const sheetReview: SheetReview = { ...before };
+        if (p.remove) {
+          if (!sheetReview[p.role]) return null;
+          delete sheetReview[p.role];
+        } else {
+          const open = data.openReviewNotes();
+          if (open.length) throw new Error(`${open.length} review note${open.length === 1 ? " is" : "s are"} still open on this sheet. Clear ${open.length === 1 ? "it" : "them"} first.`);
+          if (p.role === "reviewed" && !sheetReview.prepared) throw new Error("Sign it off as prepared first.");
+          const log = ctx.workbook.evidence.log;
+          sheetReview[p.role] = { by: p.by, at: Date.now(), logHash: log.length ? log[log.length - 1].hash : "0".repeat(64), logLength: log.length };
+        }
+        ctx.workbook.review.sheets[id] = sheetReview;
+        return { type: "review.putSheet", params: { sheet: id, state: ctx.blobs.put(before) } };
+      },
+    })
+    .register<{ ref: string | null; sheet?: string }>({
+      type: "review.ref",
+      title: "Give a sheet a workpaper reference (like B-3), or remove it",
+      schema: withSheet({ ref: s.anyOf(s.string("the reference", { maxLength: 20 }), s.null()) }, ["ref"]),
+      describe: (p) => (p.ref ? `workpaper ref ${p.ref}` : "remove workpaper ref"),
+      recordable: true,
+      apply(ctx, p) {
+        const { id } = target(ctx, p.sheet);
+        const before = structuredClone(ctx.workbook.review.sheets[id] ?? {});
+        const next: SheetReview = { ...before };
+        if (p.ref?.trim()) next.ref = p.ref.trim();
+        else delete next.ref;
+        ctx.workbook.review.sheets[id] = next;
+        return { type: "review.putSheet", params: { sheet: id, state: ctx.blobs.put(before) } };
+      },
+    })
+    .register<{ state: string; sheet?: string }>({
+      type: "review.putSheet",
+      title: "Put a sheet's review state back",
+      internal: true,
+      schema: withSheet({ state: s.string() }, ["state"]),
+      describe: () => "review",
+      apply(ctx, p) {
+        const { id } = target(ctx, p.sheet);
+        const before = structuredClone(ctx.workbook.review.sheets[id] ?? {});
+        ctx.workbook.review.sheets[id] = ctx.blobs.get<SheetReview>(p.state);
+        return { type: "review.putSheet", params: { sheet: id, state: ctx.blobs.put(before) } };
+      },
+    })
+    .register<{ marks: MarkDef[] }>({
+      type: "review.setMarks",
+      title: "Set the workbook's custom tick marks (id, glyph, label, colour)",
+      schema: s.object({ marks: s.array(s.object({ id: s.string(), glyph: s.string(undefined, { minLength: 1, maxLength: 4 }), label: s.string(), color: s.string() })) }),
+      describe: () => "custom tick marks",
+      recordable: false,
+      apply(ctx, p) {
+        const before = structuredClone(ctx.workbook.review.marks);
+        ctx.workbook.review.marks = structuredClone(p.marks);
+        return { type: "review.setMarks", params: { marks: before } };
       },
     });
 
