@@ -73,7 +73,7 @@ let tip: HTMLElement | null = null;
 export function showNoteTip(source: EditableSource, cell: CellRef | null, x: number, y: number): void {
   const extra = cell ? source.extraAt(cell.row, cell.col) : null;
   const link = cell ? cellLink(source, cell.row, cell.col) : null;
-  if (!extra?.note && !link) {
+  if (!extra?.note && !link && !extra?.review) {
     tip?.remove();
     tip = null;
     return;
@@ -86,6 +86,15 @@ export function showNoteTip(source: EditableSource, cell: CellRef | null, x: num
   }
   tip.replaceChildren();
   if (extra?.note) tip.append(Object.assign(document.createElement("div"), { className: "note-text", textContent: extra.note }));
+  if (extra?.review) {
+    const r = extra.review;
+    tip.append(
+      Object.assign(document.createElement("div"), {
+        className: "note-text",
+        textContent: `Review (${r.by}): ${r.text}${r.cleared ? `\nCleared by ${r.cleared.by}` : " (open)"}`,
+      }),
+    );
+  }
   if (link) tip.append(Object.assign(document.createElement("div"), { className: "hp-muted", textContent: `${link} (Ctrl+click to open)` }));
   tip.style.left = `${Math.min(x + 14, innerWidth - 300)}px`;
   tip.style.top = `${Math.min(y + 14, innerHeight - 120)}px`;

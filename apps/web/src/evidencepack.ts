@@ -3,6 +3,7 @@ import { unzip, zip, zipText } from "@cellforge/core";
 import { summary, verifyLog, type Evidence, type LogEntry } from "./evidence";
 import { packWorkbook, toFile } from "./persist";
 import type { Workbook } from "./workbook";
+import { changedSince } from "./review";
 
 function download(blob: Blob, name: string): void {
   const a = document.createElement("a");
@@ -12,12 +13,28 @@ function download(blob: Blob, name: string): void {
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
 }
 
+/** Sheets with their workpaper references, sign-offs (and changes since) and open review notes. */
+function reviewSection(wb: Workbook): string {
+  const when = (at: number) => new Date(at).toISOString().replace("T", " ").slice(0, 16) + " UTC";
+  const rows = wb.sheets.map((sh) => {
+    const r = wb.review.sheets[sh.id] ?? {};
+    const sign = (role: "prepared" | "reviewed") => {
+      const x = r[role];
+      if (!x) return "—";
+      const n = changedSince(x, wb.evidence.log, sh.name);
+      return `${x.by}, ${when(x.at)}${n ? ` (changed since: ${n})` : ""}`;
+    };
+    return `| ${r.ref ?? ""} | ${sh.name} | ${sign("prepared")} | ${sign("reviewed")} | ${sh.source.openReviewNotes().length} |`;
+  });
+  return ["", "", "## Workpapers", "", "| Ref | Sheet | Prepared | Reviewed | Open review notes |", "|---|---|---|---|---:|", ...rows, ""].join("\n");
+}
+
 /** The pack's files: the workbook, recipes, inputs, log and a readable summary. */
 export async function evidenceFiles(wb: Workbook, active: string, name: string): Promise<[string, string | Uint8Array][]> {
   const verified = await verifyLog(wb.evidence.log);
   const book = toFile(packWorkbook(wb, active, name));
   return [
-    ["SUMMARY.md", summary(name, wb.evidence, wb.recipes, verified)],
+    ["SUMMARY.md", summary(name, wb.evidence, wb.recipes, verified) + reviewSection(wb)],
     ["log.json", JSON.stringify(wb.evidence.log, null, 1)],
     ["inputs.json", JSON.stringify(wb.evidence.inputs, null, 1)],
     ["recipes.json", JSON.stringify(wb.recipes, null, 1)],

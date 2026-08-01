@@ -1427,23 +1427,28 @@ export class Grid {
     if (!spanText && (style?.marks?.length || style?.openReview)) {
       ctx.save();
       if (style.openReview) {
+        // an open review note: a blue corner, top left (notes are red, top right)
         ctx.fillStyle = "#1a73e8";
         ctx.beginPath();
-        ctx.moveTo(x, y + h);
-        ctx.lineTo(x + 7, y + h);
-        ctx.lineTo(x, y + h - 7);
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + 7, y);
+        ctx.lineTo(x, y + 7);
         ctx.closePath();
         ctx.fill();
       }
       if (style.marks?.length) {
-        ctx.font = "bold 9px system-ui, sans-serif";
-        ctx.textAlign = "right";
+        // tick marks sit on the side the value leaves empty: left of numbers, right of text
+        const v = this.source.getCell(row, col);
+        const onLeft = (typeof v === "number" && style.align !== "left") || style.align === "right";
+        ctx.font = "bold 11px system-ui, sans-serif";
         ctx.textBaseline = "bottom";
-        let mx = x + w - 2;
-        for (const m of [...style.marks].reverse()) {
+        ctx.textAlign = onLeft ? "left" : "right";
+        let mx = onLeft ? x + 3 : x + w - 3;
+        for (const m of onLeft ? style.marks : [...style.marks].reverse()) {
           ctx.fillStyle = m.color;
-          ctx.fillText(m.glyph, mx, y + h - 1);
-          mx -= ctx.measureText(m.glyph).width + 2;
+          ctx.fillText(m.glyph, mx, y + h - 2);
+          const step = ctx.measureText(m.glyph).width + 3;
+          mx += onLeft ? step : -step;
         }
       }
       ctx.restore();

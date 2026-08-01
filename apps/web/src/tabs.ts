@@ -53,8 +53,9 @@ export class SheetTabs {
       tab.className = `tab${sheet.id === active ? " active" : ""}`;
       tab.setAttribute("role", "tab");
       tab.setAttribute("aria-selected", String(sheet.id === active));
-      tab.textContent = sheet.name;
-      tab.title = `${sheet.name}: double-click to rename, right-click for more`;
+      const review = wb.review.sheets[sheet.id];
+      tab.textContent = `${review?.ref ? `${review.ref} · ` : ""}${sheet.name}${review?.reviewed ? " ✓✓" : review?.prepared ? " ✓" : ""}`;
+      tab.title = `${sheet.name}${review?.prepared ? `: prepared by ${review.prepared.by}` : ""}${review?.reviewed ? `, reviewed by ${review.reviewed.by}` : ""}. Double-click to rename, right-click for more`;
       tab.draggable = true;
       if (sheet.color) tab.style.setProperty("--tab-color", sheet.color);
       tab.addEventListener("click", () => this.opts.switchTo(sheet.id));

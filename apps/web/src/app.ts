@@ -34,6 +34,8 @@ import { openPivot } from "./pivotpanel";
 import { RecipeRecorder, unbindAction, usedMemory } from "./recipe";
 import { openRecipes } from "./recipepanel";
 import { openLineage } from "./lineagepanel";
+import { reviewCommands } from "./reviewui";
+import { allMarks } from "./review";
 import { appendLog, fingerprint, onFileRead, type Fingerprint, type LogEntry } from "./evidence";
 import { openVerifyPack, saveEvidencePack } from "./evidencepack";
 import { openRunOnFiles } from "./recipefiles";
@@ -523,6 +525,11 @@ function refresh() {
   settleActiveSheet();
   syncFilterButtons();
   source.invalidateCondFormats();
+  // tick marks look the same on every sheet (custom ones come from the workbook)
+  {
+    const looks = new Map(allMarks(workbook.review).map((m) => [m.id, { glyph: m.glyph, color: m.color }]));
+    for (const s of workbook.sheets) s.source.markLook = (id) => looks.get(id) ?? { glyph: "?", color: "#5f6368" };
+  }
   syncCharts();
   showHint();
   tabs.render();
@@ -1596,6 +1603,17 @@ function paletteCommands(): Command[] {
       hint: "categorise categorize category tag bulk tagging rules learn uncategorised queue coding expenses",
       run: () => openCategorise({ workbook: () => workbook, activeSheet: () => activeId, source: () => source, range: () => grid.range, run: (a) => run(a), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }),
     },
+    ...reviewCommands({
+      workbook: () => workbook,
+      activeSheet: () => activeId,
+      range: () => grid.range,
+      cell: () => ({ ...grid.selection }),
+      run: (a) => run(a),
+      putBlob: (v) => blobs.put(v),
+      goTo: findDeps().goTo,
+      status: (t) => (statusLeft.textContent = t),
+      focusGrid: () => grid.focus(),
+    }),
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },
