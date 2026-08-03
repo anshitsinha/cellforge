@@ -27,6 +27,12 @@ export class Table {
     return this.columns[col]?.name;
   }
 
+  /** The raw Float64Array behind a numeric column, or null for text columns. */
+  numberColumn(col: number): Float64Array | null {
+    const column = this.columns[col];
+    return column?.kind === "number" ? column.values : null;
+  }
+
   getCell(row: number, col: number): Value {
     const column = this.columns[col];
     if (!column || row >= this.rowCount) return null;

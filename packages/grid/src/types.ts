@@ -14,6 +14,11 @@ export interface DataSource {
    * when missing or when it returns undefined.
    */
   getColumnName?(col: number): string | undefined;
+  /**
+   * Optional text to put in the editor when a cell is edited. Lets a source
+   * show "=SUM(A1:A9)" for editing while getCell returns the result.
+   */
+  getEditText?(row: number, col: number): string;
 }
 
 export interface CellRef {
