@@ -5,6 +5,7 @@ import { computeStats } from "./stats";
 import { SyntheticSource } from "./demo";
 import { BlankSource, EditableSource, parseInput, type Stored } from "./editable";
 import { download, exportCsv } from "./exporter";
+import { History } from "./history";
 import { formatBytes, importCsv } from "./importer";
 
 const DEMO_ROWS = 100_000_000;
@@ -81,17 +82,86 @@ grid.onSelectionChange = () => {
   updateSelectionStats();
 };
 
-/** Write several cells at once, then refresh everything that depends on them. */
-function writeCells(changes: { row: number; col: number; value: Stored }[]) {
-  for (const { row, col, value } of changes) source.setCell(row, col, value);
+// --- edits + undo/redo -------------------------------------------------------------
+
+const history = new History();
+const undoButton = document.getElementById("btn-undo") as HTMLButtonElement;
+const redoButton = document.getElementById("btn-redo") as HTMLButtonElement;
+
+// `undefined` means "no edit" (show the underlying data), which is different
+// from null ("edited to be empty") - undo needs to tell those apart.
+type CellChange = { row: number; col: number; value: Stored | undefined };
+
+function applyChanges(target: EditableSource, changes: CellChange[]) {
+  for (const { row, col, value } of changes) {
+    if (value === undefined) target.revertCell(row, col);
+    else target.setCell(row, col, value);
+  }
+}
+
+/** Repaint and update everything that shows cell contents. */
+function refresh() {
   grid.invalidate();
   syncFormulaBar();
   updateStatus();
   updateSelectionStats();
+  undoButton.disabled = !history.canUndo;
+  redoButton.disabled = !history.canRedo;
 }
 
+/** Write several cells as one undoable step. */
+function writeCells(changes: CellChange[], label: string) {
+  if (changes.length === 0) return;
+  // capture the sheet itself - history is cleared when a new sheet loads, but
+  // being explicit means an undo can never write into the wrong one
+  const target = source;
+  const before = changes.map(({ row, col }) => ({ row, col, value: target.getStored(row, col) }));
+  applyChanges(target, changes);
+  history.push({
+    label,
+    undo: () => applyChanges(target, before),
+    redo: () => applyChanges(target, changes),
+  });
+  refresh();
+}
+
+function undo() {
+  const cmd = history.undo();
+  if (cmd) statusLeft.textContent = `Undid ${cmd.label}`;
+  refresh();
+}
+
+function redo() {
+  const cmd = history.redo();
+  if (cmd) statusLeft.textContent = `Redid ${cmd.label}`;
+  refresh();
+}
+
+undoButton.addEventListener("click", () => {
+  undo();
+  grid.focus();
+});
+redoButton.addEventListener("click", () => {
+  redo();
+  grid.focus();
+});
+
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  // leave text inputs alone so ctrl+z inside the formula bar undoes typing
+  if (document.activeElement instanceof HTMLInputElement) return;
+  const k = e.key.toLowerCase();
+  if (k === "z" && !e.shiftKey) {
+    e.preventDefault();
+    undo();
+  } else if (k === "y" || (k === "z" && e.shiftKey)) {
+    e.preventDefault();
+    redo();
+  }
+});
+
 grid.onCellEdit = ({ row, col }, text) => {
-  writeCells([{ row, col, value: parseInput(text) }]);
+  writeCells([{ row, col, value: parseInput(text) }], `edit in ${columnLetter(col)}${row + 1}`);
 };
 
 // Clearing goes cell by cell into the sparse edit map, so a whole 100M row
@@ -103,13 +173,13 @@ grid.onClearRange = (range) => {
     statusLeft.textContent = `Clearing more than ${rowFormat.format(MAX_BULK_CELLS)} cells at once isn't supported yet.`;
     return;
   }
-  const changes = [];
+  const changes: CellChange[] = [];
   for (let row = range.top; row <= range.bottom; row++) {
     for (let col = range.left; col <= range.right; col++) {
       if (source.getCell(row, col) !== null) changes.push({ row, col, value: null });
     }
   }
-  writeCells(changes);
+  writeCells(changes, "clear");
 };
 
 // --- clipboard ------------------------------------------------------------------
@@ -149,7 +219,7 @@ document.addEventListener("paste", (e) => {
 
   const rows = parseTsv(text.replace(/\r?\n$/, "")); // Excel adds a trailing newline
   const { row: top, col: left } = grid.selection;
-  const changes = [];
+  const changes: CellChange[] = [];
   let right = left;
   for (let i = 0; i < rows.length && top + i < source.rowCount; i++) {
     for (let j = 0; j < rows[i].length && left + j < source.colCount; j++) {
@@ -157,7 +227,7 @@ document.addEventListener("paste", (e) => {
       right = Math.max(right, left + j);
     }
   }
-  writeCells(changes);
+  writeCells(changes, "paste");
   // select what was pasted so it's obvious where it went
   grid.selectRange({
     top,
@@ -194,9 +264,10 @@ grid.focus();
 function loadSource(next: EditableSource, name: string) {
   source = next;
   currentName = name;
+  history.clear();
   grid.setSource(source);
   fileName.textContent = name;
-  updateStatus();
+  refresh();
   grid.focus();
 }
 
