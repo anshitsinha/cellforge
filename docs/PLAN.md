@@ -186,8 +186,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 ### M9: Local AI 🔨
 - 🔨 kiln: small decoder LLMs (int4), KV cache, grammar-constrained decoding
 - 🔨 Model manager: hardware detection, tiered models, OPFS cache, offline use
-- 🔨 Deterministic command parser for common phrasings
-- 🔨 Tool loop over the action catalog: context → constrained action → execute → verify → retry
+- ✅ Deterministic command parser for common phrasings
+- ✅ Tool loop over the action catalog: context → constrained action → execute → verify → retry
 - ⬜ Ask, Do, Explain, Clean; audit assistant; category suggestions
 - ⬜ Internal eval harness for accuracy and time-to-answer
 

@@ -35,6 +35,7 @@ import { RecipeRecorder, unbindAction, usedMemory } from "./recipe";
 import { openRecipes } from "./recipepanel";
 import { openLineage } from "./lineagepanel";
 import { reviewCommands } from "./reviewui";
+import { askContext, setupAskBar } from "./askbar";
 import { allMarks } from "./review";
 import { appendLog, fingerprint, onFileRead, type Fingerprint, type LogEntry } from "./evidence";
 import { openVerifyPack, saveEvidencePack } from "./evidencepack";
@@ -1614,6 +1615,7 @@ function paletteCommands(): Command[] {
       status: (t) => (statusLeft.textContent = t),
       focusGrid: () => grid.focus(),
     }),
+    { id: "ask", title: "Ask or do…", keys: "Ctrl /", hint: "ai natural language type what you want plain english", run: () => askBar.open() },
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },
@@ -1763,6 +1765,15 @@ setupPalette({
   catalog: () => registry.catalog(),
   run: (a) => run(a),
   range: () => grid.range,
+  focusGrid: () => grid.focus(),
+});
+
+// the ask bar (Ctrl+/): plain-English requests turned into actions; a local model can be plugged in later
+const askBar = setupAskBar({
+  catalog: () => registry.catalog(),
+  context: () => askContext(workbook, activeId, grid.range),
+  run: (a) => run(a),
+  commands: paletteCommands,
   focusGrid: () => grid.focus(),
 });
 
