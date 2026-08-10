@@ -36,6 +36,8 @@ import { openRecipes } from "./recipepanel";
 import { openLineage } from "./lineagepanel";
 import { reviewCommands } from "./reviewui";
 import { askContext, setupAskBar } from "./askbar";
+import { clearLocalData, decryptFile, encryptFile, isEncrypted } from "./sharing";
+import { askPassword, confirmClear, openShareCheck } from "./sharingui";
 import { allMarks } from "./review";
 import { appendLog, fingerprint, onFileRead, type Fingerprint, type LogEntry } from "./evidence";
 import { openVerifyPack, saveEvidencePack } from "./evidencepack";
@@ -1616,6 +1618,36 @@ function paletteCommands(): Command[] {
       focusGrid: () => grid.focus(),
     }),
     { id: "ask", title: "Ask or do…", keys: "Ctrl /", hint: "ai natural language type what you want plain english", run: () => askBar.open() },
+    { id: "share-check", title: "Before you share: check for hidden content…", hint: "share safely hidden sheets rows notes personal data pii history versions privacy", run: () => openShareCheck(workbook, (id) => showSheet(id)) },
+    {
+      id: "save-protected",
+      title: "Save a password-protected copy…",
+      hint: "encrypt password protect secure share aes",
+      run: async () => {
+        const password = await askPassword("Password for the copy", true);
+        if (!password) return grid.focus();
+        statusLeft.textContent = "Encrypting…";
+        const book = toFile(packWorkbook(workbook, activeId, currentName));
+        const locked = await encryptFile(new Uint8Array(await book.arrayBuffer()), password);
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([locked as BlobPart], { type: "application/octet-stream" }));
+        a.download = `${currentName} (protected).cellforge`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+        statusLeft.textContent = "Saved a password-protected copy. Open it in cellforge with the password.";
+        grid.focus();
+      },
+    },
+    {
+      id: "clear-local",
+      title: "Clear all data cellforge keeps in this browser…",
+      hint: "privacy delete local storage autosave forget clear data",
+      run: async () => {
+        if (!(await confirmClear())) return grid.focus();
+        const n = await clearLocalData(saver?.store ?? null);
+        statusLeft.textContent = `Cleared ${n} stored item${n === 1 ? "" : "s"}. Reload the page to start fresh.`;
+      },
+    },
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },
@@ -1905,7 +1937,16 @@ async function openFileInto(file: File) {
   if (/\.cellforge$/i.test(file.name)) {
     try {
       statusLeft.textContent = `Opening ${file.name}…`;
-      const packed = fromFile(await file.arrayBuffer());
+      let raw: Uint8Array = new Uint8Array(await file.arrayBuffer());
+      if (isEncrypted(raw)) {
+        const password = await askPassword(`"${file.name}" is password-protected`, false);
+        if (password === null) {
+          statusLeft.textContent = "Ready";
+          return;
+        }
+        raw = await decryptFile(raw, password);
+      }
+      const packed = fromFile(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer);
       const opened = await unpackWorkbook(packed.meta, async (n) => {
         const data = packed.files.get(n);
         if (data === undefined) throw new Error(`The file is missing ${n}.`);
@@ -2006,3 +2047,8 @@ declare global {
   }
 }
 window.grid = grid;
+
+// offline use: the built app registers a service worker that keeps its own files cached
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch(() => undefined);
+}

@@ -69,11 +69,11 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Hidden-content check, encrypted export; clear all local data; offline bundle
-- [ ] Hidden-content check before sharing: hidden sheets, rows, columns, very hidden names, notes, review notes, formulas pointing outside, personal data columns (from the PII scan)
-- [ ] Encrypted export: a password-protected file (AES-GCM, key from PBKDF2) that cellforge can open, and a way to open it
-- [ ] Clear all local data: autosaves, versions, settings, with a clear confirmation
-- [ ] Offline bundle: the app works with no network after the first visit (service worker), and a downloadable single-folder build
-- [ ] Tests, user guide
+- [x] Hidden-content check before sharing: hidden sheets, rows, columns, very hidden names, notes, review notes, formulas pointing outside, personal data columns (from the PII scan)
+- [x] Encrypted export: a password-protected file (AES-GCM, key from PBKDF2) that cellforge can open, and a way to open it
+- [x] Clear all local data: autosaves, versions, settings, with a clear confirmation
+- [x] Offline bundle: the app works with no network after the first visit (service worker), and a downloadable single-folder build
+- [x] Tests, user guide
 
 ## Milestones
 
