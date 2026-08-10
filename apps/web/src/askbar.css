@@ -1,0 +1,88 @@
+/* The ask bar (Ctrl+/): reuses the palette's backdrop and box. */
+.askbar-body {
+  padding: 10px 14px 4px;
+  overflow-y: auto;
+  min-height: 2.5em;
+}
+
+.askbar-body p {
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+
+.askbar-explain {
+  font-size: 14px;
+}
+
+.askbar-muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.askbar-question {
+  color: var(--text);
+}
+
+.askbar-problem {
+  color: #b42318;
+}
+
+.askbar-problems,
+.askbar-examples,
+.askbar-suggestions {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.askbar-examples,
+.askbar-suggestions {
+  list-style: none;
+  padding-left: 0;
+}
+
+.askbar-suggestions li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.askbar-suggestions kbd {
+  margin-left: auto;
+  color: var(--muted);
+  font: 11px ui-monospace, Consolas, monospace;
+}
+
+.askbar-link {
+  font: inherit;
+  font-size: 13px;
+  padding: 3px 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+}
+
+.askbar-link:hover,
+.askbar-link:focus-visible {
+  text-decoration: underline;
+}
+
+.askbar-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 14px 12px;
+}
+
+.askbar-do:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+@media (prefers-color-scheme: dark) {
+  .askbar-problem {
+    color: #ff8a80;
+  }
+}

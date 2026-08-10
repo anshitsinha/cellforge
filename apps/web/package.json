@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@cellforge/actions": "*",
+    "@cellforge/ai": "*",
     "@cellforge/core": "*",
     "@cellforge/gpu": "*",
     "@cellforge/grid": "*"
