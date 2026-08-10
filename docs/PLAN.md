@@ -68,12 +68,11 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Hidden-content check, encrypted export; clear all local data; offline bundle
-- [x] Hidden-content check before sharing: hidden sheets, rows, columns, very hidden names, notes, review notes, formulas pointing outside, personal data columns (from the PII scan)
-- [x] Encrypted export: a password-protected file (AES-GCM, key from PBKDF2) that cellforge can open, and a way to open it
-- [x] Clear all local data: autosaves, versions, settings, with a clear confirmation
-- [x] Offline bundle: the app works with no network after the first visit (service worker), and a downloadable single-folder build
-- [x] Tests, user guide
+### Scenarios (copy-on-write sheets) compared side by side
+- [ ] Scenario model: named sets of input-cell values (base, best, worst…) over the same workbook, applied without copying data; the active scenario switches inputs as one undo step
+- [ ] Compare: chosen result cells across every scenario side by side (values and differences from base), recalculated per scenario on a copy so the workbook isn't disturbed
+- [ ] Scenario manager panel: add / edit / delete scenarios, pick input and result cells from the selection, show / apply a scenario, summary sheet
+- [ ] Actions, saved with the file; tests, user guide
 
 ## Milestones
 
@@ -132,7 +131,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Notes on cells, hyperlinks
 
 ### M5: Query engine, explore, reconcile 🔨
-- ⬜ Query engine (DuckDB-WASM, loaded on demand) over sheet columns
+- 🔨 Query engine over sheet columns: our own SQL on the columnar storage (decided instead of DuckDB-WASM: no 30 MB download, no runtime dependency, works offline)
 - ✅ Pivot tables (drag fields, drill-down to rows), slicers
 - ✅ Column profiles
 - ✅ Join doctor (match rate, duplicate keys, orphans) and guided joins
@@ -145,7 +144,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Trial balance compare; GL → TB tie-out
 - ✅ Fuzzy name matching incl. name order; mapping tables
 - ✅ Key-based file compare
-- ⬜ Scenarios (copy-on-write sheets) compared side by side
+- 🔨 Scenarios (copy-on-write sheets) compared side by side
 - 🔨 Acceptance test: synthetic bank/ledger month modelled on real data at 6K and 6M rows
 
 ### M6: Recipes and checks 🔨
@@ -172,7 +171,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Review mode: tick marks with legend, reviewed-by, notes that block sign-off,
   workpaper references
 - ✅ Share safely: PII scan, mask / hash / pseudonymise / redact into a safe copy
-- 🔨 Hidden-content check, encrypted export; clear all local data; offline bundle
+- ✅ Hidden-content check, encrypted export; clear all local data; offline bundle
 
 ### M8: Charts and reports 🔨
 - ✅ Charts: column, bar, line, area, pie, scatter, combo, histogram, waterfall,
