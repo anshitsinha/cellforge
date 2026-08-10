@@ -1,0 +1,15 @@
+{
+  "name": "@cellforge/ai",
+  "version": "0.0.1",
+  "description": "Turns requests in plain English into actions: a deterministic parser for common phrasings, plus a tool loop (propose, validate, run, verify, retry) a local model can plug into",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@cellforge/actions": "*"
+  }
+}
