@@ -17,6 +17,7 @@ import { captureVersion, versionSheets, type Version } from "./versions";
 import type { ChartSpec } from "./charts/model";
 import { checkDv, subtractRange, type DvRule } from "./validation";
 import { safeLink } from "./links";
+import type { ScenarioModel } from "./scenarios";
 import { allMarks, type MarkDef, type ReviewNote, type SheetReview } from "./review";
 import { bindStep, type Recipe, type RecipeStep } from "./recipe";
 import { checkRule, describeRule, newRuleId, type CfRule } from "./condformat";
@@ -945,6 +946,23 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         return back.length ? { type: "steps.undo", params: { steps: ctx.blobs.put(back.reverse()) } } : null;
       },
     });
+
+  // ------------------------------------------------------------ scenarios --
+  registry.register<{ model: ScenarioModel }>({
+    type: "scenarios.set",
+    title: "Set the workbook's scenarios: input cells, result cells, and named sets of input values",
+    schema: s.object({ model: { type: "object", properties: {}, additionalProperties: true } }),
+    describe: () => "scenarios",
+    recordable: false,
+    apply(ctx, p) {
+      const m = p.model;
+      if (!Array.isArray(m.inputs) || !Array.isArray(m.results) || !Array.isArray(m.scenarios)) throw new Error("Scenarios need inputs, results and a list of scenarios.");
+      for (const sc of m.scenarios) if (sc.values.length !== m.inputs.length) throw new Error(`Scenario "${sc.name}" has ${sc.values.length} values for ${m.inputs.length} inputs.`);
+      const before = structuredClone(ctx.workbook.scenarios);
+      ctx.workbook.scenarios = structuredClone(m);
+      return { type: "scenarios.set", params: { model: before } };
+    },
+  });
 
   // --------------------------------------------------------------- review --
   const revRange = s.object({ top: s.int(undefined, 0), left: s.int(undefined, 0), bottom: s.int(undefined, 0), right: s.int(undefined, 0) });

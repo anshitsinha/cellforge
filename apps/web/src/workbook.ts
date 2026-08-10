@@ -8,6 +8,7 @@ import type { ChartSpec } from "./charts/model";
 import type { Recipe } from "./recipe";
 import type { Evidence } from "./evidence";
 import { emptyReview, type WorkbookReview } from "./review";
+import { emptyScenarios, type ScenarioModel } from "./scenarios";
 import type { CatRule, CheckDef } from "@cellforge/core";
 import { BlankSource, EditableSource } from "./editable";
 import type { Version } from "./versions";
@@ -62,6 +63,8 @@ export class Workbook {
   checks: CheckDef[] = [];
   /** categorisation rules; saved with the workbook */
   categoryRules: CatRule[] = [];
+  /** scenarios: input cells, result cells and named sets of input values */
+  scenarios: ScenarioModel = emptyScenarios();
   /** tick marks, sign-offs and workpaper references */
   review: WorkbookReview = emptyReview();
   /** the hash-chained action log and the fingerprints of files read into it */

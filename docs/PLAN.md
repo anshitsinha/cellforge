@@ -69,8 +69,8 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Scenarios (copy-on-write sheets) compared side by side
-- [ ] Scenario model: named sets of input-cell values (base, best, worst…) over the same workbook, applied without copying data; the active scenario switches inputs as one undo step
-- [ ] Compare: chosen result cells across every scenario side by side (values and differences from base), recalculated per scenario on a copy so the workbook isn't disturbed
+- [x] Scenario model: named sets of input-cell values (base, best, worst…) over the same workbook, applied without copying data; the active scenario switches inputs as one undo step
+- [x] Compare: chosen result cells across every scenario side by side (values and differences from base), recalculated per scenario on a copy so the workbook isn't disturbed
 - [ ] Scenario manager panel: add / edit / delete scenarios, pick input and result cells from the selection, show / apply a scenario, summary sheet
 - [ ] Actions, saved with the file; tests, user guide
 
