@@ -36,6 +36,7 @@ import { openRecipes } from "./recipepanel";
 import { openLineage } from "./lineagepanel";
 import { reviewCommands } from "./reviewui";
 import { askContext, setupAskBar } from "./askbar";
+import { openScenarios } from "./scenariosui";
 import { clearLocalData, decryptFile, encryptFile, isEncrypted } from "./sharing";
 import { askPassword, confirmClear, openShareCheck } from "./sharingui";
 import { allMarks } from "./review";
@@ -1648,6 +1649,7 @@ function paletteCommands(): Command[] {
         statusLeft.textContent = `Cleared ${n} stored item${n === 1 ? "" : "s"}. Reload the page to start fresh.`;
       },
     },
+    { id: "scenarios", title: "Scenarios (what-if: base, best, worst)…", hint: "scenario what if manager best worst case compare sensitivity", run: () => openScenarios({ workbook: () => workbook, activeSheet: () => activeId, range: () => grid.range, run: (a) => run(a), putBlob: (v) => blobs.put(v), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }) },
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },

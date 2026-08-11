@@ -367,6 +367,7 @@ export class EditableSource implements DataSource {
     copy.editsPerColumn = new Map(this.editsPerColumn);
     copy.count = this.count;
     copy.formulas = this.formulas;
+    copy.spillFormulas = this.spillFormulas; // without it a copy never spills
     // kernels are pure functions of the template, so they can be shared;
     // cached chunks can't (they belong to this sheet's data)
     copy.fills = this.fills.map((f) => ({ ...f, chunks: new Map(), computing: false }));

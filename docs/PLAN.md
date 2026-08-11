@@ -68,11 +68,12 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Scenarios (copy-on-write sheets) compared side by side
-- [x] Scenario model: named sets of input-cell values (base, best, worst…) over the same workbook, applied without copying data; the active scenario switches inputs as one undo step
-- [x] Compare: chosen result cells across every scenario side by side (values and differences from base), recalculated per scenario on a copy so the workbook isn't disturbed
-- [ ] Scenario manager panel: add / edit / delete scenarios, pick input and result cells from the selection, show / apply a scenario, summary sheet
-- [ ] Actions, saved with the file; tests, user guide
+### Templates for the three hero workflows: monthly close, bank rec, audit tests
+- [ ] Template model: a starter workbook (sheets, layout, formulas, checks, conditional formats, review marks legend) plus recipes, built in code so it stays in step with the app
+- [ ] Monthly close template: TB import sheet, mapping, prior month, flux with thresholds, checks (TB balances, mapping complete), sign-off sheet
+- [ ] Bank rec template: cash book and statement import, reconcile settings, rec statement, outstanding items roll-forward, checks
+- [ ] Audit tests template: population import, duplicates, gaps, Benford, JE tests, sample with recorded seed, results summary and legend
+- [ ] "New from template…" gallery; tests, user guide
 
 ## Milestones
 
@@ -144,14 +145,14 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Trial balance compare; GL → TB tie-out
 - ✅ Fuzzy name matching incl. name order; mapping tables
 - ✅ Key-based file compare
-- 🔨 Scenarios (copy-on-write sheets) compared side by side
+- ✅ Scenarios (copy-on-write sheets) compared side by side
 - 🔨 Acceptance test: synthetic bank/ledger month modelled on real data at 6K and 6M rows
 
 ### M6: Recipes and checks 🔨
 - ✅ Recipe panel: recorded steps, edit / reorder / disable, parameters,
   live preview at every step, per-step time and memory profile
 - ✅ Re-run a recipe on new files or a folder
-- ⬜ Templates for the three hero workflows: monthly close, bank rec, audit tests
+- 🔨 Templates for the three hero workflows: monthly close, bank rec, audit tests
 - ✅ Data checks: column rules, master-list lookups, debits = credits; green/red
   checklist that gates export
 - ✅ Categorisation rules that learn from manual tagging; bulk tagging; uncategorised queue
