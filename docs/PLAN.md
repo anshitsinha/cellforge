@@ -68,12 +68,11 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Templates for the three hero workflows: monthly close, bank rec, audit tests
-- [ ] Template model: a starter workbook (sheets, layout, formulas, checks, conditional formats, review marks legend) plus recipes, built in code so it stays in step with the app
-- [ ] Monthly close template: TB import sheet, mapping, prior month, flux with thresholds, checks (TB balances, mapping complete), sign-off sheet
-- [ ] Bank rec template: cash book and statement import, reconcile settings, rec statement, outstanding items roll-forward, checks
-- [ ] Audit tests template: population import, duplicates, gaps, Benford, JE tests, sample with recorded seed, results summary and legend
-- [ ] "New from template…" gallery; tests, user guide
+### Evidence linking: attached documents stored outside the workbook, cell ↔
+- [ ] Document store: attach files (PDF, images) to a workbook; kept in the browser's private storage by SHA-256, not inside the workbook file; listed with name, size, fingerprint
+- [ ] Links: a cell ↔ a place in a document (PDF page and region, or image region), shown on hover and in the explain panel; open the document at that place
+- [ ] Validation: a linked cell's value compared with the number read from the document region (text PDFs), flagged when they differ
+- [ ] Evidence pack includes the attached documents; tests, user guide
 
 ## Milestones
 
@@ -152,7 +151,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Recipe panel: recorded steps, edit / reorder / disable, parameters,
   live preview at every step, per-step time and memory profile
 - ✅ Re-run a recipe on new files or a folder
-- 🔨 Templates for the three hero workflows: monthly close, bank rec, audit tests
+- ✅ Templates for the three hero workflows: monthly close, bank rec, audit tests
 - ✅ Data checks: column rules, master-list lookups, debits = credits; green/red
   checklist that gates export
 - ✅ Categorisation rules that learn from manual tagging; bulk tagging; uncategorised queue
@@ -167,7 +166,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Sampling (random, systematic, stratified, monetary-unit) with recorded seed
 - ✅ Footing / cross-footing and roll-forward checks
 - ✅ Evidence pack: workbook + recipe + input fingerprints + hash-chained action log
-- ⬜ Evidence linking: attached documents stored outside the workbook, cell ↔
+- 🔨 Evidence linking: attached documents stored outside the workbook, cell ↔
   document-region links, validation that compares values
 - ✅ Review mode: tick marks with legend, reviewed-by, notes that block sign-off,
   workpaper references

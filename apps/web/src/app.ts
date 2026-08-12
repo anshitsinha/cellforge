@@ -37,6 +37,7 @@ import { openLineage } from "./lineagepanel";
 import { reviewCommands } from "./reviewui";
 import { askContext, setupAskBar } from "./askbar";
 import { openScenarios } from "./scenariosui";
+import { buildTemplate, pickTemplate, TEMPLATES } from "./templates";
 import { clearLocalData, decryptFile, encryptFile, isEncrypted } from "./sharing";
 import { askPassword, confirmClear, openShareCheck } from "./sharingui";
 import { allMarks } from "./review";
@@ -1650,6 +1651,21 @@ function paletteCommands(): Command[] {
       },
     },
     { id: "scenarios", title: "Scenarios (what-if: base, best, worst)…", hint: "scenario what if manager best worst case compare sensitivity", run: () => openScenarios({ workbook: () => workbook, activeSheet: () => activeId, range: () => grid.range, run: (a) => run(a), putBlob: (v) => blobs.put(v), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }) },
+    {
+      id: "template",
+      title: "New from a template (monthly close, bank rec, audit tests)…",
+      hint: "template starter new workbook monthly close bank reconciliation audit tests",
+      run: async () => {
+        const kind = await pickTemplate();
+        if (!kind) return grid.focus();
+        if (workbookEdited() && !confirm("Discard your changes and start from the template?")) return;
+        statusLeft.textContent = "Building the template…";
+        const wb = await buildTemplate(kind);
+        loadWorkbook(wb, wb.sheets[0].id, TEMPLATES.find((t) => t.kind === kind)!.title);
+        void snapshotNow();
+        statusLeft.textContent = "Started from the template: read \"Start here\" first.";
+      },
+    },
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },

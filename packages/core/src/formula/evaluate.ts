@@ -154,7 +154,7 @@ export const LIFTED = new Set(
   (
     "ABS SQRT INT ROUND ROUNDUP ROUNDDOWN TRUNC MOD POWER SIGN EXP LN LOG LOG10 EVEN ODD FACT CEILING FLOOR MROUND QUOTIENT " +
     "LEN UPPER LOWER TRIM PROPER LEFT RIGHT MID FIND SEARCH SUBSTITUTE REPLACE TEXT VALUE NUMBERVALUE EXACT CLEAN REPT CHAR CODE " +
-    "TEXTBEFORE TEXTAFTER IF IFERROR IFNA IFS SWITCH NOT ISERROR ISNA ISNUMBER ISTEXT ISLOGICAL ISBLANK " +
+    "TEXTBEFORE TEXTAFTER IF IFERROR IFNA IFS SWITCH NOT ISERROR ISNA ISNUMBER ISTEXT ISLOGICAL ISBLANK N " +
     "DATE TIME YEAR MONTH DAY HOUR MINUTE SECOND WEEKDAY EDATE EOMONTH DATEVALUE DAYS WEEKNUM ISOWEEKNUM DATEDIF YEARFRAC DAYS360"
   ).split(" "),
 );
@@ -869,6 +869,13 @@ export const FUNCTIONS: Record<string, Fn> = {
     return isError(v) && v.code === "#N/A";
   },
   ISNUMBER: (args) => (args.length === 1 ? typeof scalarArg(args[0]) === "number" : errors.value),
+  // N: a number stays, TRUE / FALSE become 1 / 0, text and blanks 0, errors pass through
+  N: (args) => {
+    if (args.length !== 1) return errors.value;
+    const v = scalarArg(args[0]);
+    if (isError(v)) return v;
+    return typeof v === "number" ? v : typeof v === "boolean" ? (v ? 1 : 0) : 0;
+  },
   ISTEXT: (args) => (args.length === 1 ? typeof scalarArg(args[0]) === "string" : errors.value),
   ISLOGICAL: (args) => (args.length === 1 ? typeof scalarArg(args[0]) === "boolean" : errors.value),
   ISBLANK: (args) => (args.length === 1 ? scalarArg(args[0]) === null : errors.value),

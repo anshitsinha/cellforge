@@ -618,6 +618,13 @@ const LIST: FunctionInfo[] = [
       ]
     },
     {
+      name: "N",
+      category: "Information",
+      summary: "The value as a number: numbers stay as they are, TRUE is 1, FALSE, text and empty cells are 0. Handy to add up cells that may hold text.",
+      args: [{ name: "value", description: "a value, cell or formula" }],
+      examples: [["=N(A1)", 10], ["=N(\"abc\")", 0], ["=N(TRUE)", 1]],
+    },
+    {
       name: "ISNUMBER",
       category: "Information",
       summary: "TRUE if the value is a number (dates are numbers too).",

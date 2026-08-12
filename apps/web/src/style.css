@@ -1418,3 +1418,20 @@ button:disabled {
   margin: 4px 0 0;
   padding-left: 16px;
 }
+
+/* ---- templates ---- */
+.template-cards {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.template-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 12px;
+  text-align: left;
+  white-space: normal;
+}
