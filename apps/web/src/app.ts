@@ -37,6 +37,7 @@ import { openLineage } from "./lineagepanel";
 import { reviewCommands } from "./reviewui";
 import { askContext, setupAskBar } from "./askbar";
 import { openScenarios } from "./scenariosui";
+import { openDocuments } from "./docviewer";
 import { buildTemplate, pickTemplate, TEMPLATES } from "./templates";
 import { clearLocalData, decryptFile, encryptFile, isEncrypted } from "./sharing";
 import { askPassword, confirmClear, openShareCheck } from "./sharingui";
@@ -361,6 +362,21 @@ function noteInput(file: File, kind: Fingerprint["kind"]) {
     .catch(() => undefined);
 }
 onFileRead((file, kind) => noteInput(file, kind));
+
+/** Where attached documents' bytes live: the browser's private storage (null where it isn't available). */
+// documents are stored by fingerprint, so any tab can use the storage (no autosave lock needed)
+let docStore: Awaited<ReturnType<typeof OpfsStore.open>> = null;
+void OpfsStore.open("documents").then((st) => (docStore = st)).catch(() => undefined);
+const docBytes = () => (docStore ? { read: (n: string) => docStore!.read(n), write: (n: string, d: Uint8Array) => docStore!.write(n, d) } : null);
+const docDeps = () => ({
+  workbook: () => workbook,
+  activeSheet: () => activeId,
+  cell: () => ({ ...grid.selection }),
+  store: docBytes,
+  run: (a: Action) => run(a),
+  goTo: findDeps().goTo,
+  status: (t: string) => (statusLeft.textContent = t),
+});
 
 const recipeFilesDeps = () => ({
   registry,
@@ -1593,7 +1609,7 @@ function paletteCommands(): Command[] {
       id: "evidence-pack",
       title: "Save an evidence pack…",
       hint: "evidence pack audit trail log hash fingerprint working papers review sign off",
-      run: () => void logQueue.then(() => saveEvidencePack(workbook, workbook.get(activeId).name, (t) => (statusLeft.textContent = t))),
+      run: () => void logQueue.then(() => saveEvidencePack(workbook, workbook.get(activeId).name, (t) => (statusLeft.textContent = t), docBytes())),
     },
     { id: "evidence-verify", title: "Verify an evidence pack…", hint: "verify evidence pack hash chain tamper check", run: () => openVerifyPack(workbook, (t) => (statusLeft.textContent = t)) },
     {
@@ -1646,7 +1662,7 @@ function paletteCommands(): Command[] {
       hint: "privacy delete local storage autosave forget clear data",
       run: async () => {
         if (!(await confirmClear())) return grid.focus();
-        const n = await clearLocalData(saver?.store ?? null);
+        const n = (await clearLocalData(saver?.store ?? (await OpfsStore.open()))) + (await clearLocalData(docStore));
         statusLeft.textContent = `Cleared ${n} stored item${n === 1 ? "" : "s"}. Reload the page to start fresh.`;
       },
     },
@@ -1666,6 +1682,10 @@ function paletteCommands(): Command[] {
         statusLeft.textContent = "Started from the template: read \"Start here\" first.";
       },
     },
+    { id: "documents", title: "Supporting documents (attach, link cells as evidence)…", hint: "evidence documents attach pdf invoice bank letter confirmation link support vouch", run: () => openDocuments(docDeps()) },
+    ...(source.extraAt(row, col)?.evidence
+      ? [{ id: "evidence-open", title: "Show this cell's evidence", hint: "evidence document link open", run: () => openDocuments(docDeps(), source.extraAt(row, col)!.evidence) }, { id: "evidence-unlink", title: "Remove this cell's evidence link", hint: "evidence unlink", run: () => run({ type: "evidence.link", params: { row, col, link: null } }) }]
+      : []),
     { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
     { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
     { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },

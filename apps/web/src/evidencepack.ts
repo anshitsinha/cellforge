@@ -4,6 +4,7 @@ import { summary, verifyLog, type Evidence, type LogEntry } from "./evidence";
 import { packWorkbook, toFile } from "./persist";
 import type { Workbook } from "./workbook";
 import { changedSince } from "./review";
+import { documentBytes, type DocBytes } from "./docstore";
 
 function download(blob: Blob, name: string): void {
   const a = document.createElement("a");
@@ -29,8 +30,29 @@ function reviewSection(wb: Workbook): string {
   return ["", "", "## Workpapers", "", "| Ref | Sheet | Prepared | Reviewed | Open review notes |", "|---|---|---|---|---:|", ...rows, ""].join("\n");
 }
 
+/** The supporting documents, under documents/ (missing ones listed in documents/MISSING.txt). */
+async function documentFiles(wb: Workbook, docs: DocBytes | null): Promise<[string, string | Uint8Array][]> {
+  if (!wb.documents.length) return [];
+  const out: [string, string | Uint8Array][] = [];
+  const missing: string[] = [];
+  const used = new Set<string>();
+  for (const d of wb.documents) {
+    const bytes = docs ? await documentBytes(docs, d.sha256) : null;
+    if (!bytes) {
+      missing.push(`${d.name} (SHA-256 ${d.sha256})`);
+      continue;
+    }
+    let file = d.name.replace(/[\\/:*?"<>|]/g, "_");
+    while (used.has(file.toLowerCase())) file = "_" + file;
+    used.add(file.toLowerCase());
+    out.push([`documents/${file}`, bytes]);
+  }
+  if (missing.length) out.push(["documents/MISSING.txt", `Not in this browser's storage, so not included:\n${missing.join("\n")}\n`]);
+  return out;
+}
+
 /** The pack's files: the workbook, recipes, inputs, log and a readable summary. */
-export async function evidenceFiles(wb: Workbook, active: string, name: string): Promise<[string, string | Uint8Array][]> {
+export async function evidenceFiles(wb: Workbook, active: string, name: string, docs: DocBytes | null = null): Promise<[string, string | Uint8Array][]> {
   const verified = await verifyLog(wb.evidence.log);
   const book = toFile(packWorkbook(wb, active, name));
   return [
@@ -39,13 +61,14 @@ export async function evidenceFiles(wb: Workbook, active: string, name: string):
     ["inputs.json", JSON.stringify(wb.evidence.inputs, null, 1)],
     ["recipes.json", JSON.stringify(wb.recipes, null, 1)],
     [`${name}.cellforge`, new Uint8Array(await book.arrayBuffer())],
+    ...(await documentFiles(wb, docs)),
   ];
 }
 
-export async function saveEvidencePack(wb: Workbook, name: string, status: (t: string) => void): Promise<void> {
+export async function saveEvidencePack(wb: Workbook, name: string, status: (t: string) => void, docs: DocBytes | null = null): Promise<void> {
   status("Making the evidence pack…");
   const active = wb.sheets.find((s) => !s.hidden)?.id ?? wb.sheets[0].id;
-  const bytes = await zip(await evidenceFiles(wb, active, name));
+  const bytes = await zip(await evidenceFiles(wb, active, name, docs));
   download(new Blob([bytes as BlobPart], { type: "application/zip" }), `${name} evidence ${new Date().toISOString().slice(0, 10)}.zip`);
   status(`Saved the evidence pack: ${wb.evidence.log.length} log entries, ${wb.evidence.inputs.length} input file${wb.evidence.inputs.length === 1 ? "" : "s"}`);
 }

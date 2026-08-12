@@ -1435,3 +1435,42 @@ button:disabled {
   text-align: left;
   white-space: normal;
 }
+
+/* ---- supporting documents ---- */
+.doc-page {
+  position: relative;
+  background: #fff;
+  color: #111;
+  border: 1px solid var(--border, #dadce0);
+  margin: 6px 0;
+  overflow: hidden;
+  cursor: crosshair;
+  user-select: none;
+  touch-action: none;
+}
+
+.doc-page span {
+  position: absolute;
+  white-space: pre;
+  line-height: 1;
+  font-family: Helvetica, Arial, sans-serif;
+}
+
+.doc-image img {
+  display: block;
+  width: 100%;
+  pointer-events: none;
+}
+
+.doc-region {
+  position: absolute;
+  border: 2px solid #1a73e8;
+  background: rgb(26 115 232 / 15%);
+  pointer-events: none;
+}
+
+.doc-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

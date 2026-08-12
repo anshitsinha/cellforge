@@ -62,3 +62,18 @@ describe("supporting documents", () => {
     await expect(h.run({ type: "evidence.link", params: { row: 0, col: 1, link: { doc: "nope" } } })).rejects.toThrow(/isn't attached/);
   });
 });
+
+describe("evidence packs with documents", () => {
+  it("carry the attached documents", async () => {
+    const { evidenceFiles } = await import("./evidencepack");
+    const store = memory();
+    const wb = new Workbook({ name: "Cash", source: new EditableSource(new BlankSource(3, 2)) });
+    const meta = await attachDocument(store, new File([statement() as BlobPart], "letter.pdf", { type: "application/pdf" }));
+    wb.documents = [meta, { ...meta, sha256: "f".repeat(64), name: "gone.pdf" }];
+    const files = await evidenceFiles(wb, wb.sheets[0].id, "Cash", store);
+    const names = files.map(([n]) => n);
+    expect(names).toContain("documents/letter.pdf");
+    expect(names).toContain("documents/MISSING.txt");
+    expect(String(files.find(([n]) => n === "documents/MISSING.txt")![1])).toContain("gone.pdf");
+  });
+});

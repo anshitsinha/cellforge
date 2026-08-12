@@ -37,7 +37,8 @@ export interface DocBytes {
   write(name: string, data: Uint8Array): Promise<void>;
 }
 
-const key = (sha: string) => `docs/${sha}`;
+// flat names: browser private file systems don't allow "/" in a file name
+const key = (sha: string) => `doc-${sha}`;
 
 /** Keep a file and return what the workbook records about it. Same bytes = same document. */
 export async function attachDocument(store: DocBytes, file: File): Promise<DocMeta> {
