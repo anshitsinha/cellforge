@@ -76,6 +76,7 @@ export function setupHistoryPanel(d: HistoryPanelDeps): { toggle: () => void; re
     const close = el("button", "hp-close", "×");
     close.type = "button";
     close.title = "Close";
+    close.setAttribute("aria-label", "Close history");
     close.addEventListener("click", toggle);
     head.append(close);
     root.append(head);

@@ -3,6 +3,7 @@
  * rows as they'll come in, and the options to change that.
  */
 import { previewCsv, type CsvOptions, type Encoding } from "@cellforge/core";
+import { modal } from "./a11y";
 
 const DELIMS: [string, string][] = [
   ["", "Detect"],
@@ -24,6 +25,7 @@ export async function askCsvOptions(file: File): Promise<CsvOptions | null> {
   return new Promise((resolve) => {
     const back = document.createElement("div");
     back.className = "palette-backdrop";
+    modal(back);
     back.innerHTML = `
       <div class="palette import-dialog" role="dialog" aria-label="Open a text file">
         <form class="palette-form">
@@ -56,8 +58,12 @@ export async function askCsvOptions(file: File): Promise<CsvOptions | null> {
       header: header.checked,
     });
 
+    // what Detect found, passed on so the import splits the file the same way
+    // (ties go to the locale's delimiter: ";" where the comma is the decimal)
+    let detectedDelimiter = ",";
     const render = () => {
       const p = previewCsv(head, options());
+      detectedDelimiter = p.delimiter;
       const dName = DELIMS.find(([v]) => v === p.delimiter)?.[1] ?? JSON.stringify(p.delimiter);
       detected.textContent = `Reading it as ${ENCODINGS.find(([v]) => v === p.encoding)?.[1] ?? p.encoding}, split by ${dName.toLowerCase()}.`;
       const table = document.createElement("table");
@@ -81,7 +87,8 @@ export async function askCsvOptions(file: File): Promise<CsvOptions | null> {
     };
     back.querySelector("form")!.addEventListener("submit", (e) => {
       e.preventDefault();
-      done(options());
+      const o = options();
+      done(o.delimiter ? o : { ...o, delimiter: detectedDelimiter });
     });
     back.querySelector("[data-act=cancel]")!.addEventListener("click", () => done(null));
     back.addEventListener("keydown", (e) => {

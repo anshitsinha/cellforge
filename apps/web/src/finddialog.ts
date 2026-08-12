@@ -10,6 +10,7 @@ import { type CellRange, columnLetter } from "@cellforge/grid";
 import { compileQuery, find, findNext, type FindOptions, planReplace, replaceAction, replacementInput, type Match } from "./findreplace";
 import { setCells } from "./actions";
 import type { Workbook } from "./workbook";
+import { modal } from "./a11y";
 
 export interface FindReplaceDeps {
   workbook: () => Workbook;
@@ -46,6 +47,8 @@ export function openFindReplace(d: FindReplaceDeps, mode: "find" | "replace"): v
 
   const back = document.createElement("div");
   back.className = "palette-backdrop find-backdrop";
+  // the sheet stays usable behind Find, so it isn't modal
+  modal(back, { modal: false });
   back.innerHTML = `<div class="palette find-dialog" role="dialog" aria-label="Find and replace"><div class="palette-form">
     <h3></h3>
     <label>Find <input type="text" data-k="query" spellcheck="false" autocomplete="off"></label>

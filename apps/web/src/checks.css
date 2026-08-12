@@ -70,15 +70,15 @@
 }
 
 .ck-pass .ck-mark {
-  color: #1e8e3e;
+  color: #137333;
 }
 
 .ck-fail .ck-mark {
-  color: #d93025;
+  color: #c5221f;
 }
 
 .ck-warn .ck-mark {
-  color: #b06000;
+  color: #a35200;
 }
 
 .ck-text {
@@ -140,12 +140,12 @@
 }
 
 .ck-summary .ck-good {
-  color: #1e8e3e;
+  color: #137333;
   font-weight: 600;
 }
 
 .ck-summary .ck-bad {
-  color: #d93025;
+  color: #c5221f;
   font-weight: 600;
 }
 

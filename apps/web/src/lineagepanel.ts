@@ -26,6 +26,7 @@ export function openLineage(d: LineageDeps): void {
   const panel = el("aside", { className: "recipe-panel lineage-panel" });
   panel.setAttribute("aria-label", "Where this number came from");
   const close = el("button", { type: "button", textContent: "×", title: "Close" });
+  close.setAttribute("aria-label", "Close");
   close.addEventListener("click", () => panel.remove());
   panel.append(el("div", { className: "recipe-head" }, el("strong", { textContent: `Where ${root.label} came from` }), close));
 

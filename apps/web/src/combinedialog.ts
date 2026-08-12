@@ -6,6 +6,7 @@ import type { Action } from "@cellforge/actions";
 import { alignColumns, columnKey, combineParts, Table, type AlignedColumn, type FilePart } from "@cellforge/core";
 import { COMBINABLE, readPart } from "./combine";
 import { EditableSource } from "./editable";
+import { modal } from "./a11y";
 
 export interface CombineDeps {
   run: (a: Action) => Promise<unknown>;
@@ -85,6 +86,7 @@ export function showAlignment(d: CombineDeps, parts: FilePart[], failed: string[
 
   const back = document.createElement("div");
   back.className = "palette-backdrop";
+  modal(back);
   back.innerHTML = `<div class="palette import-dialog" role="dialog" aria-label="Combine files"><div class="palette-form"></div></div>`;
   const body = back.querySelector<HTMLElement>(".palette-form")!;
   const h = document.createElement("h3");

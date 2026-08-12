@@ -6,7 +6,7 @@
   --border: #e3e5e8;
   --text: #16181d;
   --muted: #5d6571;
-  --accent: #1a73e8;
+  --accent: #1967d2; /* #1a73e8 was 4.2:1 on --panel; this is 5.0:1 */
   --accent-soft: rgba(26, 115, 232, 0.1);
 
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;

@@ -14,6 +14,8 @@
  * 29 February 1900 (serial 60), so serials match files made in Excel.
  */
 
+import { DEFAULT_LOCALE, getLocale, groupDigits, type Locale } from "./locale";
+
 export interface Formatted {
   text: string;
   /** a colour from the code, e.g. [Red] */
@@ -239,8 +241,17 @@ function digitsOf(x: number, d: number): [string, string] {
   return [a === "0" ? "" : a, b];
 }
 
-/** Excel's General: up to 11 characters, switching to scientific when needed. */
-export function formatGeneral(n: number): string {
+/**
+ * Excel's General: up to 11 characters, switching to scientific when needed.
+ * Uses en-US ("1234.5") unless a locale is passed: it also makes edit text
+ * and stored text, which should not change with the display locale.
+ */
+export function formatGeneral(n: number, locale: Locale = DEFAULT_LOCALE): string {
+  const s = formatGeneralPlain(n);
+  return locale.decimal === "." ? s : s.replace(".", locale.decimal);
+}
+
+function formatGeneralPlain(n: number): string {
   if (!isFinite(n)) return n > 0 ? "#NUM!" : "#NUM!";
   if (n === 0) return "0";
   const abs = Math.abs(n);
@@ -256,7 +267,7 @@ export function formatGeneral(n: number): string {
   return String(roundTo(n, decimals)).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 }
 
-function formatNumber(sec: Section, value: number): string {
+function formatNumber(sec: Section, value: number, locale: Locale): string {
   const tokens = sec.tokens;
   let x = value * 100 ** sec.percent / 1000 ** sec.scale;
   const expAt = tokens.findIndex((t) => t.t === "exp");
@@ -306,7 +317,7 @@ function formatNumber(sec: Section, value: number): string {
     if (thousands) {
       const lead = intOut.match(/^ */)?.[0] ?? "";
       const body = intOut.slice(lead.length);
-      intOut = lead + body.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+      intOut = lead + groupDigits(body, locale);
     }
   }
   // fraction: trailing # drop zeros, ? become spaces
@@ -347,7 +358,7 @@ function formatNumber(sec: Section, value: number): string {
         }
         break;
       case "point":
-        out += ".";
+        out += locale.decimal;
         if (!intDone) {
           out += "";
           intDone = true;
@@ -365,7 +376,7 @@ function formatNumber(sec: Section, value: number): string {
         out += " ";
         break;
       case "general":
-        out += formatGeneral(Math.abs(x));
+        out += formatGeneral(Math.abs(x), locale);
         break;
       case "text":
         break;
@@ -538,13 +549,15 @@ function sectionFor(c: Compiled, x: number): { sec: Section; signed: boolean } {
 
 /**
  * Format a value with an Excel number format code. Text uses the code's
- * text section (or shows as is); booleans show as TRUE / FALSE.
+ * text section (or shows as is); booleans show as TRUE / FALSE. Numbers use
+ * the locale's decimal and thousands separators: the app-wide one from
+ * setLocale unless `locale` is given (en-US until then).
  */
-export function formatValue(value: number | string | boolean | null, code: string | undefined): Formatted {
+export function formatValue(value: number | string | boolean | null, code: string | undefined, locale: Locale = getLocale()): Formatted {
   if (value === null) return { text: "" };
   if (typeof value === "boolean") return { text: value ? "TRUE" : "FALSE" };
   if (!code || code.toLowerCase() === "general") {
-    return { text: typeof value === "number" ? formatGeneral(value) : value };
+    return { text: typeof value === "number" ? formatGeneral(value, locale) : value };
   }
   const c = compile(code);
   if (typeof value === "string") {
@@ -565,7 +578,7 @@ export function formatValue(value: number | string | boolean | null, code: strin
     text = sec.tokens.map((t) => (t.t === "lit" ? t.s : t.t === "fill" ? " " : t.t === "percent" ? "%" : "")).join("");
     if (x < 0 && !signed) text = "-" + text;
   } else {
-    text = formatNumber(sec, Math.abs(x));
+    text = formatNumber(sec, Math.abs(x), locale);
     // the sign: only when a single section handles negatives, and the
     // number didn't round to zero
     if (x < 0 && !signed && /[1-9]/.test(text)) text = "-" + text;
@@ -614,24 +627,33 @@ function parseTime(s: string): { value: number; format: string } | null {
   return { value: (h * 3600 + mi * 60 + sec) / 86_400, format };
 }
 
-function parseDate(s: string): { value: number; format: string } | null {
+function parseDate(s: string, locale: Locale): { value: number; format: string } | null {
   let m: RegExpExecArray | null;
   let y: number, mo: number, d: number, format: string;
+  const dmy = locale.dateOrder === "dmy";
   if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))) {
     [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
     format = "yyyy-mm-dd";
   } else if ((m = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(s))) {
-    // month first, as in the US, unless the first number can't be a month
     const a = Number(m[1]);
     const b = Number(m[2]);
     y = fullYear(m[3]);
-    if (a > 12 && b <= 12) {
+    if (dmy) {
+      // day first (UK, India, Europe)
+      [d, mo] = [a, b];
+      format = "dd/mm/yyyy";
+    } else if (a > 12 && b <= 12) {
+      // month first, as in the US, unless the first number can't be a month
       [d, mo] = [a, b];
       format = "d/m/yyyy";
     } else {
       [mo, d] = [a, b];
       format = "m/d/yyyy";
     }
+  } else if (dmy && (m = /^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})$/.exec(s))) {
+    // 15.1.2024, as typed in Germany
+    [d, mo, y] = [Number(m[1]), Number(m[2]), fullYear(m[3])];
+    format = "dd.mm.yyyy";
   } else if ((m = /^(\d{1,2})[- ]([a-z]{3,9})[- ,]+(\d{2}|\d{4})$/i.exec(s))) {
     mo = MONTH_INDEX[m[2].toLowerCase()];
     [d, y] = [Number(m[1]), fullYear(m[3])];
@@ -647,41 +669,72 @@ function parseDate(s: string): { value: number; format: string } | null {
 
 const CURRENCY: Record<string, string> = { $: "$", "€": "€", "£": "£", "¥": "¥", "₹": "₹" };
 
+const escapeRe = (c: string) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const numberRes = new Map<string, RegExp>();
+
+/** The pattern for a decorated number in a locale (cached per locale). */
+function numberRe(locale: Locale): RegExp {
+  let re = numberRes.get(locale.id);
+  if (!re) {
+    const g = `[${locale.groupInput.map(escapeRe).join("")}]`;
+    const dec = escapeRe(locale.decimal);
+    const int = [
+      ...(locale.grouping === "indian" ? [`\\d{1,2}(?:${g}\\d{2})+${g}\\d{3}`] : []),
+      `\\d{1,3}(?:${g}\\d{3})+`,
+      `\\d+`,
+    ].join("|");
+    // a currency symbol after the number ("12,50 €") only where that's the custom
+    const suffix = locale.decimal === "," ? `\\s*([$€£¥₹])?` : "()";
+    re = new RegExp(`^([-+])?(\\()?\\s*([$€£¥₹])?\\s*([-+])?(${int})?(${dec}\\d+)?\\s*(%)?${suffix}\\)?$`);
+    numberRes.set(locale.id, re);
+  }
+  return re;
+}
+
 /**
  * A number typed with formatting (percent, currency, thousands separators,
  * a date or a time): its value and the format that shows it the same way.
- * Plain numbers and anything else return null.
+ * The format is an Excel code written the en-US way ("#,##0.00"); the
+ * locale only changes how it's read. Plain numbers return null, except in
+ * a decimal-comma locale, where "1,5" returns 1.5 with an empty format
+ * (keep the cell's own). Anything else returns null.
  */
-export function parseTyped(text: string): { value: number; format: string } | null {
+export function parseTyped(text: string, locale: Locale = getLocale()): { value: number; format: string } | null {
   const s = text.trim();
   if (!s || s.length > 40) return null;
   // dates and times
   const time = parseTime(s);
   if (time) return time;
-  const date = parseDate(s);
+  const date = parseDate(s, locale);
   if (date) return date;
   const dt = /^(.+?)[ T](\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]m?)?)$/i.exec(s);
   if (dt) {
-    const dd = parseDate(dt[1]);
+    const dd = parseDate(dt[1], locale);
     const tt = parseTime(dt[2]);
     if (dd && tt) return { value: dd.value + tt.value, format: `${dd.format} ${tt.format}` };
   }
   // numbers with decoration: sign, (negative), currency, separators, %
-  const m = /^([-+])?(\()?\s*([$€£¥₹])?\s*([-+])?(\d{1,3}(?:,\d{3})+|\d+)?(\.\d+)?\s*(%)?\)?$/.exec(s);
+  const m = numberRe(locale).exec(s);
   if (!m || (!m[5] && !m[6])) return null;
   const paren = !!m[2];
   if (paren !== s.endsWith(")")) return null;
-  const sym = m[3];
+  if (m[3] && m[8]) return null; // a symbol on both sides
+  const sym = m[3] || m[8];
   const pct = !!m[7];
-  const grouped = !!m[5]?.includes(",");
-  if (!sym && !pct && !grouped && !paren) return null; // a plain number
+  const grouped = !!m[5] && !/^\d+$/.test(m[5]);
   const negative = m[1] === "-" || m[4] === "-" || paren;
-  let value = Number((m[5] ?? "0").replace(/,/g, "") + (m[6] ?? ""));
+  const digits = (m[5] ?? "0").replace(/\D/g, "");
+  let value = Number(digits + (m[6] ? "." + m[6].slice(1) : ""));
   if (pct) value /= 100;
   if (negative) value = -value;
+  if (!sym && !pct && !grouped && !paren) {
+    // a plain number: the caller reads "1.5" itself; "1,5" only means 1.5 here
+    return locale.decimal !== "." && m[6] ? { value, format: "" } : null;
+  }
   const decimals = m[6] ? "." + "0".repeat(Math.min(m[6].length - 1, 10)) : "";
   let format: string;
   if (pct) format = `0${decimals}%`;
+  else if (m[8]) format = `#,##0${decimals ? ".00" : ""} "${CURRENCY[sym]}"`;
   else if (sym) format = `${sym === "$" ? "$" : `"${CURRENCY[sym]}"`}#,##0${decimals ? ".00" : ""}`;
   else format = `#,##0${decimals ? ".00" : ""}`;
   if (sym && paren) format = `${format};(${format})`;

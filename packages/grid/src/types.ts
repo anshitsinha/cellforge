@@ -64,6 +64,8 @@ export interface GridOptions {
    * focusing an input with text smaller than 16px, so use 16 on phones.
    */
   editorFontSize?: number;
+  /** What screen readers call the grid (default "Spreadsheet grid"). */
+  label?: string;
 }
 
 export interface Theme {

@@ -7,6 +7,7 @@ import type { Action } from "@cellforge/actions";
 import { buildTb, formatValue, readTb, Table, TB_ROLES, type ColumnData, type TbResult, type TbRole } from "@cellforge/core";
 import { namedHeader, sheetText } from "./cleanup";
 import { EditableSource } from "./editable";
+import { modal } from "./a11y";
 
 export interface TbDeps {
   source: () => EditableSource;
@@ -69,6 +70,7 @@ export function openTbMapper(d: TbDeps): void {
 
   const back = document.createElement("div");
   back.className = "palette-backdrop";
+  modal(back);
   back.innerHTML = `<div class="palette import-dialog" role="dialog" aria-label="Trial balance"><div class="palette-form"></div></div>`;
   const body = back.querySelector<HTMLElement>(".palette-form")!;
   const h = document.createElement("h3");

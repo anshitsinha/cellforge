@@ -28,6 +28,7 @@ import { readSheet, type SheetData } from "./audittools";
 import { setCells } from "./actions";
 import { EditableSource } from "./editable";
 import "./transformtools.css";
+import { modal } from "./a11y";
 
 export type TransformKind = "dedupe" | "split" | "unpivot" | "pivot" | "extract" | "goalseek";
 
@@ -759,6 +760,7 @@ export function openTransform(kind: TransformKind, d: TransformDeps): void {
   const c: Ctx = { d, src, data, sheet: d.sheetName().slice(0, 18), sheetId: d.activeSheet() };
   const back = document.createElement("div");
   back.className = "palette-backdrop";
+  modal(back);
   back.innerHTML = `<div class="palette import-dialog" role="dialog"><div class="palette-form tx-form"></div></div>`;
   const body = back.querySelector<HTMLElement>(".palette-form")!;
   const close = () => {
