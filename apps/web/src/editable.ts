@@ -27,6 +27,7 @@ import { filteredOutRows, type FilterSpec, type FilterView } from "./filter";
 import { CondFormatter, spliceRules, type CfRule } from "./condformat";
 import { ruleAt, spliceRanged, type DvRule } from "./validation";
 import type { ReviewNote } from "./review";
+import type { EvidenceLink } from "./docstore";
 import { SheetStyles, type ColumnStyles, type StylesState } from "./styles";
 
 /** A table: a named block whose first row holds its column headers. */
@@ -1365,13 +1366,14 @@ export class EditableSource implements DataSource {
 
   private putExtra(id: number, col: number, x: CellExtra | null): void {
     let cols = this.extras.get(id);
-    if (x && (x.note || x.link || x.marks?.length || x.review)) {
+    if (x && (x.note || x.link || x.marks?.length || x.review || x.evidence)) {
       if (!cols) this.extras.set(id, (cols = new Map()));
       cols.set(col, {
         ...(x.note ? { note: x.note } : {}),
         ...(x.link ? { link: x.link } : {}),
         ...(x.marks?.length ? { marks: [...x.marks] } : {}),
         ...(x.review ? { review: structuredClone(x.review) } : {}),
+        ...(x.evidence ? { evidence: structuredClone(x.evidence) } : {}),
       });
     } else if (cols) {
       cols.delete(col);
@@ -1386,13 +1388,14 @@ export class EditableSource implements DataSource {
   }
 
   /** Change a cell's note and / or link; returns what was there (for undo). */
-  setExtra(row: number, col: number, change: { note?: string | null; link?: string | null; marks?: string[] | null; review?: ReviewNote | null }): CellExtra | null {
+  setExtra(row: number, col: number, change: { note?: string | null; link?: string | null; marks?: string[] | null; review?: ReviewNote | null; evidence?: EvidenceLink | null }): CellExtra | null {
     const before = this.extraAt(row, col);
     const next: CellExtra = { ...before };
     if (change.note !== undefined) next.note = change.note ?? undefined;
     if (change.link !== undefined) next.link = change.link ?? undefined;
     if (change.marks !== undefined) next.marks = change.marks ?? undefined;
     if (change.review !== undefined) next.review = change.review ?? undefined;
+    if (change.evidence !== undefined) next.evidence = change.evidence ?? undefined;
     this.putExtra(this.toBase(row), col, next);
     return before ? structuredClone(before) : null;
   }
@@ -1494,6 +1497,7 @@ export class EditableSource implements DataSource {
       if (x?.link) own = { color: "#1a73e8", underline: true, ...own };
       if (x?.marks?.length) own = { ...own, marks: x.marks.map((m) => this.markLook?.(m) ?? { glyph: "?", color: "#5f6368" }) };
       if (x?.review && !x.review.cleared) own = { ...own, openReview: true };
+      if (x?.evidence) own = { ...own, marks: [...(own?.marks ?? []), { glyph: "📎", color: "#5f6368" }] };
     }
     const r = this.cf?.apply(row, col);
     if (!r) return own;
@@ -2155,6 +2159,8 @@ export interface CellExtra {
   /** tick mark ids (see review.ts) */
   marks?: string[];
   review?: ReviewNote;
+  /** a place in an attached document that supports this cell */
+  evidence?: EvidenceLink;
 }
 
 export interface FormulaSnapshot {

@@ -151,6 +151,8 @@ describe("sheet actions", () => {
       "recipe.run",
       "recipe.save",
       "recipe.delete",
+      "documents.set",
+      "evidence.link",
       "scenarios.set",
       "review.mark",
       "review.note",

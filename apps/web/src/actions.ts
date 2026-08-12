@@ -18,6 +18,7 @@ import type { ChartSpec } from "./charts/model";
 import { checkDv, subtractRange, type DvRule } from "./validation";
 import { safeLink } from "./links";
 import type { ScenarioModel } from "./scenarios";
+import type { DocMeta, EvidenceLink } from "./docstore";
 import { allMarks, type MarkDef, type ReviewNote, type SheetReview } from "./review";
 import { bindStep, type Recipe, type RecipeStep } from "./recipe";
 import { checkRule, describeRule, newRuleId, type CfRule } from "./condformat";
@@ -944,6 +945,52 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
           if (applied.inverse) back.push(applied.inverse);
         }
         return back.length ? { type: "steps.undo", params: { steps: ctx.blobs.put(back.reverse()) } } : null;
+      },
+    });
+
+  // ------------------------------------------------------------- evidence --
+  registry
+    .register<{ docs: DocMeta[] }>({
+      type: "documents.set",
+      title: "Set the workbook's list of supporting documents (attaching stores the file first)",
+      schema: s.object({ docs: s.array({ type: "object", properties: {}, additionalProperties: true }) }),
+      describe: () => "supporting documents",
+      recordable: false,
+      apply(ctx, p) {
+        const before = structuredClone(ctx.workbook.documents);
+        ctx.workbook.documents = structuredClone(p.docs);
+        return { type: "documents.set", params: { docs: before } };
+      },
+    })
+    .register<{ row: number; col: number; link: EvidenceLink | null; sheet?: string }>({
+      type: "evidence.link",
+      title: "Link a cell to a place in a supporting document (a PDF page and region), or remove the link",
+      schema: withSheet(
+        {
+          row: s.int(undefined, 0),
+          col: s.int(undefined, 0),
+          link: s.anyOf(
+            s.object(
+              {
+                doc: s.string("the document's SHA-256"),
+                page: s.int("PDF page, from 1", 1),
+                region: s.object({ x: s.number(), y: s.number(), w: s.number(), h: s.number() }),
+              },
+              ["doc"],
+            ),
+            s.null(),
+          ),
+        },
+        ["row", "col", "link"],
+      ),
+      describe: (p) => (p.link ? "link to evidence" : "remove evidence link"),
+      recordable: true,
+      apply(ctx, p) {
+        const { id, data } = target(ctx, p.sheet);
+        checkBounds(data, [{ row: p.row, col: p.col }]);
+        if (p.link && !ctx.workbook.documents.some((d) => d.sha256 === p.link!.doc)) throw new Error("That document isn't attached to this workbook.");
+        const before = data.setExtra(p.row, p.col, { evidence: p.link });
+        return { type: "evidence.link", params: { sheet: id, row: p.row, col: p.col, link: before?.evidence ?? null } };
       },
     });
 
