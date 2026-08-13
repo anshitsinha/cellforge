@@ -189,6 +189,13 @@ export class Grid {
    */
   onCellEdit: ((cell: CellRef, text: string) => void) | null = null;
 
+  /**
+   * Turns a cell's edit text into what the editor shows and screen readers
+   * hear, e.g. a formula with the locale's separators (=ROUND(A1;2) in
+   * Germany). onCellEdit gets back whatever was typed, untranslated.
+   */
+  editTextFilter: ((text: string) => string) | null = null;
+
   private readonly editor: CellEditor;
 
   // screen readers can't see the canvas: an off-screen live region says
@@ -622,10 +629,16 @@ export class Grid {
     const { row, col } = this.active;
     if (row >= this.source.rowCount || col >= this.source.colCount) return "";
     const header = this.source.getColumnName?.(col);
-    const parts = [describeCell({ row, col, columnName: header, shown: this.shownText(row, col), editText: this.source.getEditText?.(row, col) })];
+    const parts = [describeCell({ row, col, columnName: header, shown: this.shownText(row, col), editText: this.editText(row, col) })];
     const range = describeRange(this.range);
     if (range) parts.push(range);
     return parts.join(". ");
+  }
+
+  /** A cell's edit text through editTextFilter, or undefined when the source has none. */
+  private editText(row: number, col: number): string | undefined {
+    const t = this.source.getEditText?.(row, col);
+    return t === undefined || !this.editTextFilter ? t : this.editTextFilter(t);
   }
 
   /** What a cell shows, as drawn. */
@@ -709,7 +722,7 @@ export class Grid {
     const { row, col } = this.active;
     this.scrollIntoView(row, col);
     const text =
-      initialText ?? this.source.getEditText?.(row, col) ?? formatCell(this.source.getCell(row, col));
+      initialText ?? this.editText(row, col) ?? formatCell(this.source.getCell(row, col));
     this.editor.input.setAttribute("aria-label", `Edit cell ${rangeAddress({ top: row, left: col, bottom: row, right: col })}`);
     this.editor.open(this.cellRect(row, col), text, this.theme, this.editorFontSize);
   }
