@@ -10,6 +10,7 @@ import { parseRanges, rangesToText } from "./cfmanager";
 import type { EditableSource } from "./editable";
 import { allowed, describeDv, errorText, listChoices, typedValue, type DvContext, type DvKind, type DvOp, type DvRule } from "./validation";
 import type { Workbook } from "./workbook";
+import { modal } from "./a11y";
 
 export interface DvDeps {
   workbook: () => Workbook;
@@ -96,6 +97,7 @@ export function askAboutInvalid(rule: DvRule): Promise<boolean> {
     const style = rule.errorStyle ?? "stop";
     const back = document.createElement("div");
     back.className = "palette-backdrop";
+    modal(back);
     back.innerHTML = `<div class="palette" role="alertdialog"><div class="palette-form"><h3></h3><p></p><div class="numfmt-actions"></div></div></div>`;
     back.querySelector("h3")!.textContent = title;
     back.querySelector("p")!.textContent = message + (style === "warning" ? " Keep it anyway?" : "");
@@ -314,6 +316,7 @@ export function openValidationDialog(d: DvDeps): void {
   const existing = src.validationAt(sel.top, sel.left);
   const back = document.createElement("div");
   back.className = "palette-backdrop";
+  modal(back);
   back.innerHTML = `<div class="palette import-dialog" role="dialog" aria-label="Data validation"><div class="palette-form"><h3>Data validation</h3></div></div>`;
   const body = back.querySelector<HTMLElement>(".palette-form")!;
   const field = (label: string, el: HTMLElement) => {

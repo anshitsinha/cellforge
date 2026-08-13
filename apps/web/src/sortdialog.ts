@@ -2,6 +2,7 @@
 import type { Action } from "@cellforge/actions";
 import { columnLetter } from "@cellforge/grid";
 import type { EditableSource } from "./editable";
+import { modal } from "./a11y";
 
 export interface SortDialogDeps {
   source: () => EditableSource;
@@ -27,6 +28,7 @@ export function openSortDialog(d: SortDialogDeps): void {
 
   const back = document.createElement("div");
   back.className = "palette-backdrop";
+  modal(back);
   back.innerHTML = `<div class="palette" role="dialog" aria-label="Sort"><div class="palette-form"></div></div>`;
   const body = back.querySelector<HTMLElement>(".palette-form")!;
   const h = document.createElement("h3");

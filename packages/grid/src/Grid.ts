@@ -6,6 +6,7 @@ import type { BorderLine, BorderStyle, CellStyle } from "./types";
 import { ColumnLayout, columnLetter } from "./columns";
 import { formatCell } from "./format";
 import { readTheme } from "./theme";
+import { describeCell, describeEdit, describeRange, GRID_KEY_HELP, isMenuKey, rangeAddress } from "./a11y";
 import type { CellRange, CellRef, DataSource, GridOptions, Theme } from "./types";
 
 const FONT = '13px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
@@ -52,6 +53,21 @@ function wrapLines(ctx: CanvasRenderingContext2D, text: string, width: number): 
   }
   return out;
 }
+
+/** Visually hidden but read by screen readers. */
+const OFF_SCREEN: Partial<CSSStyleDeclaration> = {
+  position: "absolute",
+  width: "1px",
+  height: "1px",
+  margin: "-1px",
+  padding: "0",
+  border: "0",
+  overflow: "hidden",
+  clipPath: "inset(50%)",
+  whiteSpace: "nowrap",
+};
+
+let gridIds = 0;
 
 const BORDER_WIDTH: Record<BorderStyle, number> = { thin: 1, medium: 2, thick: 3, dashed: 1, dotted: 1, double: 1 };
 
@@ -173,7 +189,29 @@ export class Grid {
    */
   onCellEdit: ((cell: CellRef, text: string) => void) | null = null;
 
+  /**
+   * Turns a cell's edit text into what the editor shows and screen readers
+   * hear, e.g. a formula with the locale's separators (=ROUND(A1;2) in
+   * Germany). onCellEdit gets back whatever was typed, untranslated.
+   */
+  editTextFilter: ((text: string) => string) | null = null;
+
   private readonly editor: CellEditor;
+
+  // screen readers can't see the canvas: an off-screen live region says
+  // what's under the cursor, and a hidden description lists the keys
+  private readonly liveRegion: HTMLElement;
+  private readonly keyHelp: HTMLElement;
+  private announceTimer = 0;
+  private lastAnnounced = "";
+  /** a change to mention before the cell ("B5 set to 12") */
+  private pendingNote = "";
+  /** Escape was pressed: the next Tab leaves the grid instead of moving a cell */
+  private tabLeaves = false;
+  /** when the Menu key / Shift+F10 last opened the cell menu (to swallow the browser's own event) */
+  private menuKeyAt = -Infinity;
+  private readonly reducedMotion = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
+  private readonly forcedColors = typeof matchMedia === "function" ? matchMedia("(forced-colors: active)") : null;
 
   constructor(
     private readonly container: HTMLElement,
@@ -200,9 +238,29 @@ export class Grid {
     container.appendChild(this.canvas);
     this.ctx = this.canvas.getContext("2d", { alpha: false })!;
 
+    // accessibility: the canvas is one focusable "application" that takes
+    // the arrow keys; what it shows is spoken through the live region
+    const helpId = `cf-grid-help-${++gridIds}`;
+    this.keyHelp = document.createElement("div");
+    this.keyHelp.id = helpId;
+    this.keyHelp.hidden = true;
+    this.keyHelp.textContent = GRID_KEY_HELP;
+    this.liveRegion = document.createElement("div");
+    this.liveRegion.setAttribute("aria-live", "polite");
+    this.liveRegion.setAttribute("aria-atomic", "true");
+    this.liveRegion.className = "cf-sr-only";
+    Object.assign(this.liveRegion.style, OFF_SCREEN);
+    container.append(this.keyHelp, this.liveRegion);
+    this.canvas.setAttribute("role", "application");
+    this.canvas.setAttribute("aria-roledescription", "spreadsheet");
+    this.canvas.setAttribute("aria-label", options.label ?? "Spreadsheet grid");
+    this.canvas.setAttribute("aria-describedby", helpId);
+
     this.editor = new CellEditor(container);
     this.editor.onCommit = (text, move) => {
-      this.onCellEdit?.(this.selection, text);
+      const at = this.selection;
+      this.onCellEdit?.(at, text);
+      this.noteEdit(at.row, at.col);
       const { row, col } = this.active;
       if (move === "down") this.select(row + 1, col);
       else if (move === "up") this.select(row - 1, col);
@@ -211,7 +269,10 @@ export class Grid {
       if (move !== "none") this.canvas.focus();
       this.invalidate();
     };
-    this.editor.onCancel = () => this.canvas.focus();
+    this.editor.onCancel = () => {
+      this.canvas.focus();
+      this.announce("Edit cancelled");
+    };
 
     this.updateRowHeaderWidth();
 
@@ -225,6 +286,9 @@ export class Grid {
     this.canvas.addEventListener("mousemove", this.onHover);
     this.canvas.addEventListener("mouseleave", this.onLeave);
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", this.onThemeChange);
+    this.forcedColors?.addEventListener("change", this.onThemeChange);
+    this.canvas.addEventListener("focus", this.onFocus);
+    container.addEventListener("contextmenu", this.onNativeMenu, true);
 
     this.resize();
   }
@@ -240,6 +304,7 @@ export class Grid {
     this.updateRowHeaderWidth();
     this.invalidate();
     this.onSelectionChange?.(this.active);
+    this.announceSelection();
   }
 
   /**
@@ -539,7 +604,101 @@ export class Grid {
     this.extent = { ...extent };
     this.invalidate();
     this.onSelectionChange?.(this.selection);
+    this.announceSelection();
   }
+
+  // ---------------------------------------------------------------------------
+  // what a screen reader hears
+
+  /**
+   * Say something through the grid's live region (polite: it waits for the
+   * screen reader to finish). Use it for results of actions on the grid,
+   * e.g. "Sorted by Amount".
+   */
+  announce(text: string): void {
+    clearTimeout(this.announceTimer);
+    this.announceTimer = 0;
+    // the same words twice in a row wouldn't be read again; vary them invisibly
+    const out = text === this.lastAnnounced ? text + "\u00a0" : text;
+    this.lastAnnounced = out;
+    this.liveRegion.textContent = out;
+  }
+
+  /** The active cell as a sentence: "B5, Amount, 1,234.50, formula =SUM(B2:B4)", plus the selection size. */
+  describeActiveCell(): string {
+    const { row, col } = this.active;
+    if (row >= this.source.rowCount || col >= this.source.colCount) return "";
+    const header = this.source.getColumnName?.(col);
+    const parts = [describeCell({ row, col, columnName: header, shown: this.shownText(row, col), editText: this.editText(row, col) })];
+    const range = describeRange(this.range);
+    if (range) parts.push(range);
+    return parts.join(". ");
+  }
+
+  /** A cell's edit text through editTextFilter, or undefined when the source has none. */
+  private editText(row: number, col: number): string | undefined {
+    const t = this.source.getEditText?.(row, col);
+    return t === undefined || !this.editTextFilter ? t : this.editTextFilter(t);
+  }
+
+  /** What a cell shows, as drawn. */
+  private shownText(row: number, col: number): string {
+    const value = this.source.getCell(row, col);
+    if (value === null) return "";
+    const style = (this.source.getDisplayStyle ?? this.source.getStyle)?.call(this.source, row, col) ?? null;
+    return this.source.formatValue ? this.source.formatValue(value, style).text : formatCell(value);
+  }
+
+  /** Announce the active cell (and any edit just made) once the keys stop moving it. */
+  private announceSelection(delay = 150): void {
+    clearTimeout(this.announceTimer);
+    this.announceTimer = setTimeout(() => {
+      this.announceTimer = 0;
+      const note = this.pendingNote;
+      this.pendingNote = "";
+      const cell = this.describeActiveCell();
+      this.announce(note ? `${note}. ${cell}` : cell);
+    }, delay) as unknown as number;
+  }
+
+  /** An edit was committed at (row, col): say what the cell shows once the owner has stored it. */
+  private noteEdit(row: number, col: number): void {
+    // the owner may store the value asynchronously; read it a moment later
+    setTimeout(() => {
+      if (row >= this.source.rowCount || col >= this.source.colCount) return;
+      this.pendingNote = describeEdit({ row, col, shown: this.shownText(row, col) });
+      this.announceSelection(50);
+    }, 120);
+  }
+
+  private onFocus = (): void => {
+    this.tabLeaves = false;
+    this.announceSelection(300);
+  };
+
+  /** Open the cell menu from the keyboard: a contextmenu event at the active cell, as a right-click there would. */
+  private openMenuFromKeyboard(): void {
+    const { row, col } = this.active;
+    this.scrollIntoView(row, col);
+    const r = this.cellPageRect(row, col);
+    this.menuKeyAt = performance.now();
+    const ev = new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: r.x + Math.min(r.width / 2, 40),
+      clientY: r.y + r.height / 2,
+    });
+    this.canvas.dispatchEvent(ev);
+  }
+
+  /** The browser's own contextmenu right after the Menu key: ours already opened, so drop it. */
+  private onNativeMenu = (e: MouseEvent): void => {
+    if (e.isTrusted && performance.now() - this.menuKeyAt < 1000 && e.target === this.canvas) {
+      this.menuKeyAt = -Infinity;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+  };
 
   focus(): void {
     this.canvas.focus();
@@ -563,7 +722,8 @@ export class Grid {
     const { row, col } = this.active;
     this.scrollIntoView(row, col);
     const text =
-      initialText ?? this.source.getEditText?.(row, col) ?? formatCell(this.source.getCell(row, col));
+      initialText ?? this.editText(row, col) ?? formatCell(this.source.getCell(row, col));
+    this.editor.input.setAttribute("aria-label", `Edit cell ${rangeAddress({ top: row, left: col, bottom: row, right: col })}`);
     this.editor.open(this.cellRect(row, col), text, this.theme, this.editorFontSize);
   }
 
@@ -642,6 +802,12 @@ export class Grid {
     this.endDrag();
     this.editor.destroy();
     matchMedia("(prefers-color-scheme: dark)").removeEventListener("change", this.onThemeChange);
+    this.forcedColors?.removeEventListener("change", this.onThemeChange);
+    this.canvas.removeEventListener("focus", this.onFocus);
+    this.container.removeEventListener("contextmenu", this.onNativeMenu, true);
+    clearTimeout(this.announceTimer);
+    this.liveRegion.remove();
+    this.keyHelp.remove();
     this.canvas.remove();
   }
 
@@ -815,6 +981,8 @@ export class Grid {
 
   /** Keep scrolling after a fling, decaying exponentially (velocity in px/ms). */
   private startMomentum(vx: number, vy: number): void {
+    // no gliding after a fling for people who asked for less motion
+    if (this.reducedMotion?.matches) return;
     let last = performance.now();
     const step = (now: number) => {
       const dt = Math.min(32, now - last);
@@ -964,6 +1132,22 @@ export class Grid {
     // emptiness yet so the sheet edge will do.)
     const jump = e.ctrlKey || e.metaKey;
 
+    // leaving the grid: Escape, then Tab (Tab alone moves between cells)
+    if (e.key === "Tab" && this.tabLeaves && !jump && !e.altKey) {
+      this.tabLeaves = false;
+      return; // the browser moves focus on
+    }
+    this.tabLeaves = e.key === "Escape";
+    if (e.key === "Escape") {
+      this.announce("Press Tab to leave the grid");
+      return;
+    }
+    if (isMenuKey(e)) {
+      e.preventDefault();
+      this.openMenuFromKeyboard();
+      return;
+    }
+
     // editing shortcuts first
     if (e.key === "F2") {
       e.preventDefault();
@@ -972,9 +1156,12 @@ export class Grid {
     }
     if (e.key === "Delete" || e.key === "Backspace") {
       e.preventDefault();
-      if (this.onClearRange) this.onClearRange(this.range);
+      const range = this.range;
+      if (this.onClearRange) this.onClearRange(range);
       else this.onCellEdit?.(this.selection, "");
       this.invalidate();
+      this.pendingNote = `${rangeAddress(range)} cleared`;
+      this.announceSelection();
       return;
     }
     if (jump && e.key.toLowerCase() === "a") {

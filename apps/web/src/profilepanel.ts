@@ -9,6 +9,7 @@ import { formatValue } from "@cellforge/core";
 import { profile, type DataProfile } from "@cellforge/core";
 import { readSheetColumns, type ColumnSource, type SheetColumns } from "./pivotpanel";
 import "./pivot.css";
+import { modal } from "./a11y";
 
 export interface ProfileDeps {
   source: () => ColumnSource;
@@ -143,6 +144,7 @@ const letterOf = (c: number) => {
 export function openProfiles(d: ProfileDeps): void {
   const data = readSheetColumns(d.source());
   const back = el("div", "palette-backdrop");
+  modal(back);
   const dialog = el("div", "palette import-dialog profile-dialog");
   dialog.setAttribute("role", "dialog");
   dialog.setAttribute("aria-label", "Column profiles");

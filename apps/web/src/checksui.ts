@@ -44,6 +44,7 @@ import { readSheet, type SheetData } from "./audittools";
 import type { EditableSource } from "./editable";
 import type { Sheet, Workbook } from "./workbook";
 import "./checks.css";
+import { modal } from "./a11y";
 
 // ------------------------------------------------------------------ store --
 
@@ -245,6 +246,7 @@ export async function gateExport(continueFn: () => unknown, wb: Workbook | undef
 function confirmExport(failing: readonly CheckResult[]): Promise<boolean> {
   return new Promise((resolve) => {
     const back = el("div", "palette-backdrop");
+    modal(back);
     const box = el("div", "palette ck-dialog ck-confirm");
     box.setAttribute("role", "alertdialog");
     box.setAttribute("aria-label", "Checks are failing");
@@ -493,6 +495,7 @@ function tick(text: string, checked: boolean): { el: HTMLLabelElement; input: HT
 
 function dialog(title: string, cls: string, onClose: () => void): { back: HTMLDivElement; body: HTMLDivElement; close: () => void } {
   const back = el("div", "palette-backdrop");
+  modal(back);
   const box = el("div", `palette import-dialog ck-dialog ${cls}`);
   box.setAttribute("role", "dialog");
   box.setAttribute("aria-label", title);

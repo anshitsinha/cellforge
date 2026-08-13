@@ -40,7 +40,7 @@
 }
 
 .recon-warn-row td {
-  color: #f29900;
+  color: #a35200;
 }
 
 .recon-why input {
@@ -54,4 +54,10 @@
 
 .recon-suggest button {
   margin-left: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .recon-warn-row td {
+    color: #f29900;
+  }
 }

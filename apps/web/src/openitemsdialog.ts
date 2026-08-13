@@ -25,6 +25,7 @@ import {
 import { EditableSource } from "./editable";
 import { guessMap, readSide, reconSheets, RECON_ROLES, RULE_LABEL, sheetHeader, type ReconMap, type ReconRole, type ReconSheet } from "./recondialog";
 import type { Workbook } from "./workbook";
+import { modal } from "./a11y";
 
 export interface OpenItemsDeps {
   workbook: () => Workbook;
@@ -376,6 +377,7 @@ export function openOpenItems(kind: OpenItemsKind, d: OpenItemsDeps): void {
 
   const back = document.createElement("div");
   back.className = "palette-backdrop";
+  modal(back);
   back.innerHTML = `<div class="palette import-dialog recon-dialog openitems-dialog" role="dialog"><div class="palette-form"></div></div>`;
   back.querySelector(".palette")!.setAttribute("aria-label", info.title);
   const body = back.querySelector<HTMLElement>(".palette-form")!;

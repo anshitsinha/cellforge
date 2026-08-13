@@ -38,6 +38,7 @@ import { sheetText } from "./cleanup";
 import { EditableSource } from "./editable";
 import { sheetHeader } from "./recondialog";
 import type { Workbook } from "./workbook";
+import { modal } from "./a11y";
 
 export interface JoinDeps {
   workbook: () => Workbook;
@@ -491,6 +492,7 @@ interface Shell {
 function shell(d: JoinDeps, title: string, intro: string): Shell {
   const back = document.createElement("div");
   back.className = "palette-backdrop";
+  modal(back);
   back.innerHTML = `<div class="palette import-dialog join-dialog" role="dialog"><div class="palette-form"></div></div>`;
   back.querySelector(".palette")!.setAttribute("aria-label", title);
   const body = back.querySelector<HTMLElement>(".palette-form")!;

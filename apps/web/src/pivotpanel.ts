@@ -15,6 +15,7 @@ import { AGG_LABEL, fieldMembers, pivot, type DateGroup, type PivotAgg, type Piv
 import { namedHeader } from "./cleanup";
 import { EditableSource } from "./editable";
 import "./pivot.css";
+import { modal } from "./a11y";
 
 export interface PivotDeps {
   source: () => EditableSource;
@@ -367,6 +368,7 @@ export function openPivot(d: PivotDeps): void {
   const data = readSheetColumns(d.source());
   const sheet = d.sheetName();
   const back = el("div", "palette-backdrop");
+  modal(back);
   const dialog = el("div", "palette import-dialog pivot-dialog");
   dialog.setAttribute("role", "dialog");
   dialog.setAttribute("aria-label", "Pivot table");

@@ -46,6 +46,7 @@ import { readSheet, type SheetData } from "./audittools";
 import { EditableSource } from "./editable";
 import type { Workbook } from "./workbook";
 import "./jetools.css";
+import { modal } from "./a11y";
 
 type Cell = number | string | null;
 
@@ -936,6 +937,7 @@ export function openJeTool(kind: JeToolKind, d: JeToolDeps): void {
   const sheet = d.sheetName().slice(0, 16);
   const back = document.createElement("div");
   back.className = "palette-backdrop";
+  modal(back);
   back.innerHTML = `<div class="palette import-dialog je-dialog" role="dialog"><div class="palette-form audit-form"></div></div>`;
   const body = back.querySelector<HTMLElement>(".palette-form")!;
   const close = () => {

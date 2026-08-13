@@ -43,6 +43,7 @@ import { buildColumns, targetRows, toInput, type SheetOut } from "./transformtoo
 import type { Workbook } from "./workbook";
 import "./transformtools.css";
 import "./timetools.css";
+import { modal } from "./a11y";
 
 export type TimeToolKind = "fiscal" | "periods" | "bva" | "currency" | "schedule" | "journal";
 
@@ -1254,6 +1255,7 @@ export function openTimeTool(kind: TimeToolKind, d: TimeDeps): void {
   const c: Ctx = { d, src, data, sheet: d.sheetName().slice(0, 18), sheetId: d.activeSheet() };
   const back = document.createElement("div");
   back.className = "palette-backdrop";
+  modal(back);
   back.innerHTML = `<div class="palette import-dialog tt-dialog" role="dialog"><div class="palette-form tx-form"></div></div>`;
   const body = back.querySelector<HTMLElement>(".palette-form")!;
   const close = () => {

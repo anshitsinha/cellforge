@@ -4,6 +4,7 @@
  * Windows-1252 that old exports use) and its delimiter.
  */
 import { CsvParser, detectDelimiter } from "./csv";
+import { getLocale } from "./locale";
 
 export type Encoding = "utf-8" | "windows-1252" | "utf-16le" | "utf-16be";
 
@@ -56,7 +57,7 @@ export function previewCsv(bytes: Uint8Array, opts: CsvOptions = {}, maxRows = 1
   const encoding = opts.encoding ?? detectEncoding(bytes);
   let text = new TextDecoder(encoding).decode(bytes.subarray(0, 256 * 1024));
   if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
-  const delimiter = opts.delimiter ?? detectDelimiter(afterLines(text, opts.skipRows ?? 0).slice(0, 64 * 1024));
+  const delimiter = opts.delimiter ?? detectDelimiter(afterLines(text, opts.skipRows ?? 0).slice(0, 64 * 1024), defaultCsvDelimiter());
   const rows: string[][] = [];
   const parser = new CsvParser((r) => {
     if (rows.length < maxRows + (opts.skipRows ?? 0)) rows.push(r);
@@ -64,4 +65,9 @@ export function previewCsv(bytes: Uint8Array, opts: CsvOptions = {}, maxRows = 1
   parser.push(text);
   parser.end();
   return { encoding, delimiter, rows: rows.slice(opts.skipRows ?? 0) };
+}
+
+/** The delimiter a new CSV is written with, and the tie-break when detecting: the locale's (";" where the comma is the decimal). */
+export function defaultCsvDelimiter(): string {
+  return getLocale().csvDelimiter;
 }

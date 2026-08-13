@@ -194,7 +194,7 @@
 }
 
 .palette-form .pivot-status.cleanup-warn {
-  color: #f29900;
+  color: #a35200;
 }
 
 .pivot-preview {
@@ -318,12 +318,19 @@
 }
 
 .profile-card .profile-warn {
-  color: #f29900;
+  color: #a35200;
 }
 
 @media (max-width: 640px) {
   .pivot-builder,
   .pivot-zones {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .palette-form .pivot-status.cleanup-warn,
+  .profile-card .profile-warn {
+    color: #f29900;
   }
 }

@@ -28,6 +28,7 @@ import {
 import { namedHeader } from "./cleanup";
 import { EditableSource } from "./editable";
 import "./audittools.css";
+import { modal } from "./a11y";
 
 export type AuditToolKind = "duplicates" | "sequence" | "benford" | "stratify" | "topn" | "pareto" | "ageing" | "sample";
 
@@ -817,6 +818,7 @@ export function openAuditTool(kind: AuditToolKind, d: AuditDeps): void {
   const sheet = d.sheetName().slice(0, 18);
   const back = document.createElement("div");
   back.className = "palette-backdrop";
+  modal(back);
   back.innerHTML = `<div class="palette import-dialog" role="dialog"><div class="palette-form audit-form"></div></div>`;
   const body = back.querySelector<HTMLElement>(".palette-form")!;
   const close = () => {

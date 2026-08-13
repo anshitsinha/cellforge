@@ -70,6 +70,8 @@ export function setupInspectPanel(d: InspectPanelDeps) {
     head.append(el("h3", undefined, `Inspect ${columnLetter(col)}${row + 1}`));
     const close = el("button", "hp-close", "×");
     close.type = "button";
+    close.title = "Close";
+    close.setAttribute("aria-label", "Close inspect");
     close.addEventListener("click", toggle);
     head.append(close);
     root.append(head);

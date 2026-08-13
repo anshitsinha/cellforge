@@ -8,6 +8,7 @@
  */
 import type { Action, ActionRegistry } from "@cellforge/actions";
 import { memoryText, type Recipe, type RecipeStep } from "./recipe";
+import { modal } from "./a11y";
 
 export interface RecipeDeps {
   /** this session's recorded steps */
@@ -33,6 +34,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLEl
 function editParams(registry: ActionRegistry<unknown>, step: RecipeStep): Promise<Action | null> {
   return new Promise((resolve) => {
     const back = el("div", { className: "palette-backdrop" });
+    modal(back);
     const box = el("div", { className: "palette import-dialog" });
     box.setAttribute("role", "dialog");
     const area = el("textarea", { className: "recipe-json", value: JSON.stringify(step.action.params, null, 2), rows: 14 });
@@ -93,6 +95,7 @@ export function openRecipes(d: RecipeDeps): void {
     panel.replaceChildren();
     const head = el("div", { className: "recipe-head" }, el("strong", { textContent: editing.name ? `Recipe: ${editing.name}` : "This session's steps" }));
     const x = el("button", { type: "button", textContent: "×", title: "Close" });
+    x.setAttribute("aria-label", "Close");
     x.addEventListener("click", close);
     head.append(x);
     panel.append(head);
@@ -113,6 +116,7 @@ export function openRecipes(d: RecipeDeps): void {
       const cost = el("span", { className: "hp-muted recipe-cost", textContent: step.ms !== undefined ? `${step.ms < 1 ? "<1" : Math.round(step.ms)} ms ${memoryText(step.memory)}` : "" });
       const btn = (text: string, title: string, fn: () => void, disabled = false) => {
         const b = el("button", { type: "button", textContent: text, title, disabled });
+        b.setAttribute("aria-label", title);
         b.addEventListener("click", fn);
         return b;
       };
@@ -224,6 +228,7 @@ export function openRecipes(d: RecipeDeps): void {
 function askName(): Promise<string | null> {
   return new Promise((resolve) => {
     const back = el("div", { className: "palette-backdrop" });
+    modal(back);
     const input = el("input", { placeholder: "e.g. Monthly bank clean-up" });
     input.setAttribute("aria-label", "Recipe name");
     const ok = el("button", { type: "button", textContent: "Save" });

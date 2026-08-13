@@ -10,6 +10,7 @@ import { dateParts, formatValue, isDateFormat, parseDateLoose, parseNumberLoose,
 import { DEFAULT_REC_SETTINGS, explain, KEYING_LABEL, reconcile, type RecRecord, type RecResult, type RecRule, type RecSettings } from "@cellforge/core";
 import { EditableSource } from "./editable";
 import type { Workbook } from "./workbook";
+import { modal } from "./a11y";
 
 export interface ReconDeps {
   workbook: () => Workbook;
@@ -350,6 +351,7 @@ export function openRecon(d: ReconDeps): void {
 
   const back = document.createElement("div");
   back.className = "palette-backdrop";
+  modal(back);
   back.innerHTML = `<div class="palette import-dialog recon-dialog" role="dialog" aria-label="Reconcile two sheets"><div class="palette-form"></div></div>`;
   const body = back.querySelector<HTMLElement>(".palette-form")!;
   type Props = { textContent?: string; className?: string; type?: string; value?: string; checked?: boolean; inputMode?: string; placeholder?: string };

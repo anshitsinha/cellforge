@@ -10,6 +10,7 @@ import { columnLetter, type CellRange } from "@cellforge/grid";
 import { EditableSource } from "./editable";
 import { allMarks, changedSince, reviewerName, setReviewerName } from "./review";
 import type { Workbook } from "./workbook";
+import { modal } from "./a11y";
 
 export interface ReviewDeps {
   workbook: () => Workbook;
@@ -27,6 +28,7 @@ function ask(title: string, label: string, value = "", multiline = false): Promi
   return new Promise((resolve) => {
     const back = document.createElement("div");
     back.className = "palette-backdrop";
+    modal(back);
     back.innerHTML = `<div class="palette" role="dialog"><div class="palette-form"><h3></h3><div class="numfmt-actions"><button type="button" data-a="c">Cancel</button><button type="button" data-a="o">OK</button></div></div></div>`;
     back.querySelector("h3")!.textContent = title;
     const field = multiline ? document.createElement("textarea") : document.createElement("input");
@@ -139,6 +141,7 @@ export function openReviewStatus(d: ReviewDeps): void {
   const head = document.createElement("div");
   head.className = "recipe-head";
   const close = Object.assign(document.createElement("button"), { type: "button", textContent: "×", title: "Close" });
+  close.setAttribute("aria-label", "Close");
   close.addEventListener("click", () => panel.remove());
   head.append(Object.assign(document.createElement("strong"), { textContent: "Review status" }), close);
   panel.append(head);

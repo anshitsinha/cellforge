@@ -104,7 +104,7 @@ export class CsvParser {
  * first line. Handles the usual suspects - Excel in many European locales
  * writes semicolons, and TSV exports use tabs.
  */
-export function detectDelimiter(sample: string): string {
+export function detectDelimiter(sample: string, prefer = ","): string {
   const candidates = [",", ";", "\t", "|"];
   const counts = new Map(candidates.map((d) => [d, 0]));
   let inQuotes = false;
@@ -114,7 +114,8 @@ export function detectDelimiter(sample: string): string {
     else if (!inQuotes && (ch === "\n" || ch === "\r")) break;
     else if (!inQuotes && counts.has(ch)) counts.set(ch, counts.get(ch)! + 1);
   }
-  let best = ",";
+  // a tie (or nothing to go on) goes to the preferred one: ";" where the comma is the decimal
+  let best = counts.has(prefer) ? prefer : ",";
   for (const d of candidates) {
     if (counts.get(d)! > counts.get(best)!) best = d;
   }

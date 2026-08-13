@@ -7,6 +7,7 @@ import type { Action } from "@cellforge/actions";
 import { columnLetter } from "@cellforge/grid";
 import { namedHeader, planCleanup, sheetText } from "./cleanup";
 import type { EditableSource } from "./editable";
+import { modal } from "./a11y";
 
 export interface CleanupDeps {
   source: () => EditableSource;
@@ -29,6 +30,7 @@ export function openCleanup(d: CleanupDeps): void {
   }
   const back = document.createElement("div");
   back.className = "palette-backdrop";
+  modal(back);
   back.innerHTML = `<div class="palette import-dialog" role="dialog" aria-label="Clean up this sheet"><div class="palette-form"></div></div>`;
   const body = back.querySelector<HTMLElement>(".palette-form")!;
   const h = document.createElement("h3");
@@ -112,6 +114,7 @@ export function openCleanup(d: CleanupDeps): void {
 function alertBox(message: string): void {
   const back = document.createElement("div");
   back.className = "palette-backdrop";
+  modal(back);
   back.innerHTML = `<div class="palette"><div class="palette-form"><p></p><div class="numfmt-actions"><button type="button">OK</button></div></div></div>`;
   back.querySelector("p")!.textContent = message;
   back.querySelector("button")!.addEventListener("click", () => back.remove());
