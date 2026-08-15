@@ -3,6 +3,7 @@
  * its options. Everything here is JSON-safe so a chart can be saved with the
  * workbook and replayed by actions ("chart.add" / "chart.update").
  */
+import type { DateGroup, PivotAgg, PivotKey, ShowAs } from "@cellforge/core";
 
 export type ChartType =
   | "column"
@@ -52,6 +53,27 @@ export interface CellLink {
 /** A fixed number, a cell to read the number from, or null for automatic. */
 export type Limit = number | CellLink | null;
 
+/**
+ * A pivot as saved data (the engine's PivotSpec with filter sets as lists).
+ * Fields are column numbers of the sheet; `names` are their names when the
+ * pivot was made, so the fields can be found again if columns move.
+ */
+export interface SavedPivot {
+  rows: { field: number; group?: DateGroup }[];
+  cols: { field: number; group?: DateGroup }[];
+  values: { field: number; agg: PivotAgg; showAs?: ShowAs }[];
+  filters: { field: number; group?: DateGroup; keep: PivotKey[] }[];
+  subtotals?: boolean;
+  grandTotals?: boolean;
+  names?: string[];
+}
+
+/** A pivot chart reads a pivot of a sheet instead of a range of cells. */
+export interface PivotChartSource {
+  sheetId: string;
+  pivot: SavedPivot;
+}
+
 export interface ChartSpec {
   id: string;
   type: ChartType;
@@ -90,6 +112,11 @@ export interface ChartSpec {
   buckets: number[];
   /** where the chart window sits, in CSS pixels */
   frame: { x: number; y: number; w: number; h: number };
+  /**
+   * A pivot chart: the chart draws this pivot of the sheet (worked out again
+   * whenever the sheet changes); `range` only says which sheet it sits on.
+   */
+  pivot?: PivotChartSource;
 }
 
 export function defaultSpec(id: string, range: ChartRange, type: ChartType = "column"): ChartSpec {
