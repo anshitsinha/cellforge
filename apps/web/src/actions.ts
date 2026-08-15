@@ -334,7 +334,7 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
           const typed = c.input !== null && !c.input.trim().startsWith("=") && !c.input.startsWith("'") ? parseTyped(c.input) : null;
           if (typed) {
             data.setCell(c.row, c.col, typed.value);
-            if (!data.getStyle(c.row, c.col)?.numFmt) formatted.push({ row: c.row, col: c.col, format: typed.format });
+            if (typed.format && !data.getStyle(c.row, c.col)?.numFmt) formatted.push({ row: c.row, col: c.col, format: typed.format });
           } else data.setCell(c.row, c.col, c.input === null ? null : parseInput(c.input));
         }
         let formats: string | undefined;

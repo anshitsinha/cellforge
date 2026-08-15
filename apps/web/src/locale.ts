@@ -7,7 +7,7 @@
  * parseTyped use (en-US when nothing is saved).
  */
 // TODO(lead): import from "@cellforge/core" once core's index.ts exports ./locale
-import { getLocale, LOCALES, localeById, setLocale, type Locale, type LocaleId } from "../../../packages/core/src/locale";
+import { getLocale, LOCALES, localeById, setLocale, type Locale, type LocaleId } from "@cellforge/core";
 
 const KEY = "cellforge.locale";
 

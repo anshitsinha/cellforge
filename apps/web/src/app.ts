@@ -59,7 +59,9 @@ const statementDeps = () => ({
   status: (t: string) => (statusLeft.textContent = t),
   focusGrid: () => grid.focus(),
 });
-import { jsonToColumns, readParquet, Table } from "@cellforge/core";
+import { delocalizeFormula, jsonToColumns, localizeFormula, readParquet, Table } from "@cellforge/core";
+import { installA11y } from "./a11y";
+import { chooseLocale, LOCALE_CHOICES, startLocale } from "./locale";
 import { type Command, setupPalette } from "./palette";
 import { setupHistoryPanel, type TrailEntry } from "./historypanel";
 import { AutoSaver, fromFile, OpfsStore, packWorkbook, toFile, unpackWorkbook, type JournalEntry } from "./persist";
@@ -108,11 +110,16 @@ const selections = new Map<string, CellRange>();
 // Fingers need bigger targets than a mouse, and iOS zooms the page when an
 // input with <16px text gets focus.
 const coarsePointer = matchMedia("(pointer: coarse)").matches;
+// the number format and separators people expect where they are, and keyboard / screen reader support in dialogs
+startLocale();
+installA11y();
 const grid = new Grid(
   sheet,
   source,
   coarsePointer ? { rowHeight: 32, headerHeight: 30, defaultColumnWidth: 120, editorFontSize: 16 } : {},
 );
+// formulas are edited with the locale's argument separator (; in German and French)
+grid.editTextFilter = (t) => localizeFormula(t);
 
 function updateStatus() {
   const edits = source.editCount ? ` · ${source.editCount} edited` : "";
@@ -122,7 +129,7 @@ function updateStatus() {
 function syncFormulaBar() {
   const { row, col } = grid.selection;
   cellRef.textContent = `${columnLetter(col)}${row + 1}`;
-  formulaInput.value = source.getEditText(row, col);
+  formulaInput.value = localizeFormula(source.getEditText(row, col));
 }
 
 // --- status bar (right side) ----------------------------------------------------
@@ -729,6 +736,7 @@ function attachKernelReporting(s: EditableSource) {
 attachKernelReporting(source);
 
 grid.onCellEdit = async ({ row, col }, text) => {
+  text = delocalizeFormula(text);
   // data validation: a value that breaks the cell's rule is stopped, or asked about
   const bad = invalidInputs(source, dvContext(workbook, source), [{ row, col, input: text }]);
   if (bad.length && !(await askAboutInvalid(bad[0].rule))) {
@@ -1635,6 +1643,16 @@ function paletteCommands(): Command[] {
       status: (t) => (statusLeft.textContent = t),
       focusGrid: () => grid.focus(),
     }),
+    ...LOCALE_CHOICES.map((l) => ({
+      id: `locale-${l.id}`,
+      title: `Locale: ${l.name}`,
+      hint: `locale language region decimal separator comma ${l.sample}`,
+      run: () => {
+        chooseLocale(l.id);
+        grid.invalidate();
+        syncFormulaBar();
+      },
+    })),
     { id: "ask", title: "Ask or do…", keys: "Ctrl /", hint: "ai natural language type what you want plain english", run: () => askBar.open() },
     { id: "share-check", title: "Before you share: check for hidden content…", hint: "share safely hidden sheets rows notes personal data pii history versions privacy", run: () => openShareCheck(workbook, (id) => showSheet(id)) },
     {

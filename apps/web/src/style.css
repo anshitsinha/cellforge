@@ -4,7 +4,7 @@
   --border: #dadce0;
   --text: #1f2328;
   --muted: #656d76;
-  --accent: #1a73e8;
+  --accent: #1967d2;
 
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 13px;
@@ -69,7 +69,7 @@ body {
   display: inline-flex;
   gap: 8px;
   align-items: center;
-  color: #f29900;
+  color: var(--warn-text, #a35200);
   margin-left: 12px;
 }
 
@@ -229,7 +229,7 @@ button:disabled {
 }
 
 .cleanup-warn {
-  color: #f29900;
+  color: var(--warn-text, #a35200);
   font-weight: 600;
 }
 
@@ -666,7 +666,7 @@ button:disabled {
 }
 
 .palette-form output {
-  color: #d93025;
+  color: #c5221f;
   min-height: 1em;
 }
 
@@ -1473,4 +1473,15 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* warning text: dark amber on light backgrounds (4.5:1), bright amber on dark */
+:root {
+  --warn-text: #a35200;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --warn-text: #f29900;
+  }
 }
