@@ -6,6 +6,7 @@ import { SyntheticSource } from "./demo";
 import { BlankSource, EditableSource, parseInput, type Stored } from "./editable";
 import { download, exportCsv } from "./exporter";
 import { History } from "./history";
+import { sortedOrder } from "./sort";
 import { formatBytes, importCsv } from "./importer";
 
 const DEMO_ROWS = 100_000_000;
@@ -158,6 +159,46 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     redo();
   }
+});
+
+// --- sorting ---------------------------------------------------------------------
+
+// The sort itself is fine at this size, but the key + index arrays add ~13
+// bytes/row on top of the data. 100M rows would want this in a worker.
+const MAX_SORT_ROWS = 20_000_000;
+
+async function sortBy(descending: boolean) {
+  const { col } = grid.selection;
+  if (source.rowCount > MAX_SORT_ROWS) {
+    statusLeft.textContent = `Sorting is limited to ${rowFormat.format(MAX_SORT_ROWS)} rows for now.`;
+    return;
+  }
+  const name = source.getColumnName(col) ?? columnLetter(col);
+  statusLeft.textContent = `Sorting by ${name}…`;
+  // let the status message paint before the (synchronous) sort starts
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const started = performance.now();
+  const target = source;
+  const before = target.rowOrder;
+  const after = sortedOrder(target, col, descending);
+  target.setRowOrder(after);
+  history.push({
+    label: `sort by ${name}`,
+    undo: () => target.setRowOrder(before),
+    redo: () => target.setRowOrder(after),
+  });
+  refresh();
+  statusLeft.textContent = `Sorted ${rowFormat.format(target.rowCount)} rows by ${name} in ${Math.round(performance.now() - started)} ms`;
+}
+
+document.getElementById("btn-sort-asc")!.addEventListener("click", () => {
+  sortBy(false);
+  grid.focus();
+});
+document.getElementById("btn-sort-desc")!.addEventListener("click", () => {
+  sortBy(true);
+  grid.focus();
 });
 
 grid.onCellEdit = ({ row, col }, text) => {
