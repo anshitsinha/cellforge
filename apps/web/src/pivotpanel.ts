@@ -12,6 +12,8 @@ import type { Action } from "@cellforge/actions";
 import { formatValue, isDateFormat, parseDateLoose, Table, type ColumnData } from "@cellforge/core";
 import { columnLetter } from "@cellforge/grid";
 import { AGG_LABEL, fieldMembers, pivot, type DateGroup, type PivotAgg, type PivotItem, type PivotKey, type PivotResult, type PivotSpec, type ShowAs } from "@cellforge/core";
+import type { ChartSpec, ChartType } from "./charts/model";
+import { PIVOT_CHART_TYPES, pivotChartSpec, savePivot } from "./charts/pivotspec";
 import { namedHeader } from "./cleanup";
 import { EditableSource } from "./editable";
 import "./pivot.css";
@@ -24,6 +26,10 @@ export interface PivotDeps {
   putBlob: (value: unknown) => string;
   status: (text: string) => void;
   focusGrid: () => void;
+  /** id of the sheet being pivoted; with addChart, shows "Chart this pivot" */
+  sheetId?: () => string;
+  /** save a new chart (a pivot chart) with the workbook */
+  addChart?: (spec: ChartSpec) => void;
 }
 
 // ------------------------------------------------------------ the sheet --
@@ -198,6 +204,19 @@ export function toSpec(layout: PivotLayout): PivotSpec {
     subtotals: layout.subtotals,
     grandTotals: layout.grandTotals,
   };
+}
+
+/**
+ * A pivot chart of a layout, or null when the layout has nothing to chart
+ * (it needs a value and a field on Rows or Columns). The title says what
+ * is charted: "Sum of Amount by Region".
+ */
+export function pivotChartForLayout(layout: PivotLayout, data: SheetColumns, sheetId: string, type: ChartType = "column"): ChartSpec | null {
+  if (!layout.values.length || (!layout.rows.length && !layout.cols.length)) return null;
+  const what = layout.values.map((v) => `${AGG_LABEL[v.agg]} of ${data.names[v.field]}`).join(", ");
+  const by = [...layout.rows, ...layout.cols].map((f) => data.names[f.field]).join(" and ");
+  const id = `pchart${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+  return pivotChartSpec(id, sheetId, savePivot(toSpec(layout), data.names), type, `${what} by ${by}`);
 }
 
 /** Number format for a value column. */
@@ -445,6 +464,16 @@ export function openPivot(d: PivotDeps): void {
   const sheetBtn = el("button", undefined, "Put the pivot on a new sheet");
   sheetBtn.type = "button";
   actions.append(closeBtn, drillBtn, sheetBtn);
+  // a pivot chart: saved with the workbook, worked out again when the data changes
+  const chartType = select(
+    PIVOT_CHART_TYPES.map((t) => [t, t[0].toUpperCase() + t.slice(1)] as [string, string]),
+    "column",
+    "Pivot chart type",
+  );
+  const chartBtn = el("button", undefined, "Chart this pivot");
+  chartBtn.type = "button";
+  chartBtn.title = "A chart of this pivot that updates when the data changes";
+  if (d.addChart && d.sheetId) actions.append(chartType, chartBtn);
   body.append(intro, builder, options, statusLine, preview, actions);
 
   let result: PivotResult | null = null;
@@ -827,6 +856,7 @@ export function openPivot(d: PivotDeps): void {
     if (!layout.rows.length && !layout.cols.length && !layout.values.length) {
       statusLine.textContent = "Add a field to start.";
       sheetBtn.disabled = true;
+      chartBtn.disabled = true;
       renderPreview();
       return;
     }
@@ -837,10 +867,12 @@ export function openPivot(d: PivotDeps): void {
       statusLine.textContent = `${result.rowItems.length.toLocaleString("en-US")} result rows from ${result.rowCount.toLocaleString("en-US")} data rows${f}, in ${Math.round(result.ms)} ms.`;
       statusLine.classList.remove("cleanup-warn");
       sheetBtn.disabled = false;
+      chartBtn.disabled = !layout.values.length || (!layout.rows.length && !layout.cols.length);
     } catch (e) {
       statusLine.textContent = (e as Error).message;
       statusLine.classList.add("cleanup-warn");
       sheetBtn.disabled = true;
+      chartBtn.disabled = true;
     }
     renderPreview();
   };
@@ -894,6 +926,14 @@ export function openPivot(d: PivotDeps): void {
     const n = table.rows.length;
     close();
     void addSheet(`${sheet.slice(0, 24)} pivot`, cols).then(() => d.status(`Pivot table: ${n.toLocaleString("en-US")} rows`));
+  });
+  chartBtn.addEventListener("click", () => {
+    if (!d.addChart || !d.sheetId) return;
+    const spec = pivotChartForLayout(layout, data, d.sheetId(), chartType.value as ChartType);
+    if (!spec) return;
+    close();
+    d.addChart(spec);
+    d.status(`Pivot chart of ${sheet}: it updates when the data changes`);
   });
   closeBtn.addEventListener("click", close);
   back.addEventListener("keydown", (e) => {

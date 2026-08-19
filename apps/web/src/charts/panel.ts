@@ -7,6 +7,7 @@
 import "./charts.css";
 import { buildChart, comboLines, guessLayout, makeResolver, type ChartData, type ChartSource } from "./data";
 import { CHART_TYPES, defaultSpec, formatRange, limitText, parseLimit, parseRange, type ChartSpec, type ChartType, type Limit } from "./model";
+import { chartInput } from "./pivotchart";
 import { drawToCanvas, readChartTheme, type Rendered } from "./render";
 
 export interface ChartDeps {
@@ -148,16 +149,18 @@ export function openChart(deps: ChartDeps, given?: ChartSpec): string {
 
   const draw = () => {
     frame = 0;
-    const src = deps.source(spec.range.sheetId);
-    if (!src) {
-      empty.textContent = "The sheet this chart reads has been deleted.";
-      empty.hidden = false;
-      return;
-    }
     if (needRebuild || !data) {
       needRebuild = false;
       try {
-        data = buildChart(src, spec, makeResolver((sheet, row, col) => deps.source(sheet)?.getCell(row, col) ?? null));
+        // a pivot chart works its pivot out again here, so it follows the sheet
+        const input = chartInput(spec, deps.source);
+        if (!input) {
+          data = null;
+          empty.textContent = "The sheet this chart reads has been deleted.";
+          empty.hidden = false;
+          return;
+        }
+        data = buildChart(input.src, input.spec, makeResolver((sheet, row, col) => deps.source(sheet)?.getCell(row, col) ?? null));
         empty.hidden = true;
       } catch (e) {
         data = null;
@@ -167,7 +170,7 @@ export function openChart(deps: ChartDeps, given?: ChartSpec): string {
       }
       syncSeriesRows();
     }
-    const label = spec.title || `${CHART_TYPES.find((t) => t.type === spec.type)?.label ?? "Chart"} of ${formatRange(spec.range)}`;
+    const label = spec.title || `${CHART_TYPES.find((t) => t.type === spec.type)?.label ?? "Chart"} of ${spec.pivot ? "a pivot" : formatRange(spec.range)}`;
     name.textContent = label;
     win.setAttribute("aria-label", label);
     canvas.setAttribute("aria-label", label);
@@ -323,21 +326,27 @@ export function openChart(deps: ChartDeps, given?: ChartSpec): string {
   });
   field("Chart", typeSel);
 
-  field(
-    "Data range",
-    text(
-      () => formatRange(spec.range),
-      (v) => {
-        const r = parseRange(v);
-        if (!r) return false;
-        spec.range = { sheetId: deps.activeSheet(), ...r };
-        return true;
-      },
-      "A1:C20",
-    ),
-    undefined,
-    "On the sheet you're on now. Whole columns like A:C work.",
-  );
+  if (spec.pivot) {
+    const fixed = el("input");
+    fixed.value = "A pivot of this sheet";
+    fixed.disabled = true;
+    field("Data", fixed, undefined, "Change the pivot in the pivot table builder and chart it again.");
+  } else
+    field(
+      "Data range",
+      text(
+        () => formatRange(spec.range),
+        (v) => {
+          const r = parseRange(v);
+          if (!r) return false;
+          spec.range = { sheetId: deps.activeSheet(), ...r };
+          return true;
+        },
+        "A1:C20",
+      ),
+      undefined,
+      "On the sheet you're on now. Whole columns like A:C work.",
+    );
 
   const seriesSel = el("select");
   seriesSel.append(new Option("Columns", "columns"), new Option("Rows", "rows"));
