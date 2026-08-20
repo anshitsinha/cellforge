@@ -747,8 +747,11 @@ export class Grid {
     ctx.restore();
 
     // --- headers -----------------------------------------------------------
+    // (textBaseline has to be set again - the cell pass set it inside a
+    // save/restore, so it's back to "alphabetic" here)
     ctx.font = HEADER_FONT;
     ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
     ctx.fillStyle = theme.headerBackground;
     ctx.fillRect(0, 0, this.width, headerHeight);
     ctx.fillRect(0, 0, rowHeaderWidth, this.height);
