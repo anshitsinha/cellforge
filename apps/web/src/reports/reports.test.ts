@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ActionHistory, BlobStore } from "@cellforge/actions";
 import { Table, type ColumnData } from "@cellforge/core";
-import { readPdfText } from "../../../../packages/core/src/pdf/read";
+import { readPdfText } from "@cellforge/core";
 import { sheetActions, type SheetCtx } from "../actions";
 import { buildChart } from "../charts/data";
 import { pivotChartSpec, savePivot } from "../charts/pivotspec";

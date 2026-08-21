@@ -10,6 +10,7 @@ import type { Evidence } from "./evidence";
 import { emptyReview, type WorkbookReview } from "./review";
 import { emptyScenarios, type ScenarioModel } from "./scenarios";
 import type { DocMeta } from "./docstore";
+import type { Report } from "./reports/model";
 import type { CatRule, CheckDef } from "@cellforge/core";
 import { BlankSource, EditableSource } from "./editable";
 import type { Version } from "./versions";
@@ -64,6 +65,8 @@ export class Workbook {
   checks: CheckDef[] = [];
   /** categorisation rules; saved with the workbook */
   categoryRules: CatRule[] = [];
+  /** reports; saved with the workbook */
+  reports: Report[] = [];
   /** supporting documents (their bytes are kept outside the workbook, by SHA-256) */
   documents: DocMeta[] = [];
   /** scenarios: input cells, result cells and named sets of input values */

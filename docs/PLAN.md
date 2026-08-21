@@ -175,8 +175,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 ### M8: Charts and reports 🔨
 - ✅ Charts: column, bar, line, area, pie, scatter, combo, histogram, waterfall,
   Pareto, Benford, ageing; millions of points downsampled; axis limits from cells
-- 🔨 Pivot charts
-- 🔨 Reports: narrative + live tables and charts, one template for many entities,
+- ✅ Pivot charts
+- ✅ Reports: narrative + live tables and charts, one template for many entities,
   consolidation, period roll-forward, PDF report books with contents
 - ✅ Time tools: fiscal years, MoM/YoY, rolling windows, budget vs actual, multi-currency
 - ✅ Accrual / prepayment / deferred income schedules; accounting import export templates

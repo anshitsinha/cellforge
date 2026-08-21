@@ -3,7 +3,7 @@
  * preview (charts left as empty figures for the panel to draw into).
  * Pure: chart pictures come from a callback, so this is tested without a DOM.
  */
-import { writeBook, type BookOptions, type BookSection, type FlowBlock, type PdfImage } from "../../../../packages/core/src/pdf/write";
+import { writeBook, type BookOptions, type BookSection, type FlowBlock, type PdfImage } from "@cellforge/core";
 import type { RenderedBlock, RenderedReport } from "./engine";
 
 /** A chart block that has data. */

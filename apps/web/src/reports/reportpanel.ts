@@ -10,7 +10,7 @@
 import type { Action } from "@cellforge/actions";
 import { AGG_LABEL, type PivotAgg } from "@cellforge/core";
 import { columnLetter } from "@cellforge/grid";
-import { imageFromRgba, type PdfImage } from "../../../../packages/core/src/pdf/write";
+import { imageFromRgba, type PdfImage } from "@cellforge/core";
 import type { ChartSpec, SavedPivot } from "../charts/model";
 import { LIGHT_SERIES, renderChart, type ChartTheme } from "../charts/render";
 import { readSheetColumns } from "../pivotpanel";

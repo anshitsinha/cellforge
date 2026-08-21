@@ -37,6 +37,8 @@ import { openLineage } from "./lineagepanel";
 import { reviewCommands } from "./reviewui";
 import { askContext, setupAskBar } from "./askbar";
 import { openScenarios } from "./scenariosui";
+import { registerReportActions } from "./reports/actions";
+import { openReports } from "./reports/reportpanel";
 import { openDocuments } from "./docviewer";
 import { buildTemplate, pickTemplate, TEMPLATES } from "./templates";
 import { clearLocalData, decryptFile, encryptFile, isEncrypted } from "./sharing";
@@ -285,6 +287,7 @@ const redoButton = document.getElementById("btn-redo") as HTMLButtonElement;
 const registry = sheetActions();
 registerFindActions(registry);
 registerCheckActions(registry);
+registerReportActions(registry);
 bindChecksStore({
   workbook: () => workbook,
   getChecks: () => workbook.checks,
@@ -1554,7 +1557,8 @@ function paletteCommands(): Command[] {
         { id: "mapping-table", title: "Apply a mapping table…", hint: "mapping table map values standardise names fuzzy names suggest pairs lookup replace", run: () => openMapping(d) },
       ];
     })(),
-    { id: "pivot", title: "Pivot table…", hint: "pivot summarise group by subtotal crosstab drill down slicer sum count", run: () => openPivot({ ...statementDeps(), source: () => source, sheetName: () => workbook.get(activeId).name }) },
+    { id: "pivot", title: "Pivot table…", hint: "pivot summarise group by subtotal crosstab drill down slicer sum count", run: () => openPivot({ ...statementDeps(), source: () => source, sheetName: () => workbook.get(activeId).name, sheetId: () => activeId, addChart: (spec) => void run({ type: "chart.set", params: { id: spec.id, spec } }) }) },
+    { id: "reports", title: "Reports…", hint: "report pdf print narrative book contents entity consolidation roll forward period pack board", run: () => openReports({ workbook: () => workbook, activeSheet: () => activeId, run: (a) => run(a), putBlob: (v) => blobs.put(v), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }) },
     { id: "profiles", title: "Column profiles", hint: "profile columns distinct blanks min max median histogram patterns data quality", run: () => openProfiles({ source: () => source, sheetName: () => workbook.get(activeId).name, focusGrid: () => grid.focus() }) },
     {
       id: "recipes",

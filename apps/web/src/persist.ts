@@ -18,6 +18,7 @@ import type { Evidence } from "./evidence";
 import type { WorkbookReview } from "./review";
 import type { ScenarioModel } from "./scenarios";
 import type { DocMeta } from "./docstore";
+import type { Report } from "./reports/model";
 import type { CatRule, CheckDef } from "@cellforge/core";
 import type { Action } from "@cellforge/actions";
 import { Table, type ColumnData } from "@cellforge/core";
@@ -47,6 +48,8 @@ export interface WorkbookState {
   charts?: ChartSpec[];
   /** recipes (added after v1 shipped) */
   recipes?: Recipe[];
+  /** reports (added after v1 shipped) */
+  reports?: Report[];
   /** supporting documents (added after v1 shipped; their bytes are stored separately) */
   documents?: DocMeta[];
   /** scenarios (added after v1 shipped) */
@@ -161,7 +164,7 @@ export function packWorkbook(wb: Workbook, active: string, name: string): Packed
   }));
   const names = wb.definedNames;
   const iterative = wb.iterative;
-  return { meta: { format: "cellforge", v: 1, name, active, bases, sheets, ...(versions.length ? { versions } : {}), ...(names.length ? { names } : {}), ...(iterative ? { iterative } : {}), ...(wb.charts.length ? { charts: structuredClone(wb.charts) } : {}), ...(wb.recipes.length ? { recipes: structuredClone(wb.recipes) } : {}), ...(wb.evidence.log.length || wb.evidence.inputs.length ? { evidence: structuredClone(wb.evidence) } : {}), ...(wb.review.marks.length || Object.keys(wb.review.sheets).length ? { review: structuredClone(wb.review) } : {}), ...(wb.scenarios.inputs.length ? { scenarios: structuredClone(wb.scenarios) } : {}), ...(wb.documents.length ? { documents: structuredClone(wb.documents) } : {}), ...(wb.checks.length ? { checks: structuredClone(wb.checks) } : {}), ...(wb.categoryRules.length ? { categoryRules: structuredClone(wb.categoryRules) } : {}) }, files };
+  return { meta: { format: "cellforge", v: 1, name, active, bases, sheets, ...(versions.length ? { versions } : {}), ...(names.length ? { names } : {}), ...(iterative ? { iterative } : {}), ...(wb.charts.length ? { charts: structuredClone(wb.charts) } : {}), ...(wb.recipes.length ? { recipes: structuredClone(wb.recipes) } : {}), ...(wb.evidence.log.length || wb.evidence.inputs.length ? { evidence: structuredClone(wb.evidence) } : {}), ...(wb.review.marks.length || Object.keys(wb.review.sheets).length ? { review: structuredClone(wb.review) } : {}), ...(wb.scenarios.inputs.length ? { scenarios: structuredClone(wb.scenarios) } : {}), ...(wb.documents.length ? { documents: structuredClone(wb.documents) } : {}), ...(wb.reports.length ? { reports: structuredClone(wb.reports) } : {}), ...(wb.checks.length ? { checks: structuredClone(wb.checks) } : {}), ...(wb.categoryRules.length ? { categoryRules: structuredClone(wb.categoryRules) } : {}) }, files };
 }
 
 /** Rebuild a workbook from its metadata, reading files as needed. */
@@ -231,6 +234,7 @@ export async function unpackWorkbook(
   if (meta.review) workbook.review = structuredClone(meta.review);
   if (meta.scenarios) workbook.scenarios = structuredClone(meta.scenarios);
   if (meta.documents) workbook.documents = structuredClone(meta.documents);
+  if (meta.reports?.length) workbook.reports = structuredClone(meta.reports);
   if (meta.checks?.length) workbook.checks = structuredClone(meta.checks);
   if (meta.categoryRules?.length) workbook.categoryRules = structuredClone(meta.categoryRules);
   const active = workbook.has(meta.active) ? meta.active : workbook.sheets[0].id;
