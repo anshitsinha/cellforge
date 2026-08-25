@@ -5,36 +5,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="cellforge is a spreadsheet that stays fast at 100 million rows. It runs entirely in your browser — your data never leaves your machine."
+      content="cellforge is a spreadsheet for finance and audit work: messy exports, bank and ledger reconciliations, audit tests and evidence, at up to 100 million rows. It runs entirely in your browser; your data never leaves your computer."
     />
-    <title>cellforge — 100M-row spreadsheets in your browser</title>
+    <meta name="theme-color" content="#1967d2" />
+    <title>cellforge — the spreadsheet for finance and audit work</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
   </head>
   <body class="home">
     <nav class="nav">
       <a class="logo" href="/">cellforge</a>
       <div class="nav-links">
-        <a href="#features">Features</a>
+        <a href="#jobs">What it's for</a>
+        <a href="#private">Privacy</a>
         <a href="#how">How it works</a>
-        <a href="/bench.html">Benchmark</a>
-        <a href="https://github.com/anshitsinha/cellforge" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/anshitsinha/cellforge/tree/main/docs" target="_blank" rel="noopener">Guide</a>
         <a class="btn btn-primary btn-small" href="/app.html">Open app</a>
       </div>
     </nav>
 
     <header class="hero">
       <div class="hero-text">
-        <p class="eyebrow">Open source · runs 100% in your browser</p>
-        <h1>A spreadsheet that doesn't flinch at <span class="accent">100 million rows</span>.</h1>
+        <p class="eyebrow">For accountants, auditors and finance analysts · runs 100% in your browser</p>
+        <h1>The spreadsheet for the work <span class="accent">Excel makes hard</span>.</h1>
         <p class="lede">
-          Excel stops at 1,048,576 rows. Google Sheets at 10 million cells. cellforge stores data
-          in columns, draws only what's on screen, and never sends your files anywhere.
+          Messy system exports, bank statements as PDFs, million-row ledgers, reconciliations that
+          won't tie, audit tests and the evidence behind every number. cellforge does them in the
+          spreadsheet you already know how to use, and nothing ever leaves your computer.
         </p>
         <div class="cta">
           <a class="btn btn-primary" href="/app.html">Open the app</a>
-          <a class="btn" href="/app.html?demo=1">Try 100M-row demo</a>
+          <a class="btn" href="/app.html?demo=1">Try the 100M-row demo</a>
         </div>
-        <p class="fine-print">No sign-up. No upload. Works offline once loaded.</p>
+        <p class="fine-print">No sign-up. No upload. Install it and it works offline.</p>
       </div>
 
       <!-- a real cellforge grid, auto-scrolling through 100M synthetic rows -->
@@ -50,47 +53,96 @@
     <section class="stats">
       <div><strong>100M</strong><span>rows, scrolled smoothly</span></div>
       <div><strong>0</strong><span>bytes uploaded</span></div>
-      <div><strong>0</strong><span>servers to run</span></div>
-      <div><strong>MIT</strong><span>licensed</span></div>
+      <div><strong>1 undo</strong><span>for every step, even a whole recipe</span></div>
+      <div><strong>MIT</strong><span>licensed, open source</span></div>
     </section>
 
-    <section class="features" id="features">
-      <h2>Everything you expect from a spreadsheet</h2>
-      <p class="section-lede">…minus the row limit and the upload.</p>
+    <section class="features" id="jobs">
+      <h2>Built for the jobs you actually do</h2>
+      <p class="section-lede">Each one is a command, not an afternoon of formulas.</p>
       <div class="feature-grid">
         <article>
-          <h3>Open huge CSVs</h3>
-          <p>Drag in a multi-gigabyte CSV. It's parsed in a background worker straight into
-            typed columns, so the page never freezes.</p>
+          <h3>Messy exports, cleaned</h3>
+          <p>Report-style exports with titles, subtotals and page footers become a clean table.
+            <code>(1,234.50)</code>, <code>1.234,56</code>, <code>500 CR</code> and any date
+            format turn into real numbers and dates, and you see every value that didn't fit.</p>
         </article>
         <article>
-          <h3>Formulas</h3>
-          <p><code>=SUM(E1:E1000)</code>, <code>=IF(F2&gt;100, "big", "small")</code>,
-            cell references and arithmetic — the everyday stuff.</p>
+          <h3>Bank statements from PDF</h3>
+          <p>Open the bank's PDF and get the transactions, with wrapped descriptions joined,
+            years filled in and every running balance checked page by page.</p>
         </article>
         <article>
-          <h3>Sort in a click</h3>
-          <p>Sorting reorders an index instead of moving data around, so millions of rows sort
-            in a moment.</p>
+          <h3>Reconciliations that explain themselves</h3>
+          <p>Match ledger to bank by reference, amount and date, with tolerances, fuzzy text and
+            split payments. Keying errors are flagged, and "why don't these match?" tells you.
+            Then the rec statement, with proposed journals.</p>
         </article>
         <article>
-          <h3>Select, copy, paste</h3>
-          <p>Range selection with live sum / average / count, and clipboard that works with
-            Excel and Google Sheets.</p>
+          <h3>Audit tests in a click</h3>
+          <p>Duplicates (exact, near and fuzzy), sequence gaps, Benford, journal entry tests,
+            stratification and samples (random, systematic, monetary unit) with the seed
+            recorded.</p>
         </article>
         <article>
-          <h3>Undo everything</h3>
-          <p>Every edit, paste and sort can be undone with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</p>
+          <h3>Evidence for every number</h3>
+          <p>Tick marks, review notes and sign-off. Link a cell to the figure in the bank letter
+            and check it agrees. "Explain this number" traces it to its source, and an evidence
+            pack proves what was done.</p>
         </article>
         <article>
-          <h3>Private by design</h3>
-          <p>There's no backend. Your data lives in your browser tab and nowhere else.</p>
+          <h3>Do it again next month</h3>
+          <p>Every step is recorded as a recipe. Tidy it, save it, and run it on next month's
+            files, or a whole folder, as one step you can undo.</p>
         </article>
       </div>
     </section>
 
+    <section class="features" id="also">
+      <h2>…and everything you expect from a spreadsheet</h2>
+      <div class="feature-grid">
+        <article>
+          <h3>Excel formulas</h3>
+          <p>XLOOKUP, SUMIFS, FILTER, LET, LAMBDA and 160+ more, with dynamic arrays. Open and
+            save <code>.xlsx</code> with formats, conditional formats, validation and notes.</p>
+        </article>
+        <article>
+          <h3>Pivot tables, SQL, charts</h3>
+          <p>Pivot 10 million rows in under a second, query your sheets with SQL, and chart them,
+            from waterfalls to Pareto. Reports and PDF report books with contents.</p>
+        </article>
+        <article>
+          <h3>Templates</h3>
+          <p>Start a monthly close, a bank reconciliation or a set of audit tests from a template
+            with the sheets, checks and sign-off already in place.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="how" id="private">
+      <h2>Private by design</h2>
+      <ol class="steps">
+        <li>
+          <h3>Nothing leaves your computer</h3>
+          <p>There's no server and no account. Files are read in your browser, and your work is
+            kept in your browser's private storage.</p>
+        </li>
+        <li>
+          <h3>Share safely</h3>
+          <p>Before you send a file, cellforge lists what's hidden in it (hidden rows, notes,
+            history, personal data) and can mask personal data or save a password-protected
+            copy.</p>
+        </li>
+        <li>
+          <h3>Works offline</h3>
+          <p>After the first visit it runs with no connection. Install it from the browser's menu,
+            or build it and run it from a folder.</p>
+        </li>
+      </ol>
+    </section>
+
     <section class="how" id="how">
-      <h2>How it works</h2>
+      <h2>How it stays fast</h2>
       <ol class="steps">
         <li>
           <h3>Columnar storage</h3>
@@ -104,15 +156,15 @@
         </li>
         <li>
           <h3>Compiled formulas</h3>
-          <p>A formula filled down a column is really one vector operation, so it's compiled to a
-            single loop over typed arrays — 6–22× faster than interpreting it, with bit-identical
-            results. <a href="/bench.html">Run the benchmark</a> in your own browser.</p>
+          <p>A formula filled down a column is one vector operation, compiled to a single loop
+            over typed arrays, 6–22× faster than interpreting it, with bit-identical results.
+            <a href="/bench.html">Run the benchmark</a> in your own browser.</p>
         </li>
       </ol>
     </section>
 
     <section class="closing">
-      <h2>Your next spreadsheet is already open.</h2>
+      <h2>Your next reconciliation is already open.</h2>
       <a class="btn btn-primary" href="/app.html">Open cellforge</a>
     </section>
 

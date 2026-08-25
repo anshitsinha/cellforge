@@ -6,7 +6,7 @@
  * Nothing from other sites is cached, and nothing is ever sent anywhere.
  */
 const CACHE = "cellforge-app-v1";
-const SHELL = ["./", "./index.html", "./app.html", "./favicon.svg"];
+const SHELL = ["./", "./index.html", "./app.html", "./favicon.svg", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

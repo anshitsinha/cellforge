@@ -1,0 +1,24 @@
+{
+  "name": "cellforge",
+  "short_name": "cellforge",
+  "description": "The spreadsheet for finance and audit work. Runs entirely in your browser; your data never leaves your computer.",
+  "start_url": "./app.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1967d2",
+  "icons": [
+    { "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "file_handlers": [
+    {
+      "action": "./app.html",
+      "accept": {
+        "application/x-cellforge": [".cellforge"],
+        "text/csv": [".csv"],
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"]
+      }
+    }
+  ]
+}

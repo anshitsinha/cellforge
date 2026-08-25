@@ -69,9 +69,9 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Landing page around the niche; installable and offline
-- [ ] Landing page: who it's for (finance and audit analysts), what it does that Excel doesn't (messy exports, 100M rows, reconciliation, audit tests, evidence), privacy (nothing leaves the computer), live demo link, docs link
-- [ ] Installable: web app manifest, icons, offline after the first visit (service worker), works from a folder
-- [ ] Tests, docs
+- [x] Landing page: who it's for (finance and audit analysts), what it does that Excel doesn't (messy exports, 100M rows, reconciliation, audit tests, evidence), privacy (nothing leaves the computer), live demo link, docs link
+- [x] Installable: web app manifest, icons, offline after the first visit (service worker), works from a folder
+- [x] Tests, docs
 
 ## Milestones
 
