@@ -4,6 +4,7 @@
  * footers, headers repeated on every page), fill down group labels that
  * only appear on a group's first row, and flatten a two-row header.
  */
+import { parseDateLoose } from "./values";
 
 export interface DroppedRow {
   /** row in the original */
@@ -25,10 +26,13 @@ export interface Unwrapped {
 }
 
 const TOTAL = /^(sub[\s-]?total|total|grand total|net total|balance c\/f|balance b\/f|carried forward|brought forward)\b|\btotals?:?\s*$/i;
+/** a running-balance line (the whole cell): statements often date these, so they're looked for past a date */
+const BALANCE_LINE = /^((opening|closing|starting|ending|previous|new) balance|balance (brought|carried) forward|balance [bc]\/f|(brought|carried) forward)\s*:?$/i;
 const FOOTER = /^(page\s+\d+(\s+of\s+\d+)?|printed\b|report (generated|run)\b|run date\b|confidential\b|end of report\b|\*\*\*)/i;
 
 const nonEmpty = (row: string[]) => row.filter((c) => c.trim() !== "").length;
 const looksNumeric = (c: string) => /^[\s(+\-$€£¥]*[\d.,'\s]+\)?\s*(%|cr|dr)?$/i.test(c.trim()) && /\d/.test(c);
+const looksLikeDate = (c: string) => /^\d{1,4}[/.\-]\d{1,2}[/.\-]\d{1,4}$/.test(c.trim()) || parseDateLoose(c) !== null;
 const textCells = (row: string[]) => row.filter((c) => c.trim() !== "" && !looksNumeric(c)).length;
 
 /** The header row: the first row of mostly-text cells, at least as wide as most of the data below it. */
@@ -64,7 +68,8 @@ export function unwrapReport(rows: string[][]): Unwrapped {
     });
     dataStart++;
   }
-  const width = Math.max(header.length, ...rows.slice(dataStart).map((r) => r.length));
+  let width = header.length;
+  for (let r = dataStart; r < rows.length; r++) if (rows[r].length > width) width = rows[r].length;
   header = Array.from({ length: width }, (_, i) => header[i] || `column_${i + 1}`);
   const headerKey = rows[headerRow].map((c) => c.trim().toLowerCase()).join("|");
 
@@ -83,6 +88,11 @@ export function unwrapReport(rows: string[][]): Unwrapped {
     }
     const firstText = row.find((c) => c.trim() !== "" && !looksNumeric(c))?.trim() ?? "";
     if (TOTAL.test(firstText)) {
+      dropped.push({ row: r, reason: "total", text });
+      continue;
+    }
+    const label = row.find((c) => c.trim() !== "" && !looksNumeric(c) && !looksLikeDate(c))?.trim() ?? "";
+    if (BALANCE_LINE.test(label)) {
       dropped.push({ row: r, reason: "total", text });
       continue;
     }

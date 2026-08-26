@@ -295,7 +295,10 @@ export function parseStatement(lines: StatementLine[]): Statement {
   }
 
   // ------------------------------------------------------------ dates --
-  const baseYear = years.length ? Math.min(...years.filter((y) => y >= 1980)) : new Date().getUTCFullYear();
+  // (a loop, not Math.min(...years): a long statement has more years than the call stack takes arguments)
+  let baseYear = Infinity;
+  for (const y of years) if (y >= 1980 && y < baseYear) baseYear = y;
+  if (baseYear === Infinity) baseYear = new Date().getUTCFullYear();
   let year = baseYear;
   let lastMonth = 0;
   for (const t of txns) {

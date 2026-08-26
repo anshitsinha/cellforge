@@ -11,12 +11,17 @@ export type NumberStyle = "dot" | "comma"; // decimal separator
 export type DateOrder = "dmy" | "mdy" | "ymd";
 
 const CURRENCY = /^(?:[$€£¥₹]|USD|EUR|GBP|JPY|INR|CHF|CAD|AUD|SEK|NOK|DKK|ZAR|NZD|SGD|HKD|CNY)\s*|\s*(?:[$€£¥₹]|USD|EUR|GBP|JPY|INR|CHF|CAD|AUD|SEK|NOK|DKK|ZAR|NZD|SGD|HKD|CNY)$/gi;
+const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
+const HAS_DIGIT = /\d/;
 const SPACES = /[\s\u00a0\u2007\u202f']/g; // thousands can be spaces or apostrophes (Swiss)
 
 /** A number written any common way, or null. `style` says which separator is the decimal one. */
 export function parseNumberLoose(raw: string, style: NumberStyle = "dot"): number | null {
   let s = raw.trim();
   if (!s) return null;
+  // fast paths (this runs on every cell of every column a profile looks at): plain numbers, and text with no digit at all
+  if (style === "dot" && PLAIN_NUMBER.test(s)) return Number(s);
+  if (!HAS_DIGIT.test(s)) return null;
   let negative = false;
   // (1,234.50) and -1,234.50 and 1,234.50- and 1,234.50 CR (credit = negative)
   if (/^\(.*\)$/.test(s)) {
@@ -62,7 +67,9 @@ const MONTHS: Record<string, number> = {
 };
 
 function valid(y: number, m: number, d: number): boolean {
-  return m >= 1 && m <= 12 && d >= 1 && y >= 1900 && y <= 9999 && d <= new Date(Date.UTC(y, m, 0)).getUTCDate();
+  if (!(m >= 1 && m <= 12 && d >= 1 && y >= 1900 && y <= 9999)) return false;
+  const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  return d <= (m === 2 ? (leap ? 29 : 28) : m === 4 || m === 6 || m === 9 || m === 11 ? 30 : 31);
 }
 
 const year = (y: string) => (y.length <= 2 ? (Number(y) < 50 ? 2000 : 1900) + Number(y) : Number(y));
@@ -159,19 +166,32 @@ export function profileColumn(values: string[]): ColumnProfile {
   let dates = 0;
   let hasTime = false;
   let percents = 0;
-  for (const [, v] of present) {
-    if (parseNumberLoose(v, numberStyle) !== null && !dateParts(v)) {
+  // what each value parsed as, so the misfits below don't parse everything again
+  const NUM = 1;
+  const DATE_TRIED = 2;
+  const DATE = 4;
+  const seen = new Uint8Array(present.length);
+  for (let k = 0; k < present.length; k++) {
+    const v = present[k][1];
+    const isNum = parseNumberLoose(v, numberStyle) !== null;
+    if (isNum) seen[k] = NUM;
+    if (isNum && !dateParts(v)) {
       nums++;
       if (v.endsWith("%")) percents++;
-    } else if (parseDateLoose(v, dateOrder) !== null) {
-      dates++;
-      if (/\d:\d{2}/.test(v)) hasTime = true;
+    } else {
+      const isDate = parseDateLoose(v, dateOrder) !== null;
+      seen[k] |= DATE_TRIED | (isDate ? DATE : 0);
+      if (isDate) {
+        dates++;
+        if (/\d:\d{2}/.test(v)) hasTime = true;
+      }
     }
   }
   const type: ColumnType = nums >= dates && nums / present.length >= 0.5 ? "number" : dates / present.length >= 0.5 ? "date" : "text";
-  const fits = (v: string) =>
-    type === "number" ? parseNumberLoose(v, numberStyle) !== null : type === "date" ? parseDateLoose(v, dateOrder) !== null : true;
-  const misfits = present.filter(([, v]) => !fits(v)).map(([row, value]) => ({ row, value }));
+  const fits = (k: number) =>
+    type === "number" ? (seen[k] & NUM) !== 0 : type === "date" ? (seen[k] & DATE_TRIED ? (seen[k] & DATE) !== 0 : parseDateLoose(present[k][1], dateOrder) !== null) : true;
+  const misfits: { row: number; value: string }[] = [];
+  for (let k = 0; k < present.length; k++) if (!fits(k)) misfits.push({ row: present[k][0], value: present[k][1] });
   const numFmt = type === "date" ? (hasTime ? "yyyy-mm-dd hh:mm" : "yyyy-mm-dd") : type === "number" && percents > nums / 2 ? "0.0%" : undefined;
   return { type, numberStyle, dateOrder, confidence: 1 - misfits.length / present.length, misfits, hasTime, ...(numFmt ? { numFmt } : {}) };
 }

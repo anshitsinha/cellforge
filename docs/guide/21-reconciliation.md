@@ -42,18 +42,30 @@ earlier passes didn't match. Untick any pass you don't want.
 2. **Same reference, within tolerance**, with dates inside the window.
 3. **Normalised reference.** Case, spaces, punctuation, leading zeros and
    prefixes like INV, REF, PO and CHQ are ignored, so `INV-000123`,
-   `inv 123` and `#123` all count as the same.
+   `inv 123` and `#123` all count as the same, and so do `DEP-4471`
+   and `DEP004471`. When the amounts are exactly the same the date
+   window doesn't apply, so a cheque presented a week after it was
+   written still matches.
 4. **Similar description**, with the amount within tolerance and the date
    inside the window. "Description match %" sets how alike the
    descriptions must be. Word order and punctuation don't count, so
    `Smith, John` matches `JOHN SMITH`.
 5. **Amount and date only**, for sides with no shared reference. Two items
-   whose references are both filled in but different are never paired here.
+   whose references are both filled in but different are never paired here,
+   and an item whose reference is on the other side waits for that item.
+   When several items have the same amount (a run of 100.00 payments), pairs
+   whose descriptions name the same party (`Payment to Apex Plastics` and
+   `BACS APEX PLASTICS`) go first, best first; the rest pair by nearest
+   date.
 6. **Sums.** One item on one side can equal the sum of 2 or more items on
-   the other side ("Sum up to items" sets the most). Either side can hold
-   the single item. The items must share the reference, or, without one,
-   fall inside the date window. The search has a limit so it stays fast.
-   When it stops early, the summary says so.
+   the other side ("Sum up to items" sets the most, 4 by default). Either
+   side can hold the single item. Items that share the reference come
+   first; if all of them add up, they match however many there are.
+   Without a shared reference the items must fall inside the date window
+   and have the same sign, and a sum only counts when exactly one
+   combination adds up and the window holds few enough items that it's
+   unlikely to be chance. The search has a limit so it stays fast. When it
+   stops early, the summary says so.
 
 ## What you get
 
@@ -70,7 +82,9 @@ and the duplicates. 100,000 rows a side takes a second or two.
   mistake of the other. That means two digits swapped (1,234 / 1,243; the
   difference always divides by 9), one wrong digit, a decimal point in the
   wrong place (×10, ×100) or a flipped sign. A reference with two
-  characters swapped is flagged too.
+  characters swapped is flagged too. When no reference ties the two, the
+  descriptions must name the same party, so a cheque for 36.00 and a bank
+  fee of 30.00 aren't called a keying error.
 
 **Add result sheets** adds four sheets. Each row keeps its row number from
 the original sheet.
@@ -132,7 +146,10 @@ mismatched pair (same reference, different amount), a match inside the
 tolerance that's a few cents out, and an unmatched pair that looks like a
 keying error (1,243 against 1,234). By default these are the ledger's
 errors. Pick **Errors are the bank's** to show them on the bank side
-instead.
+instead. A ledger posting entered twice (the same reference, amount and
+date as one that matched the bank) is always an error in the ledger, not
+a deposit in transit or an outstanding payment, and gets a reversing
+entry.
 
 **Add result sheets** adds two sheets:
 
