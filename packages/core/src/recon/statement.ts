@@ -21,6 +21,8 @@ export interface RecItem {
   note: string;
   /** for differences: the keying error, if it looks like one */
   keying?: KeyingError;
+  /** a ledger posting that repeats one already matched (same reference, amount and date) */
+  duplicate?: boolean;
 }
 
 export interface RecLine {
@@ -54,6 +56,12 @@ export interface RecStatementOptions {
   errorsOn?: "ledger" | "bank";
   /** treat unmatched pairs flagged as keying errors as one error instead of two timing items (default true) */
   flagsAsErrors?: boolean;
+  /**
+   * an unmatched ledger posting with a reference, listed as a duplicate of one
+   * that is matched, goes under errors in the ledger (to be reversed) rather
+   * than under deposits in transit / outstanding payments (default true)
+   */
+  duplicatesAsErrors?: boolean;
 }
 
 export interface RecStatement {
@@ -126,6 +134,21 @@ export function recStatement(r: RecResult, a: RecRecord[], b: RecRecord[], opts:
   const noAmount = { a: [] as number[], b: [] as number[] };
   const dit: RecItem[] = [];
   const outstanding: RecItem[] = [];
+  const dups: RecItem[] = [];
+  if (opts.duplicatesAsErrors ?? true) {
+    const matched = new Set<number>();
+    for (const m of r.matches) for (const i of m.a) matched.add(i);
+    const unmatched = new Set(r.unmatchedA);
+    for (const d of r.duplicates) {
+      if (d.side !== "A" || !d.items.some((i) => matched.has(i))) continue;
+      for (const i of d.items) {
+        const x = amt(a[i]);
+        if (!unmatched.has(i) || diffs.usedA.has(i) || !a[i]?.key || Number.isNaN(x) || !x) continue;
+        diffs.usedA.add(i);
+        dups.push({ a: [i], b: [], value: round2(-x), note: `duplicate posting: ${a[i].key} ${money(x)} is already in the ledger and matched`, duplicate: true });
+      }
+    }
+  }
   for (const i of r.unmatchedA) {
     if (diffs.usedA.has(i)) continue;
     const x = amt(a[i]);
@@ -150,7 +173,7 @@ export function recStatement(r: RecResult, a: RecRecord[], b: RecRecord[], opts:
   }
   // a difference A − B is put right by −(A − B) in the ledger, or by A − B on the bank side
   const bankErr = errorsOn === "bank" ? diffs.items.map((it) => ({ ...it, value: round2(it.value) })) : [];
-  const ledgerErr = errorsOn === "ledger" ? diffs.items.map((it) => ({ ...it, value: round2(-it.value) })) : [];
+  const ledgerErr = [...(errorsOn === "ledger" ? diffs.items.map((it) => ({ ...it, value: round2(-it.value) })) : []), ...dups];
   const bankLines = [
     line("bank", BANK_LINE_LABEL.bank, []),
     line("dit", BANK_LINE_LABEL.dit, dit),
@@ -283,7 +306,7 @@ export function proposeAdjustments(st: RecStatement, a: RecRecord[], b: RecRecor
         const ra = a[it.a[0]];
         const rb = b[it.b[0]];
         const { account, rule } = accountFor(textOf(ra) || textOf(rb), it.value, rules, "");
-        const what = it.keying ? KEYING_LABEL[it.keying] : "amount differs";
+        const what = it.duplicate ? "duplicate posting" : it.keying ? KEYING_LABEL[it.keying] : "amount differs";
         const ref = ra?.key ?? rb?.key;
         const e: AdjEntry = {
           n: out.length + 1,

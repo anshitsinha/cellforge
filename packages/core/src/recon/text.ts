@@ -24,14 +24,15 @@ export function refPrefix(s: string, prefixes: readonly string[] = DEFAULT_PREFI
 
 /**
  * A reference reduced to what identifies it: case, spaces and punctuation
- * ignored, a known prefix (INV, REF, ...) dropped, leading zeros dropped.
+ * ignored, a known prefix (INV, REF, ...) dropped, leading zeros dropped
+ * (also after letters that aren't a known prefix: "DEP-0042" is "DEP42").
  * "INV-000123", "inv 123" and "#123" all become "123".
  */
 export function normRef(s: string, prefixes: readonly string[] = DEFAULT_PREFIXES): string {
   let u = s.trim().toUpperCase().replace(/^[#\s]+/, "");
   const p = refPrefix(u, prefixes);
   if (p) u = u.slice(p.length);
-  u = u.replace(/[^0-9A-Z]/g, "");
+  u = u.replace(/[^0-9A-Z]/g, "").replace(/^([A-Z]+)0+(?=\d)/, "$1");
   const stripped = u.replace(/^0+/, "");
   return stripped || (u ? "0" : "");
 }
@@ -42,6 +43,30 @@ export function normText(s: string): string {
     .toUpperCase()
     .replace(/[^0-9A-Z]+/g, " ")
     .trim();
+}
+
+/** Words that say what kind of transaction it is, not who it's with. */
+const GENERIC_WORDS = new Set(
+  (
+    "THE AND FOR FROM WITH REF PAYMENT PAYMENTS PAID PAY RECEIPT RECEIPTS RECEIVED RECD CUSTOMER SUPPLIER CARD CHEQUE CHQ CREDIT DEBIT " +
+    "TRANSFER TRF FASTER BGC FPO FPI BACS DDR CHAPS SEPA GIRO STANDING ORDER DIRECT LTD LIMITED PLC LLP INC CORP COMPANY GROUP INVOICE " +
+    "DEPOSIT BANK FEE FEES CHARGE CHARGES INTEREST ONLINE MOBILE BILL PURCHASE REFUND SALES SALE CASH ACCOUNT"
+  ).split(" "),
+);
+
+/**
+ * The words of a description that can name a party: three or more letters
+ * (or four or more digits), not a generic banking word ("PAYMENT", "LTD",
+ * "BACS"...). Takes normalised text (normText).
+ */
+export function nameWords(s: string): string[] {
+  return s.split(" ").filter((w) => (/^\d+$/.test(w) ? w.length >= 4 : w.length >= 3) && !GENERIC_WORDS.has(w));
+}
+
+/** Two descriptions (normalised) name the same party: they have a name word in common. */
+export function sharesName(a: string, b: string): boolean {
+  const wa = new Set(nameWords(a));
+  return nameWords(b).some((w) => wa.has(w));
 }
 
 /** Jaro-Winkler similarity, 0..1. */
