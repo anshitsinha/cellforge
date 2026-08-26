@@ -163,7 +163,7 @@ define(
     args: [{ name: "max_range", description: "the cells to take the largest from" }, ...pairArgs],
     examples: [['=MAXIFS(A1:A5, B1:B5, "North")', 30]],
   },
-  (args) => (args.length < 3 ? errors.value : foldIfs(args[0], args.slice(1), (xs) => (xs.length ? Math.max(...xs) : 0))),
+  (args) => (args.length < 3 ? errors.value : foldIfs(args[0], args.slice(1), (xs) => (xs.length ? xs.reduce((m, x) => (x > m ? x : m), -Infinity) : 0))),
 );
 
 define(
@@ -174,7 +174,7 @@ define(
     args: [{ name: "min_range", description: "the cells to take the smallest from" }, ...pairArgs],
     examples: [['=MINIFS(A1:A5, B1:B5, "North")', 10]],
   },
-  (args) => (args.length < 3 ? errors.value : foldIfs(args[0], args.slice(1), (xs) => (xs.length ? Math.min(...xs) : 0))),
+  (args) => (args.length < 3 ? errors.value : foldIfs(args[0], args.slice(1), (xs) => (xs.length ? xs.reduce((m, x) => (x < m ? x : m), Infinity) : 0))),
 );
 
 define(

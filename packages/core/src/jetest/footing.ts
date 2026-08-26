@@ -56,7 +56,7 @@ export function footRange(cells: readonly (readonly Cell[])[], opts: FootOptions
   const totalRow = opts.totalRow ?? true;
   const totalCol = opts.totalCol ?? true;
   const nr = cells.length;
-  const nc = Math.max(0, ...cells.map((r) => r.length));
+  const nc = cells.reduce((m, r) => Math.max(m, r.length), 0);
   const num = (r: number, c: number) => cellNumber(cells[r]?.[c]) ?? 0;
   const stated = (r: number, c: number) => cellNumber(cells[r]?.[c]);
   const lastR = totalRow ? nr - 1 : nr;
@@ -96,7 +96,7 @@ export function footRange(cells: readonly (readonly Cell[])[], opts: FootOptions
 /** Guess the heading rows and label columns of a block: a top row with text in it, and left columns that are mostly text. */
 export function guessFootLayout(cells: readonly (readonly Cell[])[]): { headerRows: number; labelCols: number } {
   const isText = (v: Cell | undefined) => typeof v === "string" && v.trim() !== "" && cellNumber(v) === null;
-  const nc = Math.max(0, ...cells.map((r) => r.length));
+  const nc = cells.reduce((m, r) => Math.max(m, r.length), 0);
   let headerRows = 0;
   while (headerRows < Math.min(3, cells.length - 1)) {
     const row = cells[headerRows];

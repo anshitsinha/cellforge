@@ -161,7 +161,7 @@ const blank = (v: Cell | undefined) => v === null || v === undefined || (typeof 
 export function findDuplicates(keys: DupKey[], opts: DupOptions = {}): DupResult {
   const maxBlock = opts.maxBlock ?? 40;
   const window = opts.window ?? 20;
-  const n = keys.length ? Math.max(...keys.map((k) => k.values.length)) : 0;
+  const n = keys.reduce((m, k) => Math.max(m, k.values.length), 0);
   const hashed: string[] = new Array(n).fill("");
   const ok = new Uint8Array(n).fill(1);
   const near: NearKey[] = [];

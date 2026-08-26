@@ -322,7 +322,7 @@ export function matchOpenItems(records: OpenItemRecord[], opts: OpenItemOptions 
       const vals = g.map((i) => amountOf(records[i]));
       if (!vals.some((v) => v > 0) || !vals.some((v) => v < 0)) continue;
       const total = vals.reduce((t, v) => t + v, 0);
-      const big = Math.max(...vals.map(Math.abs));
+      const big = vals.reduce((m, v) => Math.max(m, Math.abs(v)), 0);
       if (Math.abs(total) > toleranceFor(big, s)) continue;
       // a plain pair is left to reconcile() so it gets the exact / reference rule
       if (g.length === 2) continue;
