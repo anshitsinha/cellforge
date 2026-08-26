@@ -68,10 +68,10 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Landing page around the niche; installable and offline
-- [x] Landing page: who it's for (finance and audit analysts), what it does that Excel doesn't (messy exports, 100M rows, reconciliation, audit tests, evidence), privacy (nothing leaves the computer), live demo link, docs link
-- [x] Installable: web app manifest, icons, offline after the first visit (service worker), works from a folder
-- [x] Tests, docs
+### Ask the docs with the local model
+- [ ] Search over the user guide, tutorials and function reference, all on the computer: ranked passages (BM25 with stemming and synonyms finance people use), shown with the heading they're under and a link to the page
+- [ ] Answers to "how do I…" questions: the best passages, with the palette command they name runnable from the answer; the local model writes a short answer from those passages when one is loaded
+- [ ] In the app: an "Ask the guide…" box (and the ask bar falls back to it when a request isn't an action); tests, docs
 
 ## Milestones
 
@@ -144,7 +144,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Fuzzy name matching incl. name order; mapping tables
 - ✅ Key-based file compare
 - ✅ Scenarios (copy-on-write sheets) compared side by side
-- 🔨 Acceptance test: synthetic bank/ledger month modelled on real data at 6K and 6M rows
+- ✅ Acceptance test: synthetic bank/ledger month modelled on real data at 6K and 6M rows (6K: every bar met; 6M: everything tied by a reference met, see docs/acceptance.md)
+- ⬜ Volume-aware amount + date matching at millions of lines a day (6M: no-reference batches, keying errors and timing items fall below the 6K bar); column-based unwrap to cut 6M memory from ~8 GB
 
 ### M6: Recipes and checks 🔨
 - ✅ Recipe panel: recorded steps, edit / reorder / disable, parameters,
@@ -192,8 +193,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 ### M10: Docs and launch 🔨
 - ✅ Docs: the three hero workflows as tutorials, generated function reference,
   audit test catalogue, "moving from Excel" and "moving from IDEA/ACL" guides
-- ⬜ Ask the docs with the local model
-- 🔨 Landing page around the niche; installable and offline
+- 🔨 Ask the docs with the local model
+- ✅ Landing page around the niche; installable and offline
 - ✅ Accessibility pass; locale number formats and separators
 
 ## Later (only if users ask)
