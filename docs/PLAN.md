@@ -69,9 +69,9 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Ask the docs with the local model
-- [ ] Search over the user guide, tutorials and function reference, all on the computer: ranked passages (BM25 with stemming and synonyms finance people use), shown with the heading they're under and a link to the page
+- [x] Search over the user guide, tutorials and function reference, all on the computer: ranked passages (BM25 with stemming and synonyms finance people use), shown with the heading they're under and a link to the page
 - [ ] Answers to "how do I…" questions: the best passages, with the palette command they name runnable from the answer; the local model writes a short answer from those passages when one is loaded
-- [ ] In the app: an "Ask the guide…" box (and the ask bar falls back to it when a request isn't an action); tests, docs
+- [x] In the app: an "Ask the guide…" box (and the ask bar falls back to it when a request isn't an action); tests, docs
 
 ## Milestones
 

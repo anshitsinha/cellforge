@@ -40,6 +40,7 @@ import { openScenarios } from "./scenariosui";
 import { registerReportActions } from "./reports/actions";
 import { openReports } from "./reports/reportpanel";
 import { openDocuments } from "./docviewer";
+import { openAskGuide } from "./askguide";
 import { buildTemplate, pickTemplate, TEMPLATES } from "./templates";
 import { clearLocalData, decryptFile, encryptFile, isEncrypted } from "./sharing";
 import { askPassword, confirmClear, openShareCheck } from "./sharingui";
@@ -1657,6 +1658,7 @@ function paletteCommands(): Command[] {
         syncFormulaBar();
       },
     })),
+    { id: "ask-guide", title: "Ask the guide (how do I…)…", keys: "F1", hint: "help how do i question guide docs documentation search", run: () => openAskGuide(paletteCommands, () => grid.focus()) },
     { id: "ask", title: "Ask or do…", keys: "Ctrl /", hint: "ai natural language type what you want plain english", run: () => askBar.open() },
     { id: "share-check", title: "Before you share: check for hidden content…", hint: "share safely hidden sheets rows notes personal data pii history versions privacy", run: () => openShareCheck(workbook, (id) => showSheet(id)) },
     {
@@ -2112,3 +2114,11 @@ window.grid = grid;
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js").catch(() => undefined);
 }
+
+// F1: ask the guide
+document.addEventListener("keydown", (e) => {
+  if (e.key === "F1" && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    e.preventDefault();
+    openAskGuide(paletteCommands, () => grid.focus());
+  }
+});

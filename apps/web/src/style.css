@@ -1485,3 +1485,30 @@ button:disabled {
     --warn-text: #f29900;
   }
 }
+
+/* ---- ask the guide ---- */
+.ask-guide input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ask-guide-results {
+  max-height: 60vh;
+  overflow: auto;
+  margin-top: 8px;
+}
+
+.ask-guide-hit {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border, #dadce0);
+}
+
+.ask-guide-hit p {
+  margin: 4px 0;
+}
+
+.ask-guide-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
