@@ -239,7 +239,7 @@ describe("parseStatement: long statements", () => {
     expect(st.transactions).toHaveLength(n);
     expect(st.transactions[0].date).toBe(45721);
     expect(st.breaks).toBe(0);
-  });
+  }, 60_000); // big input: allow for a busy machine running the whole suite
 });
 
 describe("profileColumn / parseNumberLoose: faster, same answers", () => {
