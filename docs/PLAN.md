@@ -68,10 +68,12 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Ask the docs with the local model
-- [x] Search over the user guide, tutorials and function reference, all on the computer: ranked passages (BM25 with stemming and synonyms finance people use), shown with the heading they're under and a link to the page
-- [ ] Answers to "how do I…" questions: the best passages, with the palette command they name runnable from the answer; the local model writes a short answer from those passages when one is loaded
-- [x] In the app: an "Ask the guide…" box (and the ask bar falls back to it when a request isn't an action); tests, docs
+### Ask, Do, Explain, Clean; audit assistant; category suggestions
+- [ ] Load a local model: pick a .gguf file from disk (kept in the browser's private storage by the model manager), shown with its size and speed; nothing downloaded without asking
+- [ ] The ask bar uses it when the command parser doesn't understand: grammar-constrained action from the catalog, validated, run, checked, retried
+- [ ] Explain and Clean with the model: plain-English explanation of a formula or a lineage tree; clean-up suggestions for a messy column; category suggestions from tagged rows
+- [ ] Eval harness: the phrasing set (and more) run through parser and model, accuracy and time-to-answer per category, as a test and a report
+- [ ] Tests, user guide
 
 ## Milestones
 
@@ -183,17 +185,17 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Accrual / prepayment / deferred income schedules; accounting import export templates
 
 ### M9: Local AI 🔨
-- 🔨 kiln: small decoder LLMs (int4), KV cache, grammar-constrained decoding
-- 🔨 Model manager: hardware detection, tiered models, OPFS cache, offline use
+- ✅ kiln: small decoder LLMs (int4), KV cache, grammar-constrained decoding (CPU path tested against a float reference; the WebGPU kernels still need a real-browser check before they're on by default)
+- ✅ Model manager: hardware detection, tiered models, OPFS cache, offline use (no model is downloaded or shipped yet)
 - ✅ Deterministic command parser for common phrasings
 - ✅ Tool loop over the action catalog: context → constrained action → execute → verify → retry
-- ⬜ Ask, Do, Explain, Clean; audit assistant; category suggestions
-- ⬜ Internal eval harness for accuracy and time-to-answer
+- 🔨 Ask, Do, Explain, Clean; audit assistant; category suggestions
+- 🔨 Internal eval harness for accuracy and time-to-answer
 
 ### M10: Docs and launch 🔨
 - ✅ Docs: the three hero workflows as tutorials, generated function reference,
   audit test catalogue, "moving from Excel" and "moving from IDEA/ACL" guides
-- 🔨 Ask the docs with the local model
+- ✅ Ask the docs with the local model (on-device search now; model-written answers when a model is loaded)
 - ✅ Landing page around the niche; installable and offline
 - ✅ Accessibility pass; locale number formats and separators
 
