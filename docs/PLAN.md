@@ -69,8 +69,8 @@ The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
 ### Ask, Do, Explain, Clean; audit assistant; category suggestions
-- [ ] Load a local model: pick a .gguf file from disk (kept in the browser's private storage by the model manager), shown with its size and speed; nothing downloaded without asking
-- [ ] The ask bar uses it when the command parser doesn't understand: grammar-constrained action from the catalog, validated, run, checked, retried
+- [x] Load a local model: pick a .gguf file from disk (kept in the browser's private storage by the model manager), shown with its size and speed; nothing downloaded without asking
+- [x] The ask bar uses it when the command parser doesn't understand: grammar-constrained action from the catalog, validated, run, checked, retried
 - [ ] Explain and Clean with the model: plain-English explanation of a formula or a lineage tree; clean-up suggestions for a messy column; category suggestions from tagged rows
 - [ ] Eval harness: the phrasing set (and more) run through parser and model, accuracy and time-to-answer per category, as a test and a report
 - [ ] Tests, user guide

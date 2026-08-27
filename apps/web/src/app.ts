@@ -41,6 +41,7 @@ import { registerReportActions } from "./reports/actions";
 import { openReports } from "./reports/reportpanel";
 import { openDocuments } from "./docviewer";
 import { openAskGuide } from "./askguide";
+import { hardwareSummary, installModel, loadedModel, pickModelFile, removeModel, restoreModel } from "./localmodel";
 import { buildTemplate, pickTemplate, TEMPLATES } from "./templates";
 import { clearLocalData, decryptFile, encryptFile, isEncrypted } from "./sharing";
 import { askPassword, confirmClear, openShareCheck } from "./sharingui";
@@ -1659,6 +1660,36 @@ function paletteCommands(): Command[] {
       },
     })),
     { id: "ask-guide", title: "Ask the guide (how do I…)…", keys: "F1", hint: "help how do i question guide docs documentation search", run: () => openAskGuide(paletteCommands, () => grid.focus()) },
+    {
+      id: "model-load",
+      title: loadedModel() ? `Local AI model: ${loadedModel()!.name} (change…)` : "Load a local AI model (.gguf file)…",
+      hint: "ai model llm gguf local offline load qwen llama",
+      run: async () => {
+        const hw = await hardwareSummary();
+        if (hw) statusLeft.textContent = `This computer: ${hw}.`;
+        const file = await pickModelFile();
+        if (!file) return;
+        try {
+          const m = await installModel(file, (t) => (statusLeft.textContent = t));
+          statusLeft.textContent = `Loaded ${m.name} (${(m.size / 1024 ** 3).toFixed(2)} GB). The ask bar (Ctrl+/) now uses it for requests it doesn't know.`;
+        } catch (e) {
+          statusLeft.textContent = `Couldn't load the model: ${(e as Error).message}`;
+        }
+      },
+    },
+    ...(loadedModel()
+      ? [
+          {
+            id: "model-remove",
+            title: "Remove the local AI model",
+            hint: "ai model delete forget",
+            run: async () => {
+              await removeModel();
+              statusLeft.textContent = "Removed the local AI model.";
+            },
+          },
+        ]
+      : []),
     { id: "ask", title: "Ask or do…", keys: "Ctrl /", hint: "ai natural language type what you want plain english", run: () => askBar.open() },
     { id: "share-check", title: "Before you share: check for hidden content…", hint: "share safely hidden sheets rows notes personal data pii history versions privacy", run: () => openShareCheck(workbook, (id) => showSheet(id)) },
     {
@@ -1869,6 +1900,12 @@ const askBar = setupAskBar({
   run: (a) => run(a),
   commands: paletteCommands,
   focusGrid: () => grid.focus(),
+  // a local model, when one has been picked; one kept from last time loads in the background on first use
+  model: () => {
+    const m = loadedModel();
+    if (!m) void restoreModel();
+    return m?.kiln ?? null;
+  },
 });
 
 function loadSource(next: EditableSource, name: string) {
