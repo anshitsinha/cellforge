@@ -31,6 +31,7 @@ packages/actions/   action registry, schemas, history, blob store
 packages/core/      columnar table, CSV parser, formula parser/evaluator/compiler
 packages/grid/      virtualized canvas grid
 packages/gpu/       experimental WebGPU backend
+packages/kiln/      local LLM runtime: GGUF, tokenizer, CPU/WebGPU decoder, JSON-constrained decoding (see kiln.md)
 docs/               markdown sources for the docs site
   guide/              user guide
   dev/                developer guide
