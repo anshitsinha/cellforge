@@ -1,0 +1,136 @@
+/* SQL query panel (sqlpanel.ts). Builds on the palette-form and import-dialog styles. */
+
+.palette.sql-dialog {
+  width: min(1100px, 100%);
+  max-height: calc(100vh - 48px);
+}
+
+.palette-backdrop:has(.sql-dialog) {
+  padding-top: 24px;
+}
+
+.sql-dialog .palette-form {
+  max-height: calc(100vh - 60px);
+}
+
+.sql-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+}
+
+.sql-side {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  max-height: 70vh;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.sql-tables details {
+  margin: 0 0 2px;
+}
+
+.sql-tables summary {
+  cursor: pointer;
+}
+
+.sql-tables ul,
+.sql-saved ul {
+  list-style: none;
+  margin: 2px 0 6px;
+  padding-left: 14px;
+}
+
+.sql-tables li {
+  cursor: pointer;
+  padding: 1px 0;
+}
+
+.sql-tables code {
+  font: 12px ui-monospace, Consolas, monospace;
+}
+
+.sql-tables li:hover code,
+.sql-tables summary code:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.sql-saved {
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+
+.sql-saved ul {
+  padding-left: 0;
+}
+
+.sql-saved li {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.sql-saved-name {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sql-saved-del {
+  padding: 0 6px;
+}
+
+.sql-main {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+}
+
+.palette-form textarea.sql-editor {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 160px;
+  resize: vertical;
+  font: 13px/1.45 ui-monospace, Consolas, monospace;
+  tab-size: 2;
+}
+
+.sql-save-row {
+  display: flex;
+  gap: 6px;
+}
+
+.sql-save-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.sql-status {
+  white-space: pre-wrap;
+}
+
+.sql-preview {
+  max-height: 46vh;
+}
+
+.sql-preview td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  .sql-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sql-side {
+    max-height: 30vh;
+  }
+}
