@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { ActionHistory, BlobStore, type Action } from "@cellforge/actions";
-import { resultRows } from "../../../packages/core/src/sql";
+import { resultRows } from "@cellforge/core";
 import { setCells, sheetActions, type SheetCtx } from "./actions";
 import { BlankSource, EditableSource } from "./editable";
 import { bindSqlStore, getSavedQueries, putResultOnSheet, registerSqlActions, runOnWorkbook, sheetColumnNames, sqlName, type SavedQuery } from "./sqlpanel";

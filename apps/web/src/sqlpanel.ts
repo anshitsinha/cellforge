@@ -11,7 +11,7 @@
 import { type Action, type ActionRegistry, s } from "@cellforge/actions";
 import { formatValue, Table, type ColumnData } from "@cellforge/core";
 import { columnLetter } from "@cellforge/grid";
-import { runSql, sqlTableNames, SqlError, type SqlResult, type SqlTable } from "../../../packages/core/src/sql";
+import { runSql, sqlTableNames, SqlError, type SqlResult, type SqlTable } from "@cellforge/core";
 import type { SheetCtx } from "./actions";
 import { EditableSource } from "./editable";
 import { readSheetColumns } from "./pivotpanel";

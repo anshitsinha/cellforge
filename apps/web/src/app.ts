@@ -25,6 +25,7 @@ import { editRule, openCfManager } from "./cfmanager";
 import { openFindReplace } from "./finddialog";
 import { openAuditTool } from "./audittools";
 import { openRecon } from "./recondialog";
+import { bindSqlStore, openSql, registerSqlActions } from "./sqlpanel";
 import { bindChecksStore, gateExport, openCategorise, openChecks, registerCheckActions } from "./checksui";
 import { openTimeTool } from "./timetools";
 import { openOpenItems } from "./openitemsdialog";
@@ -290,6 +291,8 @@ const registry = sheetActions();
 registerFindActions(registry);
 registerCheckActions(registry);
 registerReportActions(registry);
+registerSqlActions(registry);
+bindSqlStore({ getQueries: () => workbook.sqlQueries, setQueries: (q) => (workbook.sqlQueries = q) });
 bindChecksStore({
   workbook: () => workbook,
   getChecks: () => workbook.checks,
@@ -1559,6 +1562,7 @@ function paletteCommands(): Command[] {
         { id: "mapping-table", title: "Apply a mapping table…", hint: "mapping table map values standardise names fuzzy names suggest pairs lookup replace", run: () => openMapping(d) },
       ];
     })(),
+    { id: "sql", title: "SQL query…", hint: "sql query select join group by where sum count left join unmatched duplicates running balance window", run: () => openSql({ workbook: () => workbook, activeSheet: () => activeId, run: (a) => run(a), putBlob: (v) => blobs.put(v), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }) },
     { id: "pivot", title: "Pivot table…", hint: "pivot summarise group by subtotal crosstab drill down slicer sum count", run: () => openPivot({ ...statementDeps(), source: () => source, sheetName: () => workbook.get(activeId).name, sheetId: () => activeId, addChart: (spec) => void run({ type: "chart.set", params: { id: spec.id, spec } }) }) },
     { id: "reports", title: "Reports…", hint: "report pdf print narrative book contents entity consolidation roll forward period pack board", run: () => openReports({ workbook: () => workbook, activeSheet: () => activeId, run: (a) => run(a), putBlob: (v) => blobs.put(v), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }) },
     { id: "profiles", title: "Column profiles", hint: "profile columns distinct blanks min max median histogram patterns data quality", run: () => openProfiles({ source: () => source, sheetName: () => workbook.get(activeId).name, focusGrid: () => grid.focus() }) },

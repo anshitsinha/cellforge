@@ -132,7 +132,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Notes on cells, hyperlinks
 
 ### M5: Query engine, explore, reconcile 🔨
-- 🔨 Query engine over sheet columns: our own SQL on the columnar storage (decided instead of DuckDB-WASM: no 30 MB download, no runtime dependency, works offline)
+- ✅ Query engine over sheet columns: our own SQL on the columnar storage (decided instead of DuckDB-WASM: no 30 MB download, no runtime dependency, works offline)
 - ✅ Pivot tables (drag fields, drill-down to rows), slicers
 - ✅ Column profiles
 - ✅ Join doctor (match rate, duplicate keys, orphans) and guided joins
