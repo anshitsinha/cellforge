@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit -p apps/web && tsc --noEmit -p apps/docs && tsc --noEmit -p apps/tracker && tsc --noEmit -p packages/kiln",
     "bench:kiln": "node packages/kiln/bench/run.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "eval": "vitest run packages/ai/test/eval --mode eval"
   },
   "engines": {
     "node": ">=20"

@@ -79,6 +79,11 @@ Checklist for a new action:
 - The formula compiler has a property-based fuzz test: compiled results must be
   bit-identical to the interpreter.
 - UI changes are also checked by hand in a browser before committing.
+- The ask bar has an eval harness (`packages/ai/src/eval.ts`): the phrasing set in
+  `packages/ai/test/cases.ts`, grouped by category, is scored for accuracy and
+  time-to-answer. The normal run requires the parser to get all of it right;
+  `npm run eval` also writes the per-category table to `docs/dev/eval-report.md`.
+  To score a local model, pass `loopAnswerer({ model, noParser: true })` to `runEval`.
 
 ## Progress tracking
 
