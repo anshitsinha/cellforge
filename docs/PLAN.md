@@ -191,12 +191,13 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Ask, Do, Explain, Clean; audit assistant; category suggestions (formulas read in plain English; spelling-variant fixes; with a model: rephrased explanations checked against the facts, extra variant pairs, category picks limited to categories in use)
 - ✅ Internal eval harness for accuracy and time-to-answer (`npm run eval`; the parser scores 150/150 across 14 categories at under 0.1 ms each; a model is scored the same way once one is loaded)
 
-### M10: Docs and launch ✅
+### M10: Docs and launch 🔨
 - ✅ Docs: the three hero workflows as tutorials, generated function reference,
   audit test catalogue, "moving from Excel" and "moving from IDEA/ACL" guides
 - ✅ Ask the docs with the local model (on-device search now; model-written answers when a model is loaded)
 - ✅ Landing page around the niche; installable and offline
 - ✅ Accessibility pass; locale number formats and separators
+- 🔨 UI/UX overhaul: independent review of every screen, then a redesigned landing page, first-run and AI onboarding (find, get and load a model), clearer toolbar and menus, one design system across all dialogs
 
 ## Later (only if users ask)
 
