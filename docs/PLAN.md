@@ -147,7 +147,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Key-based file compare
 - ✅ Scenarios (copy-on-write sheets) compared side by side
 - ✅ Acceptance test: synthetic bank/ledger month modelled on real data at 6K and 6M rows (6K: every bar met; 6M: everything tied by a reference met, see docs/acceptance.md)
-- ⬜ Volume-aware amount + date matching at millions of lines a day (6M: no-reference batches, keying errors and timing items fall below the 6K bar); column-based unwrap to cut 6M memory from ~8 GB
+- 🔨 Volume-aware amount + date matching at millions of lines a day (6M: no-reference batches, keying errors and timing items fall below the 6K bar); column-based unwrap to cut 6M memory from ~8 GB
 
 ### M6: Recipes and checks 🔨
 - ✅ Recipe panel: recorded steps, edit / reorder / disable, parameters,
