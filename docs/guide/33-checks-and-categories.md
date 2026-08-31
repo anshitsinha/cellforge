@@ -105,6 +105,17 @@ you don't want, **Add the ticked rules**, look them over, then **Apply**.
 Learned rules have a blue edge in the list. Common filler words (payment,
 card, ltd, ref…) and numbers are never proposed.
 
+### Suggestions from a local model
+
+With a local AI model loaded ([the ask bar](34-ask-bar.md#a-local-model)),
+**Suggest the rest with the local model** looks at the rows that still have
+no category after your rules, up to 50 at a time. For each it is shown a few
+of your tagged rows per category and must pick one of the categories you
+already use, or say it isn't sure; it can't invent a new one. You get a list
+of suggestions, all ticked: untick any you disagree with, then **Write the
+ticked categories**. They are ordinary values, and one **Undo** takes them
+back. Rows it wasn't sure about are left for you.
+
 ### Tagging by hand in bulk
 
 Select the rows in the sheet, open **Categorise…**, type the category next

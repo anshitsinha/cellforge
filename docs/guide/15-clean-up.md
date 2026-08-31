@@ -37,3 +37,19 @@ the values that can only be read one way (like `25/03/2024`).
 
 The original sheet is untouched. One **Undo** (Ctrl+Z) takes both new
 sheets away again.
+
+## Spelling variants in a column
+
+Names typed by different people drift: `Acme Ltd`, `ACME LTD.`, ` acme ltd`.
+Select a cell in the column and pick **Fix spelling variants in this
+column…** in the command palette. It groups values that are the same once
+case, spacing, punctuation, `&`/`and` and *Limited/Ltd*, *Incorporated/Inc*,
+*Company/Co* are ignored, and proposes changing each group to its most
+common spelling. Tick the groups you want and **Change the ticked
+spellings**; one **Undo** puts them back.
+
+With a local AI model loaded ([the ask bar](34-ask-bar.md#a-local-model)), it
+also asks the model for pairs the rules can't see, such as an abbreviation
+and the full name. The model may only pair values that are already in the
+column, and the commoner spelling is kept. Its groups are marked *model* and
+start unticked.

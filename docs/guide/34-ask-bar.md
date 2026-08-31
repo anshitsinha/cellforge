@@ -121,9 +121,29 @@ sheet is already called Bank. Change what you typed and it updates as you go.
 When it used the selection or a close spelling, it says it isn't completely
 sure, so check the description before pressing Do it.
 
-## Later: a local model
+## A local model
 
-A small AI model that runs on your computer will be able to take over
-requests the ask bar doesn't know. It will choose from the same actions, each
-one checked before it runs, and it will be undoable like everything else.
-Nothing you type leaves your computer, with or without the model.
+A small AI model that runs on your computer can take over requests the ask
+bar doesn't know. Get a model file in the .gguf format (for example a small
+Qwen or Llama instruct model, 0.5 to 3 GB) onto your disk yourself, then pick
+**Load a local AI model (.gguf file)…** in the command palette and choose it.
+cellforge keeps a copy in the browser's private storage, so next time it's
+already there; **Remove the local AI model** deletes it. Nothing is
+downloaded for you.
+
+With a model loaded, a request the ask bar doesn't recognise goes to the
+model. The model can only answer with one of the same actions (its output is
+held to their shapes as it writes), each answer is checked against your
+sheet before it runs, and a step that fails is undone and retried. Whatever
+it does is undoable like everything else. Nothing you type leaves your
+computer, with or without the model.
+
+The model also helps in three other places, always with a plain version
+that works without it:
+
+- **Explain this number** can rephrase a formula in sentences
+  ([Explain](35-explain.md)).
+- **Fix spelling variants in this column** can find abbreviations and typos
+  ([Cleaning up](15-clean-up.md)).
+- **Categorise** can suggest categories for rows no rule covers
+  ([Categories](33-checks-and-categories.md)).

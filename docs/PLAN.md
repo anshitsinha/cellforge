@@ -68,12 +68,11 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Ask, Do, Explain, Clean; audit assistant; category suggestions
-- [x] Load a local model: pick a .gguf file from disk (kept in the browser's private storage by the model manager), shown with its size and speed; nothing downloaded without asking
-- [x] The ask bar uses it when the command parser doesn't understand: grammar-constrained action from the catalog, validated, run, checked, retried
-- [ ] Explain and Clean with the model: plain-English explanation of a formula or a lineage tree; clean-up suggestions for a messy column; category suggestions from tagged rows
-- [x] Eval harness: the phrasing set (and more) run through parser and model, accuracy and time-to-answer per category, as a test and a report
-- [ ] Tests, user guide
+### Volume-aware amount + date matching at millions of lines a day
+- [ ] Measure the 6M month before the change: recall per planted category, precision per rule, peak memory
+- [ ] Amount + date pass aware of volume: weigh how likely a same-amount stranger is in the window, prefer pairs that agree on kind and direction, pick best pairs both ways
+- [ ] Column-based unwrap so the 6M pipeline holds columns, not rows of strings
+- [ ] Keep the 6K bars and the 100k x 100k contract; re-measure 6M and update the acceptance write-up
 
 ## Milestones
 
@@ -149,7 +148,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Acceptance test: synthetic bank/ledger month modelled on real data at 6K and 6M rows (6K: every bar met; 6M: everything tied by a reference met, see docs/acceptance.md)
 - 🔨 Volume-aware amount + date matching at millions of lines a day (6M: no-reference batches, keying errors and timing items fall below the 6K bar); column-based unwrap to cut 6M memory from ~8 GB
 
-### M6: Recipes and checks 🔨
+### M6: Recipes and checks ✅
 - ✅ Recipe panel: recorded steps, edit / reorder / disable, parameters,
   live preview at every step, per-step time and memory profile
 - ✅ Re-run a recipe on new files or a folder
@@ -160,7 +159,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Explain: where any number came from (formula chain, recipe step, source rows),
   lineage view, one-click write-up
 
-### M7: Audit, evidence, sharing 🔨
+### M7: Audit, evidence, sharing ✅
 - ✅ Duplicate tests (exact, near, fuzzy, multi-column); sequence gaps
 - ✅ Benford (1st and 1st-two digits) with chi-square / MAD and chart
 - ✅ Journal entry testing suite; red-flag overlaps (vendor vs employee etc.)
@@ -175,7 +174,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Share safely: PII scan, mask / hash / pseudonymise / redact into a safe copy
 - ✅ Hidden-content check, encrypted export; clear all local data; offline bundle
 
-### M8: Charts and reports 🔨
+### M8: Charts and reports ✅
 - ✅ Charts: column, bar, line, area, pie, scatter, combo, histogram, waterfall,
   Pareto, Benford, ageing; millions of points downsampled; axis limits from cells
 - ✅ Pivot charts
@@ -184,15 +183,15 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Time tools: fiscal years, MoM/YoY, rolling windows, budget vs actual, multi-currency
 - ✅ Accrual / prepayment / deferred income schedules; accounting import export templates
 
-### M9: Local AI 🔨
+### M9: Local AI ✅
 - ✅ kiln: small decoder LLMs (int4), KV cache, grammar-constrained decoding (CPU path tested against a float reference; the WebGPU kernels still need a real-browser check before they're on by default)
 - ✅ Model manager: hardware detection, tiered models, OPFS cache, offline use (no model is downloaded or shipped yet)
 - ✅ Deterministic command parser for common phrasings
 - ✅ Tool loop over the action catalog: context → constrained action → execute → verify → retry
-- 🔨 Ask, Do, Explain, Clean; audit assistant; category suggestions
+- ✅ Ask, Do, Explain, Clean; audit assistant; category suggestions (formulas read in plain English; spelling-variant fixes; with a model: rephrased explanations checked against the facts, extra variant pairs, category picks limited to categories in use)
 - ✅ Internal eval harness for accuracy and time-to-answer (`npm run eval`; the parser scores 150/150 across 14 categories at under 0.1 ms each; a model is scored the same way once one is loaded)
 
-### M10: Docs and launch 🔨
+### M10: Docs and launch ✅
 - ✅ Docs: the three hero workflows as tutorials, generated function reference,
   audit test catalogue, "moving from Excel" and "moving from IDEA/ACL" guides
 - ✅ Ask the docs with the local model (on-device search now; model-written answers when a model is loaded)
