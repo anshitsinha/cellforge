@@ -42,6 +42,7 @@ import { registerReportActions } from "./reports/actions";
 import { openReports } from "./reports/reportpanel";
 import { openDocuments } from "./docviewer";
 import { openAskGuide } from "./askguide";
+import { openVariants } from "./variants";
 import { hardwareSummary, installModel, loadedModel, pickModelFile, removeModel, restoreModel } from "./localmodel";
 import { buildTemplate, pickTemplate, TEMPLATES } from "./templates";
 import { clearLocalData, decryptFile, encryptFile, isEncrypted } from "./sharing";
@@ -1638,10 +1639,16 @@ function paletteCommands(): Command[] {
       run: () => openChecks({ workbook: () => workbook, activeSheet: () => activeId, run: (a) => run(a), goTo: findDeps().goTo, status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }),
     },
     {
+      id: "variants",
+      title: "Fix spelling variants in this column…",
+      hint: "clean spelling variants duplicates names vendors customers case spaces typos abbreviations merge normalise standardise",
+      run: () => void openVariants({ source: () => source, activeSheet: () => activeId, col: () => grid.selection.col, run: (a) => run(a), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus(), model: () => loadedModel()?.kiln ?? null }),
+    },
+    {
       id: "categorise",
       title: "Categorise…",
       hint: "categorise categorize category tag bulk tagging rules learn uncategorised queue coding expenses",
-      run: () => openCategorise({ workbook: () => workbook, activeSheet: () => activeId, source: () => source, range: () => grid.range, run: (a) => run(a), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }),
+      run: () => openCategorise({ workbook: () => workbook, activeSheet: () => activeId, source: () => source, range: () => grid.range, run: (a) => run(a), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus(), model: () => loadedModel()?.kiln ?? null }),
     },
     ...reviewCommands({
       workbook: () => workbook,

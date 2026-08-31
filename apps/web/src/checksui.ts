@@ -15,6 +15,7 @@
  * Categories already in the column are kept unless asked otherwise.
  */
 import { type Action, type ActionRegistry, s } from "@cellforge/actions";
+import { suggestCategories, type Model } from "@cellforge/ai";
 import { moveFormula, parseFormula, parseTyped, type Node } from "@cellforge/core";
 import { columnLetter, type CellRange } from "@cellforge/grid";
 import {
@@ -875,7 +876,12 @@ export interface CategoriseDeps {
   run: (a: Action) => Promise<unknown>;
   status: (text: string) => void;
   focusGrid: () => void;
+  /** the local model, if one is loaded: it can suggest categories for rows no rule covers */
+  model?: () => Model | null;
 }
+
+/** most rows the model is asked about in one go (each is one short answer) */
+export const MODEL_CATEGORY_ROWS = 50;
 
 const MATCH_OPTIONS = [
   ["contains", "contains"],
@@ -1014,9 +1020,13 @@ export function openCategorise(d: CategoriseDeps): void {
     saveRules.addEventListener("click", () => void commitRules().then(drawRules));
     const learn = button("Learn from what's tagged");
     learn.addEventListener("click", showLearned);
+    const model = d.model?.() ?? null;
+    const ask = button("Suggest the rest with the local model", model ? "For rows no rule covers: the model picks one of the categories already in use, from examples of each" : "Load a local AI model first (palette: Load a local AI model)");
+    ask.disabled = !model;
+    ask.addEventListener("click", () => void suggestWithModel(model!));
     const wrap = el("div", "import-preview");
     wrap.append(table);
-    rulesBox.append(wrap, row("ck-row", addRule, learn, saveRules));
+    rulesBox.append(wrap, row("ck-row", addRule, learn, ask, saveRules));
   };
   const td = (child: HTMLElement) => {
     const c = el("td");
@@ -1071,6 +1081,64 @@ export function openCategorise(d: CategoriseDeps): void {
     const wrap = el("div", "import-preview");
     wrap.append(table);
     learnBox.append(el("p", "", `From ${tagged.toLocaleString("en-US")} tagged rows. Rows: tagged rows with the word in that category; Right: how often the word means that category; Elsewhere: tagged rows with the word in other categories.`), wrap, row("ck-row", accept));
+  }
+
+  async function suggestWithModel(model: Model) {
+    learnBox.replaceChildren();
+    const rows = readCatRows(data, cols());
+    const examples = rows.filter((r) => r.category).map((r) => ({ text: r.text, amount: r.amount, category: r.category! }));
+    if (new Set(examples.map((e) => e.category)).size < 2) {
+      learnBox.append(el("p", "cleanup-warn", "Tag rows with at least two different categories first; the model only picks from categories already in use."));
+      return;
+    }
+    const left = categorise(rows, rules, { overwrite: false }).uncategorised.filter((i) => !rows[i].category && rows[i].text.trim());
+    if (!left.length) {
+      learnBox.append(el("p", "", "Every row with text already has a category, or a rule gives it one."));
+      return;
+    }
+    const batch = left.slice(0, MODEL_CATEGORY_ROWS);
+    const note = el("p", "", `Asking the local model about ${batch.length} row${batch.length === 1 ? "" : "s"}…`);
+    note.setAttribute("aria-live", "polite");
+    learnBox.append(note);
+    const r = await suggestCategories(model, batch.map((i) => rows[i]), examples);
+    if (!r.suggestions.length) {
+      note.textContent = `The model wasn't sure about any of these ${batch.length} rows${r.failed ? ` (${r.failed} answers didn't fit)` : ""}. Tag a few more by hand, or add rules.`;
+      return;
+    }
+    const table = el("table", "ck-rule-table");
+    const head = el("tr");
+    for (const t of ["", "Row", "Text", "Category"]) head.append(el("th", "", t));
+    table.append(head);
+    const picks: HTMLInputElement[] = [];
+    for (const sug of r.suggestions) {
+      const i = batch[sug.row];
+      const tr = el("tr");
+      const t = el("input");
+      t.type = "checkbox";
+      t.checked = true;
+      t.setAttribute("aria-label", "Use this category");
+      picks.push(t);
+      tr.append(td(t), el("td", "num", String(i + data.first + 1)), el("td", "ck-ex", rows[i].text), el("td", "", sug.category));
+      table.append(tr);
+    }
+    const write = button("Write the ticked categories");
+    write.addEventListener("click", () => {
+      const c = cols().category;
+      const cells = r.suggestions.filter((_, k) => picks[k].checked).map((sug) => ({ row: batch[sug.row] + data.first, col: c, input: categoryInput(sug.category) }));
+      if (!cells.length) return;
+      if (c >= data.names.length && data.first > 0) cells.unshift({ row: data.first - 1, col: c, input: "Category" });
+      write.disabled = true;
+      void d.run(setCells(cells, `categorise ${cells.length} rows (local model)`, sheetId)).then(() => {
+        d.status(`Wrote ${cells.length.toLocaleString("en-US")} categories suggested by the local model`);
+        learnBox.replaceChildren(el("p", "", `Wrote ${cells.length} categories. They're ordinary values: undo (Ctrl+Z) takes them back.`));
+        refresh();
+      });
+    });
+    const wrap = el("div", "import-preview");
+    wrap.append(table);
+    const more = left.length > batch.length ? ` ${left.length - batch.length} more rows are left; ask again after writing these.` : "";
+    note.textContent = `The local model suggests categories for ${r.suggestions.length} of ${batch.length} rows (${r.unsure} not sure${r.failed ? `, ${r.failed} answers didn't fit` : ""}). It only picks categories already in use; check them before writing.${more}`;
+    learnBox.append(wrap, row("ck-row", write));
   }
 
   let result: CategoriseResult | null = null;
