@@ -226,3 +226,18 @@ The second model is ~3M multiply-adds per token, which puts the CPU path
 at roughly 0.6 GMAC/s. A 0.5B model needs ~0.5 GMAC per token, so on the
 CPU path expect on the order of 1 token/s: fine for tests and tiny models,
 too slow for 0.5B+ without WebGPU or a multi-threaded/WASM-SIMD CPU path.
+
+## Checking the WebGPU kernels in a browser
+
+Open `/kilncheck.html` on the dev server (`npm run dev`). It builds tiny random
+models (F32, Q8_0, Q4_0 with Q8_0 embeddings, Q4_K qwen2, Q6_K with tied
+embeddings, and a larger Q4_0), runs the same tokens through the CPU and
+WebGPU backends, and reports the largest logit difference, how often the top
+token agrees, and whether greedy decoding matches.
+
+Result on 2026-11-16 (Brave 1.x, Windows, integrated GPU): every model within
+2e-5 of the CPU relative to the logits' range, top token agreed 41/41 steps,
+greedy output identical. On these tiny models the GPU is slower than the CPU
+(about 300 tokens/s against thousands) because each step is dominated by
+dispatch overhead; it pulls ahead as the model grows (the 512-wide 4-layer
+model: 125 vs 67 tokens/s).

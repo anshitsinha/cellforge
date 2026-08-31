@@ -184,7 +184,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Accrual / prepayment / deferred income schedules; accounting import export templates
 
 ### M9: Local AI ✅
-- ✅ kiln: small decoder LLMs (int4), KV cache, grammar-constrained decoding (CPU path tested against a float reference; the WebGPU kernels still need a real-browser check before they're on by default)
+- ✅ kiln: small decoder LLMs (int4), KV cache, grammar-constrained decoding (CPU path tested against a float reference; WebGPU kernels checked in a real browser on F32, Q8_0, Q4_0, Q4_K, Q6_K, llama and qwen2: logits within 2e-5 of the CPU, identical greedy tokens; dev page apps/web/kilncheck.html)
 - ✅ Model manager: hardware detection, tiered models, OPFS cache, offline use (no model is downloaded or shipped yet)
 - ✅ Deterministic command parser for common phrasings
 - ✅ Tool loop over the action catalog: context → constrained action → execute → verify → retry
