@@ -9,3 +9,4 @@ export { EXAMPLE_CELLS, FUNCTION_INFO, signature, type FunctionArg, type Functio
 export { parseTableSpec, type TableSpec } from "./tablespec";
 export { diagnoseMiss, squeeze } from "./diagnose";
 export { hardCodedNumbers, hasRefError, references, shape, steps, type Finding, type Reference, type Step } from "./audit";
+export { formulaInWords, type WordsOptions } from "./words";
