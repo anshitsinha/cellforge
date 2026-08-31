@@ -11,6 +11,8 @@ import { FUNCTION_INFO } from "./functions";
 export interface WordsOptions {
   /** a name for a cell or range, e.g. its column heading: "C2:C200" → "Amount (C2:C200)" */
   label?: (node: Extract<Node, { type: "ref" | "range" }>, text: string) => string | null;
+  /** row shift of a filled formula (as stored with it), so references print as on screen */
+  shift?: number;
 }
 
 const OPS: Record<string, string> = {
@@ -52,7 +54,7 @@ export function formulaInWords(node: Node, opts: WordsOptions = {}): string {
         return n.value ? "TRUE" : "FALSE";
       case "ref":
       case "range": {
-        const text = formatFormula(n).slice(1);
+        const text = formatFormula(n, opts.shift ?? 0).slice(1);
         return opts.label?.(n, text) ?? text;
       }
       case "unary":

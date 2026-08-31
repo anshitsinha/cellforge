@@ -5,7 +5,7 @@
  * carry it, which file and row they came from. Also a plain-English
  * write-up to paste into a working paper.
  */
-import { formatFormula, references } from "@cellforge/core";
+import { formatFormula, formulaInWords, references, type Node } from "@cellforge/core";
 import { columnLetter, type CellRange } from "@cellforge/grid";
 import type { Workbook } from "./workbook";
 
@@ -21,6 +21,8 @@ export interface LineageNode {
   /** spill: part of the result of a formula elsewhere (its anchor is the child) */
   kind: "formula" | "typed" | "imported" | "empty" | "range" | "spill";
   formula?: string;
+  /** the formula in plain English, columns named by their headings */
+  words?: string;
   /** a range: how many cells and their total */
   range?: { cells: number; numbers: number; total: number };
   /** when it was typed, and what (from the edit trail) */
@@ -60,6 +62,16 @@ function provenanceOf(wb: Workbook, sheetId: string, row: number): string | unde
     if (v !== null && v !== "") parts.push(`${name.toLowerCase()} ${v}`);
   }
   return parts.length ? parts.join(", ") : undefined;
+}
+
+/** "Amount (C2:C200)" for a block of one column under a text heading in row 1; null otherwise. */
+function headingFor(wb: Workbook, sheetId: string, n: Extract<Node, { type: "ref" | "range" }>, text: string): string | null {
+  if (n.type !== "range" || n.range.left !== n.range.right || !wb.has(sheetId)) return null;
+  if (n.range.top > 1) return null;
+  const src = wb.get(sheetId).source;
+  const named = src.getColumnName?.(n.range.left);
+  const head = named || (n.range.top === 1 ? src.getCell(0, n.range.left) : null);
+  return typeof head === "string" && head.trim() && !/\d/.test(head) ? `${head.trim()} (${text})` : null;
 }
 
 export function explainCell(wb: Workbook, sheetId: string, row: number, col: number, opts: LineageOptions = {}): LineageNode {
@@ -105,6 +117,7 @@ export function explainCell(wb: Workbook, sheetId: string, row: number, col: num
     if (f) {
       node.kind = "formula";
       node.formula = formatFormula(f.ast, f.shift);
+      node.words = formulaInWords(f.ast, { shift: f.shift, label: (n, text) => headingFor(wb, n.sheet ? wb.sheets.find((s) => s.name.toLowerCase() === n.sheet!.toLowerCase())?.id ?? sid : sid, n, text) });
       if (level >= depth || count >= maxNodes) return node;
       for (const ref of references(f.ast, f.shift, src.evalContext)) {
         if (count >= maxNodes) break;
@@ -171,7 +184,7 @@ export function writeUp(root: LineageNode): string {
     const name = n.label;
     switch (n.kind) {
       case "formula":
-        return `${name} is ${n.value || "empty"}, worked out as ${n.formula}.`;
+        return `${name} is ${n.value || "empty"}, worked out as ${n.formula}${n.words ? ` (${n.words.replace(/\.$/, "").replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase())})` : ""}.`;
       case "typed":
         return `${name} is ${n.value}, typed in${n.typed ? ` on ${when(n.typed.at)}` : ""}${n.origin ? ` on a sheet that came from: ${n.origin}` : ""}.`;
       case "imported":

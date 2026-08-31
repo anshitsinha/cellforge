@@ -44,7 +44,7 @@ describe("explaining where a number came from", () => {
     expect(data[0].origin).toBe("Combined 2 files: jan.csv, feb.csv");
 
     const text = writeUp(tree);
-    expect(text.split("\n")[0]).toBe("A3 is 70, worked out as =A2*A1.");
+    expect(text.split("\n")[0]).toBe("A3 is 70, worked out as =A2*A1 (A2 times A1).");
     expect(text).toContain("Data!B2 is 250, from the data as imported (Combined 2 files: jan.csv, feb.csv); this row: source file feb.csv.");
     expect(text).toContain("A1 is 0.2, typed in on");
 
@@ -81,5 +81,27 @@ describe("spilled results", () => {
     expect(tree.children[0]).toMatchObject({ label: "A3", kind: "spill", value: "3" });
     expect(tree.children[0].children[0]).toMatchObject({ label: "A1", kind: "formula", formula: "=SEQUENCE(3)" });
     expect(writeUp(tree)).toContain("A3 is 3, part of the result of the formula in A1.");
+  });
+});
+
+describe("formulas read in plain English", () => {
+  it("names a column block by its heading", async () => {
+    const workbook = new Workbook({ name: "Sales", source: new EditableSource(new BlankSource(20, 4)) });
+    const ctx: SheetCtx = { workbook, activeSheet: workbook.sheets[0].id, blobs: new BlobStore(), sortRows: async () => null };
+    const h = new ActionHistory(sheetActions(), () => ctx);
+    await h.run(
+      setCells([
+        { row: 0, col: 0, input: "Region" },
+        { row: 0, col: 1, input: "Amount" },
+        { row: 1, col: 0, input: "North" },
+        { row: 1, col: 1, input: "10" },
+        { row: 2, col: 0, input: "South" },
+        { row: 2, col: 1, input: "30" },
+        { row: 5, col: 3, input: '=SUMIF(A2:A3,"North",B2:B3)' },
+      ]),
+    );
+    const tree = explainCell(workbook, workbook.sheets[0].id, 5, 3);
+    expect(tree.words).toBe('The total of Amount (B2:B3) where Region (A2:A3) is "North".');
+    expect(writeUp(tree).split("\n")[0]).toBe('D6 is 10, worked out as =SUMIF(A2:A3, "North", B2:B3) (the total of Amount (B2:B3) where Region (A2:A3) is "North").');
   });
 });

@@ -340,6 +340,7 @@ const history = new ActionHistory(registry, ctx);
 
 const lineageDeps = () => ({
   workbook: () => workbook,
+  model: () => loadedModel()?.kiln ?? null,
   sheetId: () => activeId,
   cell: () => ({ ...grid.selection }),
   lastEdit: (sheetId: string, row: number, col: number) => {

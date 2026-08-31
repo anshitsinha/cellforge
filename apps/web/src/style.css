@@ -1399,6 +1399,15 @@ button:disabled {
   font-size: 12px;
 }
 
+.lineage-words {
+  font-size: 12px;
+  font-style: italic;
+}
+
+.lineage-model p {
+  margin: 6px 0 2px;
+}
+
 .lineage-writeup {
   white-space: pre-wrap;
   font-size: 12px;
