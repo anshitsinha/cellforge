@@ -199,15 +199,16 @@ class Pool {
   readonly vals: Float64Array;
   readonly dates: Float64Array;
   private readonly nextFree: Int32Array;
-  readonly pos = new Map<number, number>();
+  /** position of each id, made the first time an item is taken by id (most pools never are) */
+  private pos: Map<number, number> | null = null;
 
   constructor(ids: number[], val: (i: number) => number, date: (i: number) => number) {
     const sorted = ids.slice().sort((x, y) => val(x) - val(y) || dateKey(date(x)) - dateKey(date(y)) || x - y);
     this.ids = Int32Array.from(sorted);
     this.vals = Float64Array.from(sorted, val);
     this.dates = Float64Array.from(sorted, date);
-    this.nextFree = Int32Array.from({ length: sorted.length + 1 }, (_, i) => i);
-    sorted.forEach((id, p) => this.pos.set(id, p));
+    this.nextFree = new Int32Array(sorted.length + 1);
+    for (let p = 0; p <= sorted.length; p++) this.nextFree[p] = p;
   }
 
   get size(): number {
@@ -231,6 +232,10 @@ class Pool {
   }
 
   takeId(id: number): void {
+    if (!this.pos) {
+      this.pos = new Map();
+      for (let p = 0; p < this.ids.length; p++) this.pos.set(this.ids[p], p);
+    }
     const p = this.pos.get(id);
     if (p !== undefined) this.take(p);
   }
@@ -340,17 +345,28 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
 
   // 1. exact: same key, same amount (in cents)
   if (s.passes.exact) {
-    const buckets = new Map<string, number[]>();
+    // by key, then by amount: keys are mostly unique, so most keys hold one list and no map by
+    // amount, and no key + amount string is made per item
+    const buckets = new Map<string, number[] | Map<string, number[]>>();
     for (let j = 0; j < B.n; j++) {
       if (!B.key[j]) continue;
-      const k = B.key[j] + "\u0000" + amtKey(B.amount[j]);
-      const list = buckets.get(k);
-      if (list) list.push(j);
-      else buckets.set(k, [j]);
+      const k = B.key[j];
+      const amt = amtKey(B.amount[j]);
+      const b = buckets.get(k);
+      if (!b) buckets.set(k, [j]);
+      else if (Array.isArray(b)) {
+        if (amtKey(B.amount[b[0]]) === amt) b.push(j);
+        else buckets.set(k, new Map([[amtKey(B.amount[b[0]]), b], [amt, [j]]]));
+      } else {
+        const list = b.get(amt);
+        if (list) list.push(j);
+        else b.set(amt, [j]);
+      }
     }
     for (let i = 0; i < A.n; i++) {
       if (!A.key[i]) continue;
-      const list = buckets.get(A.key[i] + "\u0000" + amtKey(A.amount[i]));
+      const b = buckets.get(A.key[i]);
+      const list = !b ? undefined : Array.isArray(b) ? (b.length && amtKey(B.amount[b[0]]) === amtKey(A.amount[i]) ? b : undefined) : b.get(amtKey(A.amount[i]));
       if (!list?.length) continue;
       // exact ignores the window, but prefers the nearest date
       let best = 0;
@@ -381,8 +397,10 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
       if (g) g.push(j);
       else groups.set(k, [j]);
     }
+    // a pool only for a key with many items; most keys have one or two, searched as they are
     const pools = new Map<string, { pool: Pool; blank: number[] }>();
     for (const [k, ids] of groups) {
+      if (ids.length <= SMALL_GROUP) continue;
       const withAmt = ids.filter((j) => !Number.isNaN(B.amount[j]));
       const blank = ids.filter((j) => Number.isNaN(B.amount[j]));
       pools.set(k, { pool: new Pool(withAmt, (j) => B.amount[j], (j) => B.date[j]), blank });
@@ -390,24 +408,51 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
     for (const i of freeA()) {
       const k = keyOf(A, i);
       if (!k) continue;
+      const ids = groups.get(k);
+      if (!ids) continue;
       const g = pools.get(k);
-      if (!g) continue;
       const x = A.amount[i];
       if (Number.isNaN(x)) {
-        const b = nearest(i, g.blank);
+        const blank = g ? g.blank : ids.filter((j) => !usedB[j] && Number.isNaN(B.amount[j]));
+        const b = nearest(i, blank);
         if (b >= 0) {
-          const j = g.blank[b];
-          g.blank.splice(b, 1);
+          const j = blank[b];
+          if (g) g.blank.splice(b, 1);
           pair(rule, i, j);
         }
         continue;
       }
-      let j = bestInRange(g.pool, i, x, toleranceFor(x, s), 256);
+      const best = (tol: number, anyDate: boolean) => (g ? bestInRange(g.pool, i, x, tol, 256, undefined, anyDate) : bestInList(ids, i, x, tol, anyDate));
+      let j = best(toleranceFor(x, s), false);
       // the same reference and the very same amount is as good as exact, which ignores the window
       // (a cheque presented a week after it was written): nearest date first
-      if (j < 0 && rule === "reference" && win !== null) j = bestInRange(g.pool, i, x, HALF_CENT, 256, undefined, true);
+      if (j < 0 && rule === "reference" && win !== null) j = best(HALF_CENT, true);
       if (j >= 0) pair(rule, i, j);
     }
+  };
+  /** bestInRange (without a scorer) over a short list of B items: the same choice, without building a pool */
+  const bestInList = (ids: number[], i: number, x: number, tol: number, anyDate: boolean): number => {
+    let best = -1;
+    let bestDiff = Infinity;
+    let bestDays = Infinity;
+    for (const j of ids) {
+      const y = B.amount[j];
+      if (usedB[j] || Number.isNaN(y) || Math.abs(y - x) > tol || !(anyDate || inWindow(i, j))) continue;
+      const diff = Math.abs(y - x);
+      const d = days(i, j) ?? 0;
+      let better: boolean;
+      if (best < 0) better = true;
+      else if (Math.abs(diff - bestDiff) > EPS) better = diff < bestDiff;
+      else if (d !== bestDays) better = d < bestDays;
+      // a tie goes to the first in pool order: amount, date, index
+      else better = (y - B.amount[best] || dateKey(B.date[j]) - dateKey(B.date[best]) || j - best) < 0;
+      if (better) {
+        best = j;
+        bestDiff = diff;
+        bestDays = d;
+      }
+    }
+    return best;
   };
   /**
    * The free pool item with an amount within tol of x and a date in the
@@ -475,6 +520,19 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
     for (const i of free) if (sd.ref[i]) out.add(sd.ref[i]);
     return out;
   };
+  /** every reference on each side, matched or not (made once: a side can have millions) */
+  let refsAll: { a: Set<string>; b: Set<string> } | null = null;
+  const allRefs = () => {
+    if (!refsAll) {
+      const all = (sd: Side) => {
+        const out = new Set<string>();
+        for (let i = 0; i < sd.n; i++) if (sd.ref[i]) out.add(sd.ref[i]);
+        return out;
+      };
+      refsAll = { a: all(A), b: all(B) };
+    }
+    return refsAll;
+  };
   const conflict = (i: number, j: number, refsA: Set<string>, refsB: Set<string>) =>
     A.ref[i] ? (B.ref[j] ? A.ref[i] !== B.ref[j] : false) || refsB.has(A.ref[i]) : !!B.ref[j] && refsA.has(B.ref[j]);
 
@@ -522,7 +580,7 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
     return lo;
   };
   /** visit up to cap items of a date-sorted list of B items that are in the window of A item i */
-  const eachInWindow = (list: number[] | undefined, i: number, cap: number, visit: (j: number) => void) => {
+  const eachInWindow = (list: number[] | undefined, i: number, cap: number, visit: (j: number) => void, ok?: (j: number) => boolean) => {
     if (!list) return;
     const d = A.date[i];
     for (let k = windowStart(list, d), n = 0; k < list.length && n < cap; k++) {
@@ -531,36 +589,42 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
         if (!Number.isNaN(B.date[j]) && !Number.isNaN(d) && B.date[j] > d) break;
         continue;
       }
+      if (usedB[j] || (ok && !ok(j))) continue;
       n++;
       visit(j);
     }
   };
-  /** B items by (amount in cents, party word), each list sorted by date */
-  const wordIndex = (ids: ArrayLike<number>): Map<string, number[]> => {
-    const index = new Map<string, number[]>();
-    for (let k = 0; k < ids.length; k++) {
-      const j = ids[k];
-      const ws = model!.wordsB(j);
-      if (!ws?.length || Number.isNaN(B.amount[j])) continue;
+  /**
+   * The free B items (when the model is made) by party word and amount in
+   * cents, each list sorted by date: made once, and used items are skipped
+   * as the passes go.
+   */
+  const words: Map<string, Map<number, number[]>> = new Map();
+  if (model) {
+    for (let j = 0; j < B.n; j++) {
+      if (usedB[j] || Number.isNaN(B.amount[j])) continue;
+      const ws = model.wordsB(j);
+      if (!ws?.length) continue;
       const c = cents(B.amount[j]);
       for (const w of new Set(ws)) {
-        const k = c + " " + w;
-        const list = index.get(k);
+        let byCents = words.get(w);
+        if (!byCents) words.set(w, (byCents = new Map()));
+        const list = byCents.get(c);
         if (list) list.push(j);
-        else index.set(k, [j]);
+        else byCents.set(c, [j]);
       }
     }
     const byDate = (x: number, y: number) => dateKey(B.date[x]) - dateKey(B.date[y]) || x - y;
-    for (const list of index.values()) if (list.length > 1) list.sort(byDate);
-    return index;
-  };
+    for (const byCents of words.values()) for (const list of byCents.values()) if (list.length > 1) list.sort(byDate);
+  }
+  const wordList = (w: string, c: number) => words.get(w)?.get(c);
   /**
    * The B items of a pool that could pair with A item i, each once: those of
    * the same amount that share a party word with it, anywhere in the window
    * (however many items of that amount the window holds), and the nearest by
    * date of each amount within tol.
    */
-  const eachCandidate = (pool: Pool, words: Map<string, number[]>, i: number, x: number, tol: number, visit: (j: number) => void) => {
+  const eachCandidate = (pool: Pool, ok: (j: number) => boolean, i: number, x: number, tol: number, visit: (j: number) => void) => {
     const seen = new Set<number>();
     const once = (j: number) => {
       if (seen.has(j)) return;
@@ -568,7 +632,7 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
       visit(j);
     };
     const wa = model!.wordsA(i);
-    if (wa) for (const w of new Set(wa)) eachInWindow(words.get(cents(x) + " " + w), i, 64, once);
+    if (wa) for (const w of new Set(wa)) eachInWindow(wordList(w, cents(x)), i, 64, once, ok);
     const d = A.date[i];
     let p = pool.lowerBound(x - tol);
     for (let values = 0; p < pool.size && pool.vals[p] <= x + tol && values < 64; values++) {
@@ -601,7 +665,7 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
     // chance among this many candidates of the same amount
     const fb = freeB();
     const fa = freeA();
-    const allRefsB = refsOf(B, Array.from({ length: B.n }, (_, j) => j));
+    const allRefsB = allRefs().b;
     const refsA = refsOf(A, fa);
     const refsB = refsOf(B, fb);
     const pool = new Pool(
@@ -609,7 +673,6 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
       (j) => B.amount[j],
       (j) => B.date[j],
     );
-    const words = wordIndex(pool.ids);
     const pi: number[] = [];
     const pj: number[] = [];
     const ps: number[] = [];
@@ -620,7 +683,7 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
       const ta = A.text[i];
       const tol = toleranceFor(x, s);
       let n = -1;
-      eachCandidate(pool, words, i, x, tol, (j) => {
+      eachCandidate(pool, (j) => !!B.text[j], i, x, tol, (j) => {
         if (conflict(i, j, refsA, refsB)) return;
         const sc = textSimilarity(ta, B.text[j]);
         if (sc < s.fuzzyThreshold) return;
@@ -677,14 +740,13 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
     // over the whole run.
     const fb = freeB();
     const fa = freeA();
-    const allRefsA = refsOf(A, Array.from({ length: A.n }, (_, i) => i));
-    const allRefsB = refsOf(B, Array.from({ length: B.n }, (_, j) => j));
+    const allRefsA = allRefs().a;
+    const allRefsB = allRefs().b;
     const pool = new Pool(
       fb.filter((j) => !Number.isNaN(B.amount[j]) && !(B.ref[j] && allRefsA.has(B.ref[j]))),
       (j) => B.amount[j],
       (j) => B.date[j],
     );
-    const words = wordIndex(pool.ids);
     const pi: number[] = [];
     const pj: number[] = [];
     const pe: number[] = [];
@@ -694,7 +756,7 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
       if (Number.isNaN(x) || (A.ref[i] && allRefsB.has(A.ref[i]))) continue;
       const tol = toleranceFor(x, s);
       let n = -1;
-      eachCandidate(pool, words, i, x, tol, (j) => {
+      eachCandidate(pool, (j) => !(B.ref[j] && allRefsA.has(B.ref[j])), i, x, tol, (j) => {
         if (A.ref[i] && B.ref[j] && A.ref[i] !== B.ref[j]) return;
         if (n < 0) n = countNear(counters!.b, x, tol, A.date[i]);
         const m = crowdA(j);
@@ -795,8 +857,8 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
     // candidates told apart by their descriptions). Not for an item whose
     // reference the other side has somewhere: a second copy of a matched
     // posting isn't some other payment that happens to agree.
-    const allRefsA = refsOf(A, Array.from({ length: A.n }, (_, i) => i));
-    const allRefsB = refsOf(B, Array.from({ length: B.n }, (_, j) => j));
+    const allRefsA = allRefs().a;
+    const allRefsB = allRefs().b;
     const pool = new Pool(
       fb.filter((j) => !usedB[j] && !Number.isNaN(B.amount[j]) && !(B.ref[j] && allRefsA.has(B.ref[j]))),
       (j) => B.amount[j],
@@ -1079,11 +1141,7 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
       // its names and kinds agree more than chance would explain among that
       // many candidates. Best pairs first over the whole run. Not for an item
       // whose reference the other side has (a second copy of a matched posting).
-      const allRefsB = refsOf(B, Array.from({ length: B.n }, (_, j) => j));
-      const byWord = group((j) => {
-        const c = cents(B.amount[j]);
-        return new Set((model.wordsB(j) ?? []).map((w) => c + " " + w));
-      });
+      const allRefsB = allRefs().b;
       /** items of a date-sorted list in the window of A item i */
       const countInWindow = (list: number[] | undefined, i: number): number => {
         if (!list) return 0;
@@ -1114,7 +1172,7 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
         for (const [v] of variants) n += countInWindow(byCents.get(v), i);
         if (!n) continue;
         const crowd = Math.log(n);
-        const words = new Set(model.wordsA(i) ?? []);
+        const own = new Set(model.wordsA(i) ?? []);
         for (const [v, kind] of variants) {
           const seen = new Set<number>();
           const visit = (j: number) => {
@@ -1127,7 +1185,7 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
             fk.push(kind);
             fe.push(ev - RANK[kind] * 1e-2 - (days(i, j) ?? 0) * 1e-4);
           };
-          for (const w of words) eachInWindow(byWord.get(v + " " + w), i, 64, visit);
+          for (const w of own) eachInWindow(wordList(w, v), i, 64, visit);
           eachInWindow(byCents.get(v), i, 4, visit);
         }
       }
@@ -1179,6 +1237,8 @@ const nextUp = (x: number) => x + Math.max(Math.abs(x) * Number.EPSILON * 2, Num
 
 /** Without descriptions, a pair on amount and date needs the busier side to hold at most this many times the items of that amount in the window as the other. */
 const BALANCE = 2;
+/** Key groups up to this size are searched as lists, not pools. */
+const SMALL_GROUP = 8;
 /** Candidates looked at per amount, nearest by date first, besides those that share a party word. */
 const NEAREST = 32;
 /** Pairs sampled to learn what true pairs' and strangers' descriptions look like. */
@@ -1412,43 +1472,50 @@ const ROUTINE_RATE = 0.25;
 
 /**
  * Records on one side that look the same: same normalised key (or text),
- * amount and date.
- * Records known only by their description are left out when that
- * description and amount are routine: they turn up on other days at
- * ROUTINE_RATE a day or more, so two on one day are what volume gives.
+ * amount and date. Records known only by their description are left out
+ * when that description and amount are routine: they turn up on other days
+ * at ROUTINE_RATE a day or more, so two on one day are what volume gives.
+ * Grouped by sorting, not by a string per record: a side can have millions.
  */
 function findDuplicates(sd: Side, name: "A" | "B"): RecDuplicate[] {
-  const groups = new Map<string, number[]>();
-  const routine = new Map<string, number>();
+  const id = (i: number) => sd.ref[i] || sd.text[i];
+  const amt = (i: number) => (Number.isNaN(sd.amount[i]) ? -Infinity : cents(sd.amount[i]));
+  const day = (i: number) => (Number.isNaN(sd.date[i]) ? -Infinity : Math.floor(sd.date[i]));
   let first = Infinity;
   let last = -Infinity;
+  let n = 0;
   for (let i = 0; i < sd.n; i++) {
-    const id = sd.ref[i] || sd.text[i];
-    if (!id) continue;
+    if (!id(i)) continue;
+    n++;
     const d = sd.date[i];
-    if (!Number.isNaN(d)) {
-      if (d < first) first = d;
-      if (d > last) last = d;
-    }
-    const k = id + "\u0000" + amtKey(sd.amount[i]) + "\u0000" + (Number.isNaN(d) ? "-" : Math.floor(d));
-    const g = groups.get(k);
-    if (g) g.push(i);
-    else groups.set(k, [i]);
-    if (!sd.ref[i]) {
-      const r = id + "\u0000" + amtKey(sd.amount[i]);
-      routine.set(r, (routine.get(r) ?? 0) + 1);
-    }
+    if (d < first) first = d;
+    if (d > last) last = d;
   }
+  const items = new Int32Array(n);
+  for (let i = 0, k = 0; i < sd.n; i++) if (id(i)) items[k++] = i;
+  const cmpId = (x: number, y: number) => {
+    const a = id(x);
+    const b = id(y);
+    return a < b ? -1 : a > b ? 1 : 0;
+  };
+  items.sort((x, y) => cmpId(x, y) || amt(x) - amt(y) || day(x) - day(y) || x - y);
   const otherDays = last >= first ? Math.floor(last) - Math.floor(first) : 0;
   const out: RecDuplicate[] = [];
-  for (const g of groups.values()) {
-    if (g.length < 2) continue;
-    const i = g[0];
-    if (!sd.ref[i] && otherDays > 0 && !Number.isNaN(sd.date[i])) {
-      const elsewhere = routine.get(sd.text[i] + "\u0000" + amtKey(sd.amount[i]))! - g.length;
-      if (elsewhere / otherDays >= ROUTINE_RATE) continue;
+  // runs of one id and amount, and within them runs of one day
+  for (let s = 0; s < n; ) {
+    let e = s + 1;
+    while (e < n && !cmpId(items[s], items[e]) && amt(items[s]) === amt(items[e])) e++;
+    let textOnly = 0;
+    for (let k = s; k < e; k++) if (!sd.ref[items[k]]) textOnly++;
+    for (let a = s; a < e; ) {
+      let b = a + 1;
+      while (b < e && day(items[a]) === day(items[b])) b++;
+      const i = items[a];
+      const routine = !sd.ref[i] && otherDays > 0 && !Number.isNaN(sd.date[i]) && (textOnly - (b - a)) / otherDays >= ROUTINE_RATE;
+      if (b - a > 1 && !routine) out.push({ side: name, items: Array.from(items.subarray(a, b)) });
+      a = b;
     }
-    out.push({ side: name, items: g });
+    s = e;
   }
-  return out;
+  return out.sort((x, y) => x.items[0] - y.items[0]);
 }
