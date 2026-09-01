@@ -13,7 +13,7 @@ export { DEFAULT_LOCALE, delocalizeFormula, getLocale, groupDigits, isPlainLocal
 export { jsonToColumns } from "./json";
 export { readParquet, rleHybrid, unsnappy, type ParquetResult } from "./parquet";
 export { dateParts, parseAs, parseDateLoose, parseNumberLoose, profileColumn, type ColumnProfile, type ColumnType, type DateOrder, type NumberStyle } from "./clean/values";
-export { findHeaderRow, unwrapReport, type DroppedRow, type Unwrapped } from "./clean/unwrap";
+export { ColumnCollector, findHeaderRow, tableRow, unwrapColumns, unwrapReport, type ColumnTable, type DroppedRow, type Unwrapped, type UnwrappedColumns } from "./clean/unwrap";
 export { alignColumns, columnKey, combineParts, type AlignedColumn, type FilePart } from "./clean/combine";
 export { unzip, zip, text as zipText } from "./xlsx/zip";
 export * from "./audit";
@@ -31,6 +31,6 @@ export { amountKeyingError, bareRef, DEFAULT_PREFIXES, isOneSlip, isTranspositio
 export { accountFor, BANK_LINE_LABEL, DEFAULT_ADJ_RULES, differenceItems, payeeOf, proposeAdjustments, recStatement, type AdjEntry, type AdjLine, type AdjOptions, type AdjRule, type BankLineId, type RecItem, type RecLine, type RecStatement, type RecStatementOptions } from "./recon/statement";
 export { classifyDoc, guessStatementSigns, matchOpenItems, reconcileTwoStage, rollOutstanding, statementRec, STATEMENT_REC_LABEL, type OpenItem, type OpenItemGroup, type OpenItemOptions, type OpenItemRecord, type OpenItemResult, type OpenItemRule, type OutstandingRoll, type OutstandingStatus, type RecDocType, type RolledItem, type RollOutstandingOptions, type StatementRecLineId, type StatementRecOptions, type StatementRecRecord, type StatementRecResult } from "./recon/openitems";
 export { buildTb, guessTbRoles, readTb, TB_ROLES, type TbLine, type TbResult, type TbRole } from "./clean/tb";
-export { parseStatement, rowsToLines, type Statement, type StatementCell, type StatementLine, type StatementPage, type StatementRole, type Transaction } from "./clean/bank";
+export { columnsToLines, parseStatement, rowsToLines, type Statement, type StatementCell, type StatementLine, type StatementLines, type StatementPage, type StatementRole, type Transaction } from "./clean/bank";
 export { fitText, fontWidths, imageFromRgba, jpegInfo, layoutBook, looksNumeric, PAGE_SIZES, pageDimensions, PdfDocument, PdfPageBuilder, STD_FONTS, textWidth, winAnsi, winAnsiCode, wrapText, writeBook, type BookOptions, type BookSection, type ContentsEntry, type DocInfo, type FlowBlock, type OutlineItem, type PageSize, type PdfColor, type PdfImage, type StdFont, type TableColumn, type TableRow, type TextOptions } from "./pdf/write";
 export { pageLines, readPdfText, type LineCell, type PdfPage, type TextItem } from "./pdf/read";

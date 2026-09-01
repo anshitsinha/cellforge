@@ -58,7 +58,12 @@ export interface RecPasses {
   /**
    * amount within tolerance and date within the window, whatever the key
    * (unless both have one and they differ): pairs whose descriptions name the
-   * same party first, best first; then the rest, nearest date first
+   * same party first, best first; then the rest, nearest date first. When
+   * the key passes matched enough pairs with descriptions to learn from, a
+   * pair needs its names and kinds to agree more than chance would explain
+   * among the items of that amount in the window (and, without
+   * descriptions, the two sides to hold about as many of them); the fuzzy
+   * pass and the keying flags are weighed the same way
    */
   amountDate: boolean;
   /**
