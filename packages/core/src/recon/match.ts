@@ -8,7 +8,26 @@
  * Everything is indexed (by key, by amount, by date), so 100k x 100k runs
  * in seconds; nothing compares every record with every other one.
  */
-import { amountKeyingError, cents, DEFAULT_PREFIXES, isOneSlip, isTransposition, keyingVariants, nameWords, normRef, normText, sharesName, textSimilarity, type KeyingError } from "./text";
+import {
+  amountKeyingError,
+  cents,
+  DEFAULT_PREFIXES,
+  isOneSlip,
+  isTransposition,
+  keyingVariants,
+  kindOf,
+  kindsDiffer,
+  NAME_CLASSES,
+  NAME_NO_TEXT,
+  nameAgreement,
+  nameWords,
+  normRef,
+  normText,
+  partyWords,
+  sharesName,
+  textSimilarity,
+  type KeyingError,
+} from "./text";
 
 export interface RecRecord {
   /** where the record came from (the sheet row), carried through to the results */
@@ -39,7 +58,12 @@ export interface RecPasses {
   /**
    * amount within tolerance and date within the window, whatever the key
    * (unless both have one and they differ): pairs whose descriptions name the
-   * same party first, best first; then the rest, nearest date first
+   * same party first, best first; then the rest, nearest date first. When
+   * the key passes matched enough pairs with descriptions to learn from, a
+   * pair needs its names and kinds to agree more than chance would explain
+   * among the items of that amount in the window (and, without
+   * descriptions, the two sides to hold about as many of them); the fuzzy
+   * pass and the keying flags are weighed the same way
    */
   amountDate: boolean;
   /**
@@ -175,15 +199,16 @@ class Pool {
   readonly vals: Float64Array;
   readonly dates: Float64Array;
   private readonly nextFree: Int32Array;
-  readonly pos = new Map<number, number>();
+  /** position of each id, made the first time an item is taken by id (most pools never are) */
+  private pos: Map<number, number> | null = null;
 
   constructor(ids: number[], val: (i: number) => number, date: (i: number) => number) {
     const sorted = ids.slice().sort((x, y) => val(x) - val(y) || dateKey(date(x)) - dateKey(date(y)) || x - y);
     this.ids = Int32Array.from(sorted);
     this.vals = Float64Array.from(sorted, val);
     this.dates = Float64Array.from(sorted, date);
-    this.nextFree = Int32Array.from({ length: sorted.length + 1 }, (_, i) => i);
-    sorted.forEach((id, p) => this.pos.set(id, p));
+    this.nextFree = new Int32Array(sorted.length + 1);
+    for (let p = 0; p <= sorted.length; p++) this.nextFree[p] = p;
   }
 
   get size(): number {
@@ -207,6 +232,10 @@ class Pool {
   }
 
   takeId(id: number): void {
+    if (!this.pos) {
+      this.pos = new Map();
+      for (let p = 0; p < this.ids.length; p++) this.pos.set(this.ids[p], p);
+    }
     const p = this.pos.get(id);
     if (p !== undefined) this.take(p);
   }
@@ -316,17 +345,28 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
 
   // 1. exact: same key, same amount (in cents)
   if (s.passes.exact) {
-    const buckets = new Map<string, number[]>();
+    // by key, then by amount: keys are mostly unique, so most keys hold one list and no map by
+    // amount, and no key + amount string is made per item
+    const buckets = new Map<string, number[] | Map<string, number[]>>();
     for (let j = 0; j < B.n; j++) {
       if (!B.key[j]) continue;
-      const k = B.key[j] + "\u0000" + amtKey(B.amount[j]);
-      const list = buckets.get(k);
-      if (list) list.push(j);
-      else buckets.set(k, [j]);
+      const k = B.key[j];
+      const amt = amtKey(B.amount[j]);
+      const b = buckets.get(k);
+      if (!b) buckets.set(k, [j]);
+      else if (Array.isArray(b)) {
+        if (amtKey(B.amount[b[0]]) === amt) b.push(j);
+        else buckets.set(k, new Map([[amtKey(B.amount[b[0]]), b], [amt, [j]]]));
+      } else {
+        const list = b.get(amt);
+        if (list) list.push(j);
+        else b.set(amt, [j]);
+      }
     }
     for (let i = 0; i < A.n; i++) {
       if (!A.key[i]) continue;
-      const list = buckets.get(A.key[i] + "\u0000" + amtKey(A.amount[i]));
+      const b = buckets.get(A.key[i]);
+      const list = !b ? undefined : Array.isArray(b) ? (b.length && amtKey(B.amount[b[0]]) === amtKey(A.amount[i]) ? b : undefined) : b.get(amtKey(A.amount[i]));
       if (!list?.length) continue;
       // exact ignores the window, but prefers the nearest date
       let best = 0;
@@ -357,8 +397,10 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
       if (g) g.push(j);
       else groups.set(k, [j]);
     }
+    // a pool only for a key with many items; most keys have one or two, searched as they are
     const pools = new Map<string, { pool: Pool; blank: number[] }>();
     for (const [k, ids] of groups) {
+      if (ids.length <= SMALL_GROUP) continue;
       const withAmt = ids.filter((j) => !Number.isNaN(B.amount[j]));
       const blank = ids.filter((j) => Number.isNaN(B.amount[j]));
       pools.set(k, { pool: new Pool(withAmt, (j) => B.amount[j], (j) => B.date[j]), blank });
@@ -366,24 +408,51 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
     for (const i of freeA()) {
       const k = keyOf(A, i);
       if (!k) continue;
+      const ids = groups.get(k);
+      if (!ids) continue;
       const g = pools.get(k);
-      if (!g) continue;
       const x = A.amount[i];
       if (Number.isNaN(x)) {
-        const b = nearest(i, g.blank);
+        const blank = g ? g.blank : ids.filter((j) => !usedB[j] && Number.isNaN(B.amount[j]));
+        const b = nearest(i, blank);
         if (b >= 0) {
-          const j = g.blank[b];
-          g.blank.splice(b, 1);
+          const j = blank[b];
+          if (g) g.blank.splice(b, 1);
           pair(rule, i, j);
         }
         continue;
       }
-      let j = bestInRange(g.pool, i, x, toleranceFor(x, s), 256);
+      const best = (tol: number, anyDate: boolean) => (g ? bestInRange(g.pool, i, x, tol, 256, undefined, anyDate) : bestInList(ids, i, x, tol, anyDate));
+      let j = best(toleranceFor(x, s), false);
       // the same reference and the very same amount is as good as exact, which ignores the window
       // (a cheque presented a week after it was written): nearest date first
-      if (j < 0 && rule === "reference" && win !== null) j = bestInRange(g.pool, i, x, HALF_CENT, 256, undefined, true);
+      if (j < 0 && rule === "reference" && win !== null) j = best(HALF_CENT, true);
       if (j >= 0) pair(rule, i, j);
     }
+  };
+  /** bestInRange (without a scorer) over a short list of B items: the same choice, without building a pool */
+  const bestInList = (ids: number[], i: number, x: number, tol: number, anyDate: boolean): number => {
+    let best = -1;
+    let bestDiff = Infinity;
+    let bestDays = Infinity;
+    for (const j of ids) {
+      const y = B.amount[j];
+      if (usedB[j] || Number.isNaN(y) || Math.abs(y - x) > tol || !(anyDate || inWindow(i, j))) continue;
+      const diff = Math.abs(y - x);
+      const d = days(i, j) ?? 0;
+      let better: boolean;
+      if (best < 0) better = true;
+      else if (Math.abs(diff - bestDiff) > EPS) better = diff < bestDiff;
+      else if (d !== bestDays) better = d < bestDays;
+      // a tie goes to the first in pool order: amount, date, index
+      else better = (y - B.amount[best] || dateKey(B.date[j]) - dateKey(B.date[best]) || j - best) < 0;
+      if (better) {
+        best = j;
+        bestDiff = diff;
+        bestDays = d;
+      }
+    }
+    return best;
   };
   /**
    * The free pool item with an amount within tol of x and a date in the
@@ -451,11 +520,185 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
     for (const i of free) if (sd.ref[i]) out.add(sd.ref[i]);
     return out;
   };
+  /** every reference on each side, matched or not (made once: a side can have millions) */
+  let refsAll: { a: Set<string>; b: Set<string> } | null = null;
+  const allRefs = () => {
+    if (!refsAll) {
+      const all = (sd: Side) => {
+        const out = new Set<string>();
+        for (let i = 0; i < sd.n; i++) if (sd.ref[i]) out.add(sd.ref[i]);
+        return out;
+      };
+      refsAll = { a: all(A), b: all(B) };
+    }
+    return refsAll;
+  };
   const conflict = (i: number, j: number, refsA: Set<string>, refsB: Set<string>) =>
     A.ref[i] ? (B.ref[j] ? A.ref[i] !== B.ref[j] : false) || refsB.has(A.ref[i]) : !!B.ref[j] && refsA.has(B.ref[j]);
 
+  // What agreeing descriptions look like, learnt from this run: the pairs
+  // the reference passes matched (true pairs) against random leftovers
+  // (strangers). Null when there are too few of either; the passes below
+  // then work as they always have.
+  const model = s.passes.fuzzy || s.passes.amountDate ? textModel(A, B, matches, usedA, usedB) : null;
+  /** free items with an amount, sorted by (amount, date), for counting candidates */
+  const counters = model ? { a: new Pool(freeA().filter((i) => !Number.isNaN(A.amount[i])), (i) => A.amount[i], (i) => A.date[i]), b: new Pool(freeB().filter((j) => !Number.isNaN(B.amount[j])), (j) => B.amount[j], (j) => B.date[j]) } : null;
+  /** free items in a pool within tol of x and in the window of date d (the other side's free items that could pair with an item) */
+  const countNear = (pool: Pool, x: number, tol: number, d: number): number => {
+    let n = 0;
+    let p = pool.lowerBound(x - tol);
+    for (let values = 0; p < pool.size && pool.vals[p] <= x + tol && values < 1000; values++) {
+      const v = pool.vals[p];
+      const end = pool.lowerBound(nextUp(v));
+      if (win === null || Number.isNaN(d)) n += end - p;
+      else {
+        // undated items sort first and are always in the window
+        const dated = pool.lowerBound(v, -Number.MAX_VALUE);
+        const lo = Math.max(dated, pool.lowerBound(v, d - win - 0.5));
+        n += dated - p + Math.max(0, pool.lowerBound(v, d + win + 0.5) - lo);
+      }
+      p = end;
+    }
+    return Math.max(1, n);
+  };
+  const countM = new Int32Array(model ? B.n : 0);
+  /** with the model: how many free A items could pair with B item j (at least 1) */
+  const crowdA = (j: number): number => {
+    if (!countM[j]) countM[j] = countNear(counters!.a, B.amount[j], toleranceFor(B.amount[j], s), B.date[j]);
+    return countM[j];
+  };
+  /** first position in a list of B items sorted by date (undated first) that can be in the window of date d */
+  const windowStart = (list: number[], d: number): number => {
+    if (win === null || Number.isNaN(d) || !list.length || Number.isNaN(B.date[list[0]])) return 0;
+    let lo = 0;
+    let hi = list.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (B.date[list[mid]] < d - win - 0.5) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+  /** visit up to cap items of a date-sorted list of B items that are in the window of A item i */
+  const eachInWindow = (list: number[] | undefined, i: number, cap: number, visit: (j: number) => void, ok?: (j: number) => boolean) => {
+    if (!list) return;
+    const d = A.date[i];
+    for (let k = windowStart(list, d), n = 0; k < list.length && n < cap; k++) {
+      const j = list[k];
+      if (!inWindow(i, j)) {
+        if (!Number.isNaN(B.date[j]) && !Number.isNaN(d) && B.date[j] > d) break;
+        continue;
+      }
+      if (usedB[j] || (ok && !ok(j))) continue;
+      n++;
+      visit(j);
+    }
+  };
+  /**
+   * The free B items (when the model is made) by party word and amount in
+   * cents, each list sorted by date: made once, and used items are skipped
+   * as the passes go.
+   */
+  const words: Map<string, Map<number, number[]>> = new Map();
+  if (model) {
+    for (let j = 0; j < B.n; j++) {
+      if (usedB[j] || Number.isNaN(B.amount[j])) continue;
+      const ws = model.wordsB(j);
+      if (!ws?.length) continue;
+      const c = cents(B.amount[j]);
+      for (const w of new Set(ws)) {
+        let byCents = words.get(w);
+        if (!byCents) words.set(w, (byCents = new Map()));
+        const list = byCents.get(c);
+        if (list) list.push(j);
+        else byCents.set(c, [j]);
+      }
+    }
+    const byDate = (x: number, y: number) => dateKey(B.date[x]) - dateKey(B.date[y]) || x - y;
+    for (const byCents of words.values()) for (const list of byCents.values()) if (list.length > 1) list.sort(byDate);
+  }
+  const wordList = (w: string, c: number) => words.get(w)?.get(c);
+  /**
+   * The B items of a pool that could pair with A item i, each once: those of
+   * the same amount that share a party word with it, anywhere in the window
+   * (however many items of that amount the window holds), and the nearest by
+   * date of each amount within tol.
+   */
+  const eachCandidate = (pool: Pool, ok: (j: number) => boolean, i: number, x: number, tol: number, visit: (j: number) => void) => {
+    const seen = new Set<number>();
+    const once = (j: number) => {
+      if (seen.has(j)) return;
+      seen.add(j);
+      visit(j);
+    };
+    const wa = model!.wordsA(i);
+    if (wa) for (const w of new Set(wa)) eachInWindow(wordList(w, cents(x)), i, 64, once, ok);
+    const d = A.date[i];
+    let p = pool.lowerBound(x - tol);
+    for (let values = 0; p < pool.size && pool.vals[p] <= x + tol && values < 64; values++) {
+      const v = pool.vals[p];
+      const end = pool.lowerBound(nextUp(v));
+      const dated = pool.lowerBound(v, -Number.MAX_VALUE);
+      for (let q = p; q < dated; q++) once(pool.ids[q]);
+      if (win === null || Number.isNaN(d)) {
+        for (let q = dated; q < end && q < dated + NEAREST; q++) once(pool.ids[q]);
+      } else {
+        // outwards from the date, nearest first
+        let lo = pool.lowerBound(v, d) - 1;
+        let hi = lo + 1;
+        for (let n = 0; n < NEAREST; n++) {
+          const dl = lo >= dated ? d - pool.dates[lo] : Infinity;
+          const dh = hi < end ? pool.dates[hi] - d : Infinity;
+          if (Math.min(dl, dh) > win + 0.5) break;
+          if (dl <= dh) once(pool.ids[lo--]);
+          else once(pool.ids[hi++]);
+        }
+      }
+      p = end;
+    }
+  };
+
   // 4. fuzzy text with amount and date
-  if (s.passes.fuzzy) {
+  if (s.passes.fuzzy && model) {
+    // every candidate pair first, then the best pairs first over the whole
+    // run; a pair only counts when its names agree more than they would by
+    // chance among this many candidates of the same amount
+    const fb = freeB();
+    const fa = freeA();
+    const allRefsB = allRefs().b;
+    const refsA = refsOf(A, fa);
+    const refsB = refsOf(B, fb);
+    const pool = new Pool(
+      fb.filter((j) => B.text[j] && !Number.isNaN(B.amount[j])),
+      (j) => B.amount[j],
+      (j) => B.date[j],
+    );
+    const pi: number[] = [];
+    const pj: number[] = [];
+    const ps: number[] = [];
+    const pe: number[] = [];
+    for (const i of fa) {
+      const x = A.amount[i];
+      if (!A.text[i] || Number.isNaN(x) || (A.ref[i] && allRefsB.has(A.ref[i]))) continue;
+      const ta = A.text[i];
+      const tol = toleranceFor(x, s);
+      let n = -1;
+      eachCandidate(pool, (j) => !!B.text[j], i, x, tol, (j) => {
+        if (conflict(i, j, refsA, refsB)) return;
+        const sc = textSimilarity(ta, B.text[j]);
+        if (sc < s.fuzzyThreshold) return;
+        if (n < 0) n = countNear(counters!.b, x, tol, A.date[i]);
+        const ev = model.evidence(i, j);
+        if (ev < Math.log(Math.max(n, crowdA(j)))) return;
+        pi.push(i);
+        pj.push(j);
+        ps.push(sc);
+        pe.push(ev - (days(i, j) ?? 0) * 1e-3);
+      });
+    }
+    const order = Array.from(ps.keys()).sort((x, y) => pe[y] - pe[x] || ps[y] - ps[x] || pi[x] - pi[y] || pj[x] - pj[y]);
+    for (const k of order) if (!usedA[pi[k]] && !usedB[pj[k]]) pair("fuzzy", pi[k], pj[k], Math.round(ps[k] * 1000) / 1000);
+  } else if (s.passes.fuzzy) {
     const fb = freeB();
     const fa = freeA();
     const refsA = refsOf(A, fa);
@@ -483,7 +726,62 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
   // pairs whose descriptions name the same party go first, best pairs
   // first over the whole run; then the rest, one A item at a time, equally
   // good candidates told apart by their descriptions.
-  if (s.passes.amountDate) {
+  if (s.passes.amountDate && model) {
+    // With a model of what agreeing descriptions look like, and at volume:
+    // every candidate pair is weighed. Names and kinds that agree count for
+    // a pair as much as they are likelier between true pairs than between
+    // strangers (nameAgreement / kindOf, learnt above); against that, the
+    // number of items of that amount in the window on the busier side, any
+    // of which could show the same agreement by chance. Without descriptions
+    // a pair needs the two sides to hold about as many items of that amount
+    // in the window (each item then has a counterpart: a reference-less bank
+    // file); a lone ledger item among a crowd of bank lines of that amount
+    // (a cheque among a day's fees) is left alone. Then the best pairs first
+    // over the whole run.
+    const fb = freeB();
+    const fa = freeA();
+    const allRefsA = allRefs().a;
+    const allRefsB = allRefs().b;
+    const pool = new Pool(
+      fb.filter((j) => !Number.isNaN(B.amount[j]) && !(B.ref[j] && allRefsA.has(B.ref[j]))),
+      (j) => B.amount[j],
+      (j) => B.date[j],
+    );
+    const pi: number[] = [];
+    const pj: number[] = [];
+    const pe: number[] = [];
+    const pd: number[] = [];
+    for (const i of fa) {
+      const x = A.amount[i];
+      if (Number.isNaN(x) || (A.ref[i] && allRefsB.has(A.ref[i]))) continue;
+      const tol = toleranceFor(x, s);
+      let n = -1;
+      eachCandidate(pool, (j) => !(B.ref[j] && allRefsA.has(B.ref[j])), i, x, tol, (j) => {
+        if (A.ref[i] && B.ref[j] && A.ref[i] !== B.ref[j]) return;
+        if (n < 0) n = countNear(counters!.b, x, tol, A.date[i]);
+        const m = crowdA(j);
+        const dd = days(i, j) ?? 0;
+        if (model.cls(i, j) === NAME_NO_TEXT) {
+          // nothing to tell them apart: pairs where both sides hold about as many, each ledger item in turn, nearest date first
+          if (Math.max(n, m) > BALANCE * Math.min(n, m)) return;
+          pi.push(i);
+          pj.push(j);
+          pe.push(-Infinity);
+          pd.push(dd);
+          return;
+        }
+        // pairs with better names and kinds first, over the whole run
+        const ev = model.evidence(i, j);
+        if (ev < Math.log(Math.max(n, m))) return;
+        pi.push(i);
+        pj.push(j);
+        pe.push(ev);
+        pd.push(dd);
+      });
+    }
+    const order = Array.from(pe.keys()).sort((x, y) => (pe[x] === pe[y] ? 0 : pe[y] - pe[x]) || (pe[x] === -Infinity ? pi[x] - pi[y] : 0) || pd[x] - pd[y] || pi[x] - pi[y] || pj[x] - pj[y]);
+    for (const k of order) if (!usedA[pi[k]] && !usedB[pj[k]]) pair("amount+date", pi[k], pj[k]);
+  } else if (s.passes.amountDate) {
     const fb = freeB();
     const fa = freeA();
     const refsA = refsOf(A, fa);
@@ -559,8 +857,8 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
     // candidates told apart by their descriptions). Not for an item whose
     // reference the other side has somewhere: a second copy of a matched
     // posting isn't some other payment that happens to agree.
-    const allRefsA = refsOf(A, Array.from({ length: A.n }, (_, i) => i));
-    const allRefsB = refsOf(B, Array.from({ length: B.n }, (_, j) => j));
+    const allRefsA = allRefs().a;
+    const allRefsB = allRefs().b;
     const pool = new Pool(
       fb.filter((j) => !usedB[j] && !Number.isNaN(B.amount[j]) && !(B.ref[j] && allRefsA.has(B.ref[j]))),
       (j) => B.amount[j],
@@ -764,53 +1062,139 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
   }
   {
     const flaggedB = new Uint8Array(B.n);
-    const byCents = new Map<number, number[]>();
-    for (const j of unmatchedB) {
-      if (Number.isNaN(B.amount[j])) continue;
-      const c = cents(B.amount[j]);
-      const g = byCents.get(c);
-      if (g) g.push(j);
-      else byCents.set(c, [j]);
-    }
-    const pick = (i: number, list: number[] | undefined, ok: (j: number) => boolean): number => {
-      if (!list) return -1;
-      let best = -1;
-      let bestD = Infinity;
-      for (let k = 0; k < list.length && k < 32; k++) {
-        const j = list[k];
-        if (flaggedB[j] || !inWindow(i, j) || !ok(j)) continue;
-        const d = days(i, j) ?? 0;
-        if (d < bestD) {
-          best = j;
-          bestD = d;
+    const byDate = (x: number, y: number) => dateKey(B.date[x]) - dateKey(B.date[y]) || x - y;
+    const group = (keys: (j: number) => Iterable<string | number>): Map<string | number, number[]> => {
+      const index = new Map<string | number, number[]>();
+      for (const j of unmatchedB) {
+        if (Number.isNaN(B.amount[j])) continue;
+        for (const k of keys(j)) {
+          const list = index.get(k);
+          if (list) list.push(j);
+          else index.set(k, [j]);
         }
       }
+      for (const list of index.values()) if (list.length > 1) list.sort(byDate);
+      return index;
+    };
+    /** the keys a reference typo leaves in common: the amount with one character, or two neighbouring ones, blanked out */
+    const typoKeys = (ref: string, c: number): string[] => {
+      const out: string[] = [];
+      for (let p = 0; p < ref.length; p++) {
+        out.push(`${c}|${ref.slice(0, p)}?${ref.slice(p + 1)}`);
+        if (p + 1 < ref.length) out.push(`${c}|${ref.slice(0, p)}??${ref.slice(p + 2)}`);
+      }
+      return out;
+    };
+    const byCents = group((j) => [cents(B.amount[j])]);
+    const byTypo = group((j) => (B.ref[j] ? typoKeys(B.ref[j], cents(B.amount[j])) : []));
+    const pick = (i: number, lists: (number[] | undefined)[], ok: (j: number) => boolean): number => {
+      let best = -1;
+      let bestD = Infinity;
+      for (const list of lists)
+        eachInWindow(list, i, 64, (j) => {
+          if (flaggedB[j] || !ok(j)) return;
+          const d = days(i, j) ?? 0;
+          if (d < bestD || (d === bestD && j < best)) {
+            best = j;
+            bestD = d;
+          }
+        });
       return best;
     };
     const RANK: Record<KeyingError, number> = { "sign flip": 0, x10: 1, x100: 1, "/10": 1, "/100": 1, transposition: 2, "digit slip": 3 };
+    const refOk = (i: number, j: number) => !(A.ref[i] && B.ref[j]) || A.ref[i] === B.ref[j];
+    const keyFlagged = new Uint8Array(model ? A.n : 0);
     for (const i of unmatchedA) {
       if (Number.isNaN(A.amount[i])) continue;
       const c = cents(A.amount[i]);
       // a reference typo: same amount, keys one swap or one character apart
       if (A.ref[i]) {
-        const j = pick(i, byCents.get(c), (j) => !!B.ref[j] && (isTransposition(A.ref[i], B.ref[j]) || isOneSlip(A.ref[i], B.ref[j])));
+        const j = pick(
+          i,
+          typoKeys(A.ref[i], c).map((k) => byTypo.get(k)),
+          (j) => !!B.ref[j] && (isTransposition(A.ref[i], B.ref[j]) || isOneSlip(A.ref[i], B.ref[j])),
+        );
         if (j >= 0) {
           flaggedB[j] = 1;
           flags.push({ a: i, b: j, field: "key", kind: isTransposition(A.ref[i], B.ref[j]) ? "transposition" : "digit slip", mismatched: false });
+          if (model) keyFlagged[i] = 1;
           continue;
         }
       }
+      if (model) continue;
       // an amount typo: a differently keyed amount, with nothing to say the references differ;
       // nothing ties the two but the amount, so when both have descriptions they must share a name
       let found: { j: number; kind: KeyingError } | null = null;
       for (const [v, kind] of keyingVariants(c)) {
         if (found && RANK[found.kind] <= RANK[kind]) break;
-        const j = pick(i, byCents.get(v), (j) => (!(A.ref[i] && B.ref[j]) || A.ref[i] === B.ref[j]) && (!A.text[i] || !B.text[j] || sharesName(A.text[i], B.text[j])));
+        const j = pick(i, [byCents.get(v)], (j) => refOk(i, j) && (!A.text[i] || !B.text[j] || sharesName(A.text[i], B.text[j])));
         if (j >= 0 && (!found || RANK[kind] < RANK[found.kind])) found = { j, kind };
       }
       if (found) {
         flaggedB[found.j] = 1;
         flags.push({ a: i, b: found.j, field: "amount", kind: found.kind, mismatched: false });
+      }
+    }
+    if (model) {
+      // With a model, and at volume: every item at an amount a typo could
+      // have made, in the window, is a candidate; a pair is flagged only when
+      // its names and kinds agree more than chance would explain among that
+      // many candidates. Best pairs first over the whole run. Not for an item
+      // whose reference the other side has (a second copy of a matched posting).
+      const allRefsB = allRefs().b;
+      /** items of a date-sorted list in the window of A item i */
+      const countInWindow = (list: number[] | undefined, i: number): number => {
+        if (!list) return 0;
+        const d = A.date[i];
+        if (win === null || Number.isNaN(d)) return list.length;
+        const first = (from: number, pred: (j: number) => boolean) => {
+          let lo = from;
+          let hi = list.length;
+          while (lo < hi) {
+            const mid = (lo + hi) >> 1;
+            if (pred(list[mid])) lo = mid + 1;
+            else hi = mid;
+          }
+          return lo;
+        };
+        const undated = first(0, (j) => Number.isNaN(B.date[j]));
+        const lo = first(undated, (j) => B.date[j] < d - win - 0.5);
+        return undated + first(lo, (j) => B.date[j] <= d + win + 0.5) - lo;
+      };
+      const fi: number[] = [];
+      const fj: number[] = [];
+      const fk: KeyingError[] = [];
+      const fe: number[] = [];
+      for (const i of unmatchedA) {
+        if (keyFlagged[i] || Number.isNaN(A.amount[i]) || (A.ref[i] && allRefsB.has(A.ref[i]))) continue;
+        const variants = keyingVariants(cents(A.amount[i]));
+        let n = 0;
+        for (const [v] of variants) n += countInWindow(byCents.get(v), i);
+        if (!n) continue;
+        const crowd = Math.log(n);
+        const own = new Set(model.wordsA(i) ?? []);
+        for (const [v, kind] of variants) {
+          const seen = new Set<number>();
+          const visit = (j: number) => {
+            if (seen.has(j) || flaggedB[j] || !refOk(i, j)) return;
+            seen.add(j);
+            const ev = model.evidence(i, j) - crowd;
+            if (ev < 0) return;
+            fi.push(i);
+            fj.push(j);
+            fk.push(kind);
+            fe.push(ev - RANK[kind] * 1e-2 - (days(i, j) ?? 0) * 1e-4);
+          };
+          for (const w of own) eachInWindow(wordList(w, v), i, 64, visit);
+          eachInWindow(byCents.get(v), i, 4, visit);
+        }
+      }
+      const flaggedA = new Uint8Array(A.n);
+      const order = Array.from(fe.keys()).sort((x, y) => fe[y] - fe[x] || fi[x] - fi[y] || fj[x] - fj[y]);
+      for (const k of order) {
+        if (flaggedA[fi[k]] || flaggedB[fj[k]]) continue;
+        flaggedA[fi[k]] = flaggedB[fj[k]] = 1;
+        flags.push({ a: fi[k], b: fj[k], field: "amount", kind: fk[k], mismatched: false });
       }
     }
   }
@@ -850,6 +1234,113 @@ export function reconcile(aRecords: RecRecord[], bRecords: RecRecord[], settings
 const round2 = (x: number) => Math.round(x * 100) / 100;
 const amtKey = (x: number) => (Number.isNaN(x) ? "-" : String(cents(x)));
 const nextUp = (x: number) => x + Math.max(Math.abs(x) * Number.EPSILON * 2, Number.MIN_VALUE);
+
+/** Without descriptions, a pair on amount and date needs the busier side to hold at most this many times the items of that amount in the window as the other. */
+const BALANCE = 2;
+/** Key groups up to this size are searched as lists, not pools. */
+const SMALL_GROUP = 8;
+/** Candidates looked at per amount, nearest by date first, besides those that share a party word. */
+const NEAREST = 32;
+/** Pairs sampled to learn what true pairs' and strangers' descriptions look like. */
+const MODEL_SAMPLE = 20_000;
+/** Fewer pairs than this of either and there's no model. */
+const MODEL_MIN = 200;
+
+interface TextModel {
+  /** party words of an A item and of a B item (partyWords; null without a description) */
+  wordsA(i: number): string[] | null;
+  wordsB(j: number): string[] | null;
+  /** how the two descriptions' names agree (nameAgreement) */
+  cls(i: number, j: number): number;
+  /** log of how much likelier this agreement of names and kinds is between true pairs than between strangers */
+  evidence(i: number, j: number): number;
+}
+
+/**
+ * What agreeing descriptions look like in this run. True pairs: the 1:1
+ * matches the key passes made. Strangers: random free items of A against
+ * random free items of B. For each class of name agreement, and for kinds
+ * that differ, the log of the ratio of the two rates (smoothed). Null with
+ * too few of either: then nothing is known about how descriptions agree.
+ */
+function textModel(A: Side, B: Side, matches: RecMatch[], usedA: Uint8Array, usedB: Uint8Array): TextModel | null {
+  const words = (sd: Side, cache: (string[] | null | undefined)[], i: number): string[] | null => {
+    let w = cache[i];
+    if (w === undefined) w = cache[i] = sd.text[i] ? partyWords(sd.text[i]) : null;
+    return w;
+  };
+  const kinds = (sd: Side, cache: Int8Array, i: number): number => {
+    if (cache[i] < 0) cache[i] = sd.text[i] ? kindOf(sd.text[i]) : 0;
+    return cache[i];
+  };
+  const wA: (string[] | null | undefined)[] = new Array(A.n);
+  const wB: (string[] | null | undefined)[] = new Array(B.n);
+  const kA = new Int8Array(A.n).fill(-1);
+  const kB = new Int8Array(B.n).fill(-1);
+  const cls = (i: number, j: number) => nameAgreement(words(A, wA, i), words(B, wB, j));
+  const differ = (i: number, j: number) => kindsDiffer(kinds(A, kA, i), kinds(B, kB, j));
+
+  const tally = (pairs: Iterable<[number, number]>) => {
+    const byClass = new Float64Array(NAME_CLASSES);
+    let n = 0;
+    let kd = 0;
+    for (const [i, j] of pairs) {
+      byClass[cls(i, j)]++;
+      if (differ(i, j)) kd++;
+      n++;
+    }
+    return { byClass, n, kd };
+  };
+  // true pairs: key matches with descriptions on both sides, evenly spread over the run
+  const keyed: number[] = [];
+  for (let k = 0; k < matches.length; k++) {
+    const m = matches[k];
+    if (m.a.length === 1 && m.b.length === 1 && A.text[m.a[0]] && B.text[m.b[0]]) keyed.push(k);
+  }
+  const step = Math.max(1, Math.floor(keyed.length / MODEL_SAMPLE));
+  const truth = tally(
+    (function* () {
+      for (let k = 0; k < keyed.length; k += step) yield [matches[keyed[k]].a[0], matches[keyed[k]].b[0]] as [number, number];
+    })(),
+  );
+  // strangers: random free items with descriptions
+  const fa: number[] = [];
+  const fb: number[] = [];
+  for (let i = 0; i < A.n; i++) if (!usedA[i] && A.text[i]) fa.push(i);
+  for (let j = 0; j < B.n; j++) if (!usedB[j] && B.text[j]) fb.push(j);
+  let seed = 0x5eed;
+  const rand = (n: number) => {
+    // mulberry32: deterministic, so a run gives the same result every time
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return Math.floor((((t ^ (t >>> 14)) >>> 0) / 4294967296) * n);
+  };
+  const chance = tally(
+    (function* () {
+      if (!fa.length || !fb.length) return;
+      for (let k = 0; k < MODEL_SAMPLE; k++) yield [fa[rand(fa.length)], fb[rand(fb.length)]] as [number, number];
+    })(),
+  );
+  if (truth.n < MODEL_MIN || chance.n < MODEL_MIN) return null;
+  const lr = new Float64Array(NAME_CLASSES);
+  for (let c = 0; c < NAME_CLASSES; c++) {
+    const rt = (truth.byClass[c] + 0.5) / (truth.n + 0.5 * NAME_CLASSES);
+    const rc = (chance.byClass[c] + 0.5) / (chance.n + 0.5 * NAME_CLASSES);
+    lr[c] = Math.log(rt / rc);
+  }
+  lr[NAME_NO_TEXT] = 0;
+  const kt = (truth.kd + 0.5) / (truth.n + 1);
+  const kc = (chance.kd + 0.5) / (chance.n + 1);
+  const kindDiffer = Math.log(kt / kc);
+  const kindSame = Math.log((1 - kt) / (1 - kc));
+  return {
+    cls,
+    wordsA: (i) => words(A, wA, i),
+    wordsB: (j) => words(B, wB, j),
+    evidence: (i, j) => lr[cls(i, j)] + (differ(i, j) ? kindDiffer : kindSame),
+  };
+}
 
 /** In the date search: the most combinations expected to add up by accident before a sum stops counting as a match. */
 const CHANCE_LIMIT = 0.02;
@@ -976,18 +1467,55 @@ export function subsetSum(
   return { items: ok ? found[0].map((p) => ids[p]) : null, steps, capped: capped && !ok, ambiguous };
 }
 
-/** Records on one side that look the same: same normalised key (or text), amount and date. */
+/** A description and amount seen on other days at this rate a day or more are routine (a bank's standard fee): two on one day are not a duplicate. */
+const ROUTINE_RATE = 0.25;
+
+/**
+ * Records on one side that look the same: same normalised key (or text),
+ * amount and date. Records known only by their description are left out
+ * when that description and amount are routine: they turn up on other days
+ * at ROUTINE_RATE a day or more, so two on one day are what volume gives.
+ * Grouped by sorting, not by a string per record: a side can have millions.
+ */
 function findDuplicates(sd: Side, name: "A" | "B"): RecDuplicate[] {
-  const groups = new Map<string, number[]>();
+  const id = (i: number) => sd.ref[i] || sd.text[i];
+  const amt = (i: number) => (Number.isNaN(sd.amount[i]) ? -Infinity : cents(sd.amount[i]));
+  const day = (i: number) => (Number.isNaN(sd.date[i]) ? -Infinity : Math.floor(sd.date[i]));
+  let first = Infinity;
+  let last = -Infinity;
+  let n = 0;
   for (let i = 0; i < sd.n; i++) {
-    const id = sd.ref[i] || sd.text[i];
-    if (!id) continue;
-    const k = id + "\u0000" + amtKey(sd.amount[i]) + "\u0000" + (Number.isNaN(sd.date[i]) ? "-" : Math.floor(sd.date[i]));
-    const g = groups.get(k);
-    if (g) g.push(i);
-    else groups.set(k, [i]);
+    if (!id(i)) continue;
+    n++;
+    const d = sd.date[i];
+    if (d < first) first = d;
+    if (d > last) last = d;
   }
+  const items = new Int32Array(n);
+  for (let i = 0, k = 0; i < sd.n; i++) if (id(i)) items[k++] = i;
+  const cmpId = (x: number, y: number) => {
+    const a = id(x);
+    const b = id(y);
+    return a < b ? -1 : a > b ? 1 : 0;
+  };
+  items.sort((x, y) => cmpId(x, y) || amt(x) - amt(y) || day(x) - day(y) || x - y);
+  const otherDays = last >= first ? Math.floor(last) - Math.floor(first) : 0;
   const out: RecDuplicate[] = [];
-  for (const g of groups.values()) if (g.length > 1) out.push({ side: name, items: g });
-  return out;
+  // runs of one id and amount, and within them runs of one day
+  for (let s = 0; s < n; ) {
+    let e = s + 1;
+    while (e < n && !cmpId(items[s], items[e]) && amt(items[s]) === amt(items[e])) e++;
+    let textOnly = 0;
+    for (let k = s; k < e; k++) if (!sd.ref[items[k]]) textOnly++;
+    for (let a = s; a < e; ) {
+      let b = a + 1;
+      while (b < e && day(items[a]) === day(items[b])) b++;
+      const i = items[a];
+      const routine = !sd.ref[i] && otherDays > 0 && !Number.isNaN(sd.date[i]) && (textOnly - (b - a)) / otherDays >= ROUTINE_RATE;
+      if (b - a > 1 && !routine) out.push({ side: name, items: Array.from(items.subarray(a, b)) });
+      a = b;
+    }
+    s = e;
+  }
+  return out.sort((x, y) => x.items[0] - y.items[0]);
 }

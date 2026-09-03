@@ -57,11 +57,14 @@ transaction it is (or that it is a title, total or footer).
 
 `bench/acceptance/pipeline.ts`, shared by the test and the bench:
 
-1. parse both CSVs in 64 KB chunks with `CsvParser`;
-2. `parseStatement` over the bank rows: every running balance must follow
-   and the closing balance must agree;
-3. `unwrapReport` on both: titles, totals, footers, repeated headers and
-   balance lines dropped;
+1. parse both CSVs in 64 KB chunks with `CsvParser`, kept as columns
+   (`ColumnCollector`: one array per column, no array per row);
+2. `parseStatement` over the bank file, one line at a time
+   (`columnsToLines`): every running balance must follow and the closing
+   balance must agree;
+3. `unwrapColumns` on both (the column form of `unwrapReport`, same
+   answers): titles, totals, footers, repeated headers and balance lines
+   dropped, the columns compacted in place;
 4. `profileColumn` on every column, values read with `parseAs`;
 5. records as the reconcile dialog builds them (key, amount = in − out,
    date, description);
@@ -85,7 +88,7 @@ transaction it is (or that it is a title, total or footer).
 - Every record is in a match, a mismatched pair or a rec statement line;
   the rec statement difference is 0.
 - The bank statement's running balance has no breaks.
-- The 6K run takes under 5 s (it takes about 0.3 s).
+- The 6K run takes under 5 s (it takes about 0.4 s).
 
 When something isn't met, the test fails with the whole report (stage
 times, the category table, the rule table) and a list of what fell short.
@@ -96,11 +99,17 @@ times, the category table, the rule table) and a list of what fell short.
 npx vitest run packages/core/test/acceptance.test.ts      # 6K, part of the normal test run
 node --max-old-space-size=12000 --import ./bench/acceptance/register.mjs bench/acceptance/run.ts 6000000
 node --import ./bench/acceptance/register.mjs bench/acceptance/run.ts 60000 7   # any size, any seed
+node --max-old-space-size=10000 --import ./bench/acceptance/register.mjs bench/acceptance/diag.ts 6000000 --why=descOnly,dit
 ```
 
 `register.mjs` lets plain Node run the TypeScript sources (it resolves
 extensionless imports and strips types with the transformer Vite ships).
 Add `--no-statement-check` to skip the `parseStatement` stage.
+`diag.ts` skips the CSV round trip (records straight from the generator;
+the scores agree with the full run to within a few dozen items) and lists
+the wrong matches by rule and planted category, with examples;
+`--why=<categories>` says what happened to each line of the groups that
+were missed.
 
 ## Current numbers
 
@@ -110,18 +119,18 @@ Windows 11, Intel i5-10300H, Node 26.
 
 | Stage | ms |
 | --- | ---: |
-| generate month | 8 |
-| write CSV exports | 23 |
-| parse CSV | 9 |
-| bank statement check | 49 |
-| unwrap reports | 25 |
-| profile columns | 59 |
-| build records | 8 |
-| reconcile | 69 |
-| rec statement | 20 |
-| **total** | **≈ 275** |
+| generate month | 9 |
+| write CSV exports | 25 |
+| parse CSV | 12 |
+| bank statement check | 69 |
+| unwrap reports | 31 |
+| profile columns | 47 |
+| build records | 10 |
+| reconcile | 162 |
+| rec statement | 24 |
+| **total** | **≈ 390** |
 
-Peak RSS 111 MB.
+Peak RSS 112 MB.
 
 | Planted category | planted | found | recall | need |
 | --- | ---: | ---: | ---: | ---: |
@@ -148,58 +157,74 @@ Ledger 3,005,551, bank 3,006,169 lines. `--max-old-space-size=12000`.
 
 | Stage | s | heap after, MB | RSS after, MB |
 | --- | ---: | ---: | ---: |
-| generate month | 2.9 | 646 | 917 |
-| write CSV exports (≈ 520 MB of text) | 12.8 | 1,359 | 1,799 |
-| parse CSV | 4.6 | 2,919 | 3,269 |
-| bank statement check (`parseStatement`) | 36.9 | 5,327 | 5,705 |
-| unwrap reports | 20.5 | 4,273 | 4,777 |
-| profile columns (11 columns) | 27.9 | 7,168 | 7,668 |
-| build records | 6.1 | 3,052 | 6,105 |
-| reconcile (3M × 3M) | 76.2 | 4,747 | 5,777 |
-| rec statement | 5.2 | 4,976 | 5,986 |
-| **total** | **≈ 194** | | peak RSS **7,956** |
+| generate month | 2.7 | 646 | 913 |
+| write CSV exports (≈ 520 MB of text) | 13.5 | 1,359 | 1,802 |
+| parse CSV (into columns) | 6.5 | 2,373 | 2,713 |
+| bank statement check (`parseStatement`, line by line) | 31.8 | 2,991 | 3,323 |
+| unwrap reports (`unwrapColumns`) | 16.7 | 1,836 | 2,911 |
+| profile columns (11 columns) | 19.7 | 2,475 | 3,073 |
+| build records | 4.8 | 3,540 | 3,924 |
+| reconcile (3M × 3M) | 66.4 | 3,731 | 4,554 |
+| rec statement | 5.7 | 3,962 | 4,804 |
+| **total** | **≈ 169** | | peak RSS **4,838** |
+
+Before this round (rows of strings, `unwrapReport`, `rowsToLines`, and
+reconcile without its memory work) the same run peaked at 7,536 MB RSS
+(7,956 in an earlier measurement) and took ≈ 217 s.
 
 | Planted category | planted | found | recall | 6K bar |
 | --- | ---: | ---: | ---: | ---: |
 | Exact | 2,129,192 | 2,129,192 | 100% | 99% |
 | Reference format differs | 308,578 | 308,578 | 100% | 95% |
-| Description only | 216,005 | 214,879 | 99.5% | 95% |
+| Description only | 216,005 | 215,872 | 99.9% | 95% |
 | Split 1:N (k = 2 / 3 / 4, 12,343 each) | 37,029 | 37,029 | 100% | 100% |
 | Batched deposit with slip ref | 37,029 | 37,029 | 100% | 100% |
 | Batched deposit, no ref | 18,515 | 0 | 0% | 90% |
-| Duplicate ledger posting | 12,343 | 12,015 | 97.3% | 100% |
+| Duplicate ledger posting | 12,343 | 12,343 | 100% | 100% |
 | Digits swapped / one digit / sign flipped | 12,343 / 12,343 / 9,257 | all | 100% | 100% |
-| Digits swapped, no ref | 9,257 | 5,735 | 62.0% | 95% |
-| Reference typo | 12,343 | 11,457 | 92.8% | 95% |
-| Deposits in transit | 30,858 | 30,191 | 97.8% | 99% |
-| Unpresented cheques | 37,029 | 35,339 | 95.4% | 99% |
-| Fees / interest / direct debits | 61,716 / 617 / 55,544 | 60,666 / 484 / 55,544 | 98.3% / 78.4% / 100% | 99–100% |
+| Digits swapped, no ref | 9,257 | 9,243 | 99.8% | 95% |
+| Reference typo | 12,343 | 12,342 | 99.99% | 95% |
+| Deposits in transit | 30,858 | 30,850 | 99.97% | 99% |
+| Unpresented cheques | 37,029 | 37,029 | 100% | 99% |
+| Fees / interest / direct debits | 61,716 / 617 / 55,544 | all | 100% | 99–100% |
 
 | Rule | matches | precision |
 | --- | ---: | ---: |
 | exact | 2,141,535 | 100% |
 | reference | 308,578 | 100% |
-| fuzzy | 55,089 | 98.8% |
-| amount+date | 165,437 | 97.0% |
+| fuzzy | 55,475 | 99.96% (20 wrong) |
+| amount+date | 160,435 | 99.99% (18 wrong) |
 | one-to-many / many-to-one | 37,029 / 37,029 | 100% |
 
-Match rate 93.8%; 5,647 wrong matches (47 of them pair the same party,
-amount and kind); 52,266 keying flags (1,131 not planted); clean-up
-perfect (no junk records, no lost lines, every value read); 0 balance
-breaks; rec statement difference 0.
+Match rate 93.6%; 38 wrong matches, 35 of them pair a line with another
+line for the same party, amount and kind (two payments of 100.00 to the
+same company in the same few days: nothing in the data tells them apart);
+55,559 keying flags (31 not planted); 13,470 duplicate groups (1,127 not
+planted: 1,098 are two bank fees with the same description and odd amount
+on one day, e.g. `UNPAID ITEM FEE 5.27`, too rare on other days to count
+as routine; 21 are two receipts on one paying-in slip with the same
+amount; 8 others); clean-up perfect (no junk records, no lost lines, every value read); 0
+balance breaks; rec statement difference 0.
 
-Everything that a reference ties together holds at 6M exactly as at 6K.
-What drops is what rests on amount and date alone: with ~100,000 lines a
-day, a leftover deposit in transit, bank fee or keyed-wrong line often
-has a same-amount stranger within ±3 days, and the amount + date pass
-pairs them (most of the wrong matches; they pull the timing and
-bank-only categories below their bars). The thresholds are enforced on
-the 6K run; the 6M run reports and exits non-zero listing what it misses.
+Before the volume-aware passes the 6M run had: description only 99.5%,
+duplicates 97.3%, digits swapped without a reference 62.0%, reference
+typo 92.8%, deposits in transit 97.8%, unpresented cheques 95.4%, fees
+98.3%, interest 78.4%; fuzzy precision 98.8%, amount + date 97.0% (5,647
+wrong matches); 1,131 false keying flags, 2,476 false duplicate groups.
+
+Everything a reference ties together held at 6M exactly as at 6K. What
+dropped was what rests on amount and date alone: with ~100,000 lines a
+day a leftover deposit in transit, bank fee or keyed-wrong line often has
+a same-amount stranger within ±3 days. The passes now weigh that (fix 12
+below), and every category but one meets its 6K bar at 6M. The
+thresholds are enforced on the 6K run; the 6M run reports and exits
+non-zero listing what it misses (now only the batched deposits without a
+reference).
 
 ## What the test found, and what was fixed
 
-All in `packages/core/src`, each with focused tests in
-`packages/core/test/recfixes.test.ts`.
+All in `packages/core/src`, each with focused tests (in
+`packages/core/test/recfixes.test.ts` unless it says otherwise).
 
 1. **Leading zeros after letters** (`recon/text.ts`, `normRef`):
    `DEP-4471` and `DEP004471` were different references, so every
@@ -266,7 +291,65 @@ All in `packages/core/src`, each with focused tests in
     every value twice and `parseNumberLoose` ran its whole regex chain on
     plain numbers and on text with no digits; `valid()` built a `Date` per
     date. Fast paths and one pass: profiling the 6M-row month went from
-    38.6 s to 27.9 s.
+    38.6 s to 27.9 s (19.7 s in the run above, which reads the columns
+    directly: fix 14).
+
+12. **Amount + date at volume** (`recon/match.ts`, `textModel`; fuzzy,
+    amount + date and keying flags; `recon/text.ts`, `nameAgreement`,
+    `kindOf`): at 6M rows the passes that rest on amount and date paired
+    leftovers with strangers (97.0% precision, 98.8% fuzzy), pulling the
+    timing and bank-only categories below their bars. A blunt "only when
+    the amount is unique both ways" broke the reference-less bank file
+    contract in `recon.test.ts`, so the passes now weigh each pair:
+    - the run learns what agreeing descriptions look like from its own key
+      matches (true pairs) against random leftovers (strangers): for each
+      class of name agreement (words in common, a truncated word counts; a
+      word left over on either side) and for transaction kinds that differ
+      (cheque, card, fee, interest, direct debit, transfer, deposit), how
+      much likelier it is between true pairs;
+    - against that, the number of items of that amount in the window on
+      the busier side (counted by binary search, not capped), any of which
+      could show the same agreement by chance. A pair needs its evidence
+      to outweigh that crowd. Without descriptions, a pair needs the two
+      sides to hold about as many items of that amount in the window (at
+      most 2 : 1), so a reference-less bank file still matches but a lone
+      ledger item among a crowd of bank lines of its amount is left;
+    - candidates come from an index by amount and party word (however many
+      items of that amount the window holds) plus the nearest by date;
+      pairs with descriptions go best first over the whole run, then those
+      without, each ledger item in turn, nearest date first;
+    - keying flags without a reference: every amount a typo could have
+      made is a candidate, flagged only when names and kinds agree more
+      than chance among that many candidates, best first; reference typos
+      are looked up through an index of the reference with one or two
+      characters blanked (the old search looked at the first 32 lines of
+      that amount, which at volume were rarely in the window);
+    - an item whose reference is anywhere on the other side (the copy of a
+      matched posting) is left out of fuzzy and amount + date, as it
+      already was from the rest of amount + date.
+
+    Without enough key matches to learn from (fewer than 200 pairs with
+    descriptions, e.g. a bank file with no references) the passes work as
+    before. Tests: `packages/core/test/volume.test.ts`.
+13. **Routine lines listed as duplicates** (`recon/match.ts`,
+    `findDuplicates`): two `CHAPS FEE 15.00` lines on one day were a
+    "duplicate" (2,476 such groups at 6M). A line known only by its
+    description is now left out when that description and amount turn up
+    on a quarter of the other days or more. Postings with a reference are
+    unaffected.
+14. **Memory at 6M** (`clean/unwrap.ts`, `clean/bank.ts`,
+    `clean/values.ts`, `recon/match.ts`): rows were held as arrays of
+    strings, unwrapped into a second copy, turned into 3M statement line
+    objects at once, and reconcile made a string or a pool per record in
+    several passes. Now the CSV is parsed into columns
+    (`ColumnCollector`), unwrapped in place (`unwrapColumns`) and checked
+    as a statement one line at a time (`columnsToLines`); `profileColumn`
+    keeps no tuple per value; reconcile buckets exact matches without a
+    key + amount string per item, searches small key groups without a
+    pool, makes the reference sets and the word index once, and groups
+    duplicates by sorting. Peak RSS at 6M: 7,536 → 4,838 MB; the run went
+    from ≈ 217 s to ≈ 169 s. Tests:
+    `packages/core/test/unwrapcolumns.test.ts`.
 
 ## Known limits
 
@@ -274,16 +357,26 @@ All in `packages/core/src`, each with focused tests in
   window holds few enough candidates that a sum is unlikely to be chance.
   At 6K rows that is 18 of 19; at 6M rows (about 100,000 lines a day)
   it's none, by design: they are reported as deposits in transit and bank
-  receipts instead of being matched to the wrong items.
-- **Amount + date at volume**: at 6M rows leftovers of different kinds
-  share an amount within the window by chance and get paired (97.0%
-  precision for that rule, 98.8% for fuzzy). A stricter rule (only pair
-  when the amount is unique both ways) broke the existing contract that a
-  reference-less bank file still auto-matches by amount and date
-  (recon.test.ts, 100k x 100k), so it wasn't adopted; making the pass
-  aware of volume is open.
-- **Memory**: the pipeline holds every row as an array of strings
-  (`unwrapReport` takes `string[][]`); at 6M rows peak RSS is several GB.
-  The app keeps columns, not rows; a column-based unwrap would cut this.
+  receipts instead of being matched to the wrong items. This is the one
+  6K bar the 6M run misses.
+- **Same party, same amount, same few days**: 35 of the 38 wrong matches
+  at 6M pair a line with another line for the same party, amount and kind
+  (two 100.00 payments to one company in a week). Nothing in the data
+  tells them apart.
+- **Duplicate groups that weren't planted**: 1,127 at 6M (2,476 before),
+  almost all two identical bank fees on one day at an odd amount
+  (`UNPAID ITEM FEE 5.27`); the routine test only drops a description and
+  amount that turn up on a quarter of the other days. The check doesn't
+  count these against the bars (only planted duplicates are scored).
+- **The volume-aware passes learn from the run's key matches.** With fewer
+  than 200 key matches that have descriptions on both sides there is
+  nothing to learn from, and fuzzy, amount + date and the keying flags
+  work as before (nearest date, any shared name). A file whose two sides
+  never name the party the same way learns that agreeing names are no
+  evidence, and then leans on the 2 : 1 balance of amounts in the window.
+- **Memory**: 6M rows still peak at about 4.8 GB RSS. What's left is
+  mostly the 520 MB of CSV text (fields are slices of it), the 6M record
+  objects the reconcile API takes, the normalised keys and texts inside
+  reconcile, and V8 collecting late under a 12 GB heap limit.
 - Both files start from the same opening balance, so there are no
   outstanding items brought forward from last month.

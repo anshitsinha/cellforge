@@ -136,14 +136,22 @@ export interface ColumnProfile {
  * way; decimal comma vs dot by how separators are used.
  */
 export function profileColumn(values: string[]): ColumnProfile {
-  const present = values.map((v, i) => [i, v.trim()] as const).filter(([, v]) => v !== "");
+  // the non-empty values, trimmed, and their rows (two flat arrays: a column can have millions of values)
+  const at: number[] = [];
+  const present: string[] = [];
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i].trim();
+    if (v === "") continue;
+    at.push(i);
+    present.push(v);
+  }
   const base: ColumnProfile = { type: "empty", numberStyle: "dot", dateOrder: "dmy", confidence: 1, misfits: [], hasTime: false };
   if (!present.length) return base;
 
   // decimal comma: "1.234,56" or "12,5" with no dot after a comma
   let commaVotes = 0;
   let dotVotes = 0;
-  for (const [, v] of present.slice(0, 2000)) {
+  for (const v of present.slice(0, 2000)) {
     if (/\d\.\d{3},\d/.test(v) || /^-?\d+,\d{1,2}$/.test(v.replace(/[^\d,.-]/g, ""))) commaVotes++;
     if (/\d,\d{3}\.\d/.test(v) || /^-?\d+\.\d+$/.test(v.replace(/[^\d,.-]/g, ""))) dotVotes++;
   }
@@ -153,7 +161,7 @@ export function profileColumn(values: string[]): ColumnProfile {
   let dmy = 0;
   let mdy = 0;
   let ymd = 0;
-  for (const [, v] of present.slice(0, 5000)) {
+  for (const v of present.slice(0, 5000)) {
     const p = dateParts(v);
     if (!p) continue;
     if (p[0] > 31) ymd++;
@@ -172,7 +180,7 @@ export function profileColumn(values: string[]): ColumnProfile {
   const DATE = 4;
   const seen = new Uint8Array(present.length);
   for (let k = 0; k < present.length; k++) {
-    const v = present[k][1];
+    const v = present[k];
     const isNum = parseNumberLoose(v, numberStyle) !== null;
     if (isNum) seen[k] = NUM;
     if (isNum && !dateParts(v)) {
@@ -189,9 +197,9 @@ export function profileColumn(values: string[]): ColumnProfile {
   }
   const type: ColumnType = nums >= dates && nums / present.length >= 0.5 ? "number" : dates / present.length >= 0.5 ? "date" : "text";
   const fits = (k: number) =>
-    type === "number" ? (seen[k] & NUM) !== 0 : type === "date" ? (seen[k] & DATE_TRIED ? (seen[k] & DATE) !== 0 : parseDateLoose(present[k][1], dateOrder) !== null) : true;
+    type === "number" ? (seen[k] & NUM) !== 0 : type === "date" ? (seen[k] & DATE_TRIED ? (seen[k] & DATE) !== 0 : parseDateLoose(present[k], dateOrder) !== null) : true;
   const misfits: { row: number; value: string }[] = [];
-  for (let k = 0; k < present.length; k++) if (!fits(k)) misfits.push({ row: present[k][0], value: present[k][1] });
+  for (let k = 0; k < present.length; k++) if (!fits(k)) misfits.push({ row: at[k], value: present[k] });
   const numFmt = type === "date" ? (hasTime ? "yyyy-mm-dd hh:mm" : "yyyy-mm-dd") : type === "number" && percents > nums / 2 ? "0.0%" : undefined;
   return { type, numberStyle, dateOrder, confidence: 1 - misfits.length / present.length, misfits, hasTime, ...(numFmt ? { numFmt } : {}) };
 }

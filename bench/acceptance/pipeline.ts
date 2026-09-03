@@ -8,8 +8,8 @@
  * Shared by packages/core/test/acceptance.test.ts (6K rows) and
  * bench/acceptance/run.ts (any size, with timings and memory).
  */
-import { parseStatement, rowsToLines } from "../../packages/core/src/clean/bank";
-import { unwrapReport } from "../../packages/core/src/clean/unwrap";
+import { columnsToLines, parseStatement } from "../../packages/core/src/clean/bank";
+import { ColumnCollector, tableRow, unwrapColumns, type ColumnTable, type UnwrappedColumns } from "../../packages/core/src/clean/unwrap";
 import { parseAs, parseNumberLoose, profileColumn, type ColumnProfile } from "../../packages/core/src/clean/values";
 import { CsvParser } from "../../packages/core/src/csv";
 import { reconcile, REC_RULES, type RecRecord, type RecResult, type RecRule } from "../../packages/core/src/recon/match";
@@ -133,52 +133,52 @@ export function runAcceptance(opts: RunOptions): AcceptanceReport {
     bankOut: writeBankCsv(g, (c) => bankChunks.push(c)),
   }));
 
-  // 2. parse (streamed in chunks, as a file is read)
+  // 2. parse (streamed in chunks, as a file is read), kept as columns the way the app keeps a sheet
   const parse = (chunks: string[]) => {
-    const rows: string[][] = [];
-    const p = new CsvParser((r) => rows.push(r));
+    const table = new ColumnCollector();
+    const p = new CsvParser((r) => table.add(r));
     for (let k = 0; k < chunks.length; k++) {
       p.push(chunks[k]);
       chunks[k] = "";
     }
     p.end();
-    return rows;
+    return table;
   };
   const parsed = stage("parse CSV", () => ({ ledger: parse(ledgerChunks), bank: parse(bankChunks) }));
-  let ledgerRows: string[][] | null = parsed.ledger;
-  let bankRows: string[][] | null = parsed.bank;
-  parsed.ledger = parsed.bank = [];
+  const ledgerRows: ColumnTable = parsed.ledger;
+  const bankRows: ColumnTable = parsed.bank;
 
   // bank statement running-balance check (the bank module on the same rows)
   let bankCheck: AcceptanceReport["bankCheck"] = null;
   if (opts.statementCheck !== false) {
     bankCheck = stage("bank statement check", () => {
-      const st = parseStatement(rowsToLines(bankRows!));
+      const st = parseStatement(columnsToLines(bankRows));
       return { transactions: st.transactions.length, breaks: st.breaks, closingMatches: st.closingMatches };
     });
   }
 
   // the balances the user reads off the two reports
-  const closingRow = (rows: string[][], label: RegExp, col: number) => {
-    for (let r = rows.length - 1; r >= 0; r--) if (rows[r].some((c) => label.test(c))) return parseNumberLoose(rows[r][col] ?? "") ?? NaN;
+  const closingRow = (t: ColumnTable, label: RegExp, col: number) => {
+    for (let r = t.rows - 1; r >= 0; r--) {
+      const row = tableRow(t, r);
+      if (row.some((c) => label.test(c))) return parseNumberLoose(row[col] ?? "") ?? NaN;
+    }
     return NaN;
   };
   const ledgerBalance = closingRow(ledgerRows, /^closing balance$/i, 4);
   const bankBalance = closingRow(bankRows, /^closing balance$/i, 5);
 
-  // 3. unwrap the printed reports
-  const { lu, bu } = stage("unwrap reports", () => ({ lu: unwrapReport(ledgerRows!), bu: unwrapReport(bankRows!) }));
-  ledgerRows = null;
-  bankRows = null;
+  // 3. unwrap the printed reports (column by column, compacting the parsed columns in place)
+  const { lu, bu } = stage("unwrap reports", () => ({ lu: unwrapColumns(ledgerRows), bu: unwrapColumns(bankRows) }));
 
   // 4. profile the columns and read the values
-  const read = (u: ReturnType<typeof unwrapReport>) => {
-    const profiles: ColumnProfile[] = u.header.map((_, c) => profileColumn(u.rows.map((r) => r[c])));
+  const read = (u: UnwrappedColumns) => {
+    const profiles: ColumnProfile[] = u.header.map((_, c) => profileColumn(u.columns[c]));
     return profiles;
   };
   const { lp, bp } = stage("profile columns", () => ({ lp: read(lu), bp: read(bu) }));
-  const col = (u: ReturnType<typeof unwrapReport>, name: string) => u.header.findIndex((h) => h.toLowerCase() === name.toLowerCase());
-  const profileNames = (u: ReturnType<typeof unwrapReport>, ps: ColumnProfile[]) => Object.fromEntries(u.header.map((h, c) => [h, ps[c].type]));
+  const col = (u: UnwrappedColumns, name: string) => u.header.findIndex((h) => h.toLowerCase() === name.toLowerCase());
+  const profileNames = (u: UnwrappedColumns, ps: ColumnProfile[]) => Object.fromEntries(u.header.map((h, c) => [h, ps[c].type]));
 
   // 5. records, as the reconcile dialog reads them: key, amount (in − out), date, text
   const unreadable = { ledger: 0, bank: 0 };
@@ -192,17 +192,17 @@ export function runAcceptance(opts: RunOptions): AcceptanceReport {
       }
       return x;
     };
-    const build = (side: "ledger" | "bank", u: ReturnType<typeof unwrapReport>, ps: ColumnProfile[], m: { key: number; text: number; date: number; amount: number; minus: number }) => {
+    const build = (side: "ledger" | "bank", u: UnwrappedColumns, ps: ColumnProfile[], m: { key: number; text: number; date: number; amount: number; minus: number }) => {
       const out: RecRecord[] = [];
-      for (let k = 0; k < u.rows.length; k++) {
-        const row = u.rows[k];
+      const cell = (c: number, k: number) => u.columns[c][k];
+      for (let k = 0; k < u.rows; k++) {
         const rec: RecRecord = { row: k };
-        if (row[m.key]) rec.key = row[m.key];
-        if (row[m.text]) rec.text = row[m.text];
-        const d = value(side, row[m.date], ps[m.date]);
+        if (cell(m.key, k)) rec.key = cell(m.key, k);
+        if (cell(m.text, k)) rec.text = cell(m.text, k);
+        const d = value(side, cell(m.date, k), ps[m.date]);
         if (d !== undefined) rec.date = Math.floor(d);
-        const a = value(side, row[m.amount], ps[m.amount]);
-        const b = m.minus >= 0 ? value(side, row[m.minus], ps[m.minus]) : undefined;
+        const a = value(side, cell(m.amount, k), ps[m.amount]);
+        const b = m.minus >= 0 ? value(side, cell(m.minus, k), ps[m.minus]) : undefined;
         if (a !== undefined || b !== undefined) rec.amount = Math.round(((a ?? 0) - (b ?? 0)) * 100) / 100;
         out.push(rec);
       }
@@ -213,12 +213,12 @@ export function runAcceptance(opts: RunOptions): AcceptanceReport {
     return { ledger, bank };
   });
   // which generated line each record is
-  const idsOf = (u: ReturnType<typeof unwrapReport>, out: { lineToId: Int32Array }) => Int32Array.from(u.sourceRows, (r) => out.lineToId[r] ?? -1);
+  const idsOf = (u: UnwrappedColumns, out: { lineToId: Int32Array }) => Int32Array.from(u.sourceRows, (r) => out.lineToId[r] ?? -1);
   const idA = idsOf(lu, ledgerOut);
   const idB = idsOf(bu, bankOut);
-  // the text rows aren't needed any more (the app would hold columns, not rows of strings)
-  lu.rows.length = 0;
-  bu.rows.length = 0;
+  // the text columns aren't needed any more
+  lu.columns.length = 0;
+  bu.columns.length = 0;
 
   // 6. reconcile with the default settings
   const r = stage("reconcile", () => reconcile(records.ledger, records.bank));

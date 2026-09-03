@@ -12,6 +12,7 @@
  * 4. every balance is checked: previous balance + amount = this balance.
  */
 import { dateToSerial } from "../numfmt";
+import { tableRow, type ColumnTable } from "./unwrap";
 import { parseDateLoose, parseNumberLoose, type DateOrder, type NumberStyle } from "./values";
 
 export interface StatementCell {
@@ -176,15 +177,23 @@ function money(text: string, style: NumberStyle): { value: number; mark: "cr" | 
 const near = (a: number, b: number) => Math.abs(a - b) < 0.005;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-export function parseStatement(lines: StatementLine[]): Statement {
+/** Lines made one at a time (columnsToLines), so a long statement isn't held as line objects all at once. */
+export interface StatementLines {
+  length: number;
+  line(i: number): StatementLine;
+}
+
+export function parseStatement(input: StatementLine[] | StatementLines): Statement {
+  const lines: StatementLines = Array.isArray(input) ? { length: input.length, line: (i) => input[i] } : input;
   // the statement's number style and day/month order, from all of its text
   let comma = 0;
   let dot = 0;
   let dmy = 0;
   let mdy = 0;
-  const years: number[] = [];
-  for (const l of lines) {
-    for (const c of l.cells) {
+  // the earliest plausible year mentioned: a running minimum (not Math.min(...years): a long statement mentions more years than a call takes arguments)
+  let baseYear = Infinity;
+  for (let i = 0; i < lines.length; i++) {
+    for (const c of lines.line(i).cells) {
       const t = c.text;
       if (/\d\.\d{3},\d{2}\b/.test(t) || /^-?\d+,\d{2}$/.test(t.trim())) comma++;
       if (/\d,\d{3}\.\d{2}\b/.test(t) || /^-?\d+\.\d{2}$/.test(t.trim())) dot++;
@@ -192,7 +201,10 @@ export function parseStatement(lines: StatementLine[]): Statement {
         if (Number(m[1]) > 12 && Number(m[2]) <= 12) dmy++;
         else if (Number(m[2]) > 12 && Number(m[1]) <= 12) mdy++;
       }
-      for (const m of t.matchAll(/\b(19[89]\d|20\d{2})\b/g)) years.push(Number(m[1]));
+      for (const m of t.matchAll(/\b(19[89]\d|20\d{2})\b/g)) {
+        const y = Number(m[1]);
+        if (y >= 1980 && y < baseYear) baseYear = y;
+      }
     }
   }
   const style: NumberStyle = comma > dot ? "comma" : "dot";
@@ -206,7 +218,7 @@ export function parseStatement(lines: StatementLine[]): Statement {
   let headerKey = "";
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines.line(i);
     if (!line.cells.length) continue;
     const h = headerOf(line);
     if (h) {
@@ -295,9 +307,6 @@ export function parseStatement(lines: StatementLine[]): Statement {
   }
 
   // ------------------------------------------------------------ dates --
-  // (a loop, not Math.min(...years): a long statement has more years than the call stack takes arguments)
-  let baseYear = Infinity;
-  for (const y of years) if (y >= 1980 && y < baseYear) baseYear = y;
   if (baseYear === Infinity) baseYear = new Date().getUTCFullYear();
   let year = baseYear;
   let lastMonth = 0;
@@ -370,7 +379,14 @@ export function parseStatement(lines: StatementLine[]): Statement {
   };
 }
 
+const rowToLine = (r: string[]): StatementLine => ({ page: 1, cells: r.flatMap((text, c) => (text.trim() ? [{ x: c, x2: c + 0.9, text: text.trim() }] : [])) });
+
 /** A CSV (rows of text) as statement lines: a cell's position is its column. */
 export function rowsToLines(rows: string[][]): StatementLine[] {
-  return rows.map((r) => ({ page: 1, cells: r.flatMap((text, c) => (text.trim() ? [{ x: c, x2: c + 0.9, text: text.trim() }] : [])) }));
+  return rows.map(rowToLine);
+}
+
+/** A CSV kept as columns (ColumnTable) as statement lines, each made when it's read. */
+export function columnsToLines(t: ColumnTable): StatementLines {
+  return { length: t.rows, line: (r) => rowToLine(tableRow(t, r)) };
 }
