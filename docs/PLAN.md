@@ -68,11 +68,14 @@ moved to "Later" (see the end of this file).
 The item being built right now, broken into the steps it takes. The live
 tracker shows this expanded, with the first unticked step as the current one.
 
-### Volume-aware amount + date matching at millions of lines a day
-- [ ] Measure the 6M month before the change: recall per planted category, precision per rule, peak memory
-- [ ] Amount + date pass aware of volume: weigh how likely a same-amount stranger is in the window, prefer pairs that agree on kind and direction, pick best pairs both ways
-- [ ] Column-based unwrap so the 6M pipeline holds columns, not rows of strings
-- [ ] Keep the 6K bars and the 100k x 100k contract; re-measure 6M and update the acceptance write-up
+### UI/UX overhaul
+- [x] Independent review of every screen with screenshots: problems ranked, a new layout, six workstreams
+- [ ] Design system: tokens for both themes, one button and table style, shared dialog, side panel, toasts, confirm, icons
+- [ ] Landing page for finance and audit analysts; finance sample data instead of the sales demo
+- [ ] Local AI you can find: an AI panel with recommended models, download on request, status everywhere
+- [ ] App shell: Ask AI button, menu bar, side rail for the main jobs, start screen, a palette without engine internals
+- [ ] Every tool dialog on the shared components, with better defaults and empty states
+- [ ] Browser check of every screen in both themes; guides updated
 
 ## Milestones
 
@@ -130,7 +133,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Goal Seek
 - ✅ Notes on cells, hyperlinks
 
-### M5: Query engine, explore, reconcile 🔨
+### M5: Query engine, explore, reconcile ✅
 - ✅ Query engine over sheet columns: our own SQL on the columnar storage (decided instead of DuckDB-WASM: no 30 MB download, no runtime dependency, works offline)
 - ✅ Pivot tables (drag fields, drill-down to rows), slicers
 - ✅ Column profiles
@@ -146,7 +149,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - ✅ Key-based file compare
 - ✅ Scenarios (copy-on-write sheets) compared side by side
 - ✅ Acceptance test: synthetic bank/ledger month modelled on real data at 6K and 6M rows (6K: every bar met; 6M: everything tied by a reference met, see docs/acceptance.md)
-- 🔨 Volume-aware amount + date matching at millions of lines a day (6M: no-reference batches, keying errors and timing items fall below the 6K bar); column-based unwrap to cut 6M memory from ~8 GB
+- ✅ Volume-aware amount + date matching at millions of lines a day; column-based unwrap (6M: every planted category meets its 6K bar except batched deposits with no reference, which stay unmatched by design; amount+date precision 97.0% → 99.99%, fuzzy 98.8% → 99.96%, wrong matches 5,647 → 38; peak RSS 7.5 GB → 4.8 GB)
 
 ### M6: Recipes and checks ✅
 - ✅ Recipe panel: recorded steps, edit / reorder / disable, parameters,
