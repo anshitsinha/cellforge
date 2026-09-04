@@ -46,8 +46,8 @@
   max-height: calc(100vh - 8px);
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 12px 36px rgb(0 0 0 / 0.28);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
   overflow: hidden;
   resize: both;
 }
@@ -55,8 +55,8 @@
 .chart-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 6px 4px 10px;
+  gap: var(--space-1-5);
+  padding: var(--space-1) var(--space-1-5) var(--space-1) 10px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
   cursor: move;
@@ -70,12 +70,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .chart-head button {
-  padding: 2px 8px;
-  font-size: 12px;
+  padding: var(--space-0-5) var(--space-2);
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
@@ -100,18 +100,18 @@
   position: absolute;
   pointer-events: none;
   max-width: 260px;
-  padding: 5px 8px;
+  padding: 5px var(--space-2);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--panel);
   color: var(--text);
-  box-shadow: 0 4px 12px rgb(0 0 0 / 0.2);
-  font-size: 12px;
+  box-shadow: var(--shadow-2);
+  font-size: var(--text-sm);
   white-space: pre-line;
 }
 
 .chart-tip b {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .chart-editor {
@@ -123,7 +123,7 @@
   padding: 10px;
   display: grid;
   align-content: start;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 /* display rules below would otherwise beat the hidden attribute */
@@ -133,35 +133,29 @@
 
 .chart-editor label {
   display: grid;
-  gap: 2px;
-  font-size: 12px;
+  gap: var(--space-0-5);
+  font-size: var(--text-sm);
 }
 
 .chart-editor label.check {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1-5);
 }
 
 .chart-editor input:not([type=checkbox]),
 .chart-editor select {
-  font: inherit;
-  padding: 4px 6px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
-  color: var(--text);
   min-width: 0;
 }
 
 .chart-editor input.bad {
-  border-color: #d93025;
+  border-color: var(--danger-solid);
 }
 
 .chart-editor .pair {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: var(--space-1-5);
 }
 
 .chart-editor small,
@@ -171,15 +165,15 @@
 
 .chart-editor .chart-series {
   display: grid;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .chart-editor .chart-series-row {
   display: grid;
   grid-template-columns: 1fr auto auto;
-  gap: 6px;
+  gap: var(--space-1-5);
   align-items: center;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .chart-editor .chart-series-row span {
@@ -194,6 +188,6 @@
   display: grid;
   place-items: center;
   color: var(--muted);
-  padding: 16px;
+  padding: var(--space-4);
   text-align: center;
 }
