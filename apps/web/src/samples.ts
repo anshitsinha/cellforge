@@ -200,9 +200,9 @@ export function bankRecSample(seed = 1): BankRecSample {
   {
     const ref = `PAY-${pay++}`;
     L(21, ref, "Payment · Kestrel Print", -118_000);
-    L(22, ref, "Payment · Kestrel Print", -118_000);
+    L(21, ref, "Payment · Kestrel Print", -118_000);
     B(22, ref, "FPO KESTREL PRINT", -118_000);
-    planted.push({ kind: "Ledger error", date: iso(Y, M, 22), description: `${ref} Kestrel Print posted twice`, amount: 1_180 });
+    planted.push({ kind: "Ledger error", date: iso(Y, M, 21), description: `${ref} Kestrel Print posted twice`, amount: 1_180 });
   }
   // deposits in transit: banked on the last days, not on the statement yet
   for (const [day, who, cents] of [[30, "Rowan Schools Trust", 864_000], [31, "Oakridge Clinics", 231_540]] as const) {
