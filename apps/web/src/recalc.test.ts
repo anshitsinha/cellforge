@@ -46,7 +46,7 @@ describe("incremental recalculation", () => {
     const s = new EditableSource(new SyntheticSource(200_000), 4);
     let kernelRows = 0;
     s.onKernelRun = (run) => (kernelRows += run.rows);
-    // H = units * unit_price, filled down the whole sheet and compiled
+    // H = Debit * Credit, filled down the whole sheet and compiled
     set(s, 0, 7, "=E1*F1");
     const fill = s.addFill(7, 1, 199_999, s.getTemplate(0, 7).template, 0);
     expect(s.isCompiled(fill)).toBe(true);

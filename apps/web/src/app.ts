@@ -4,6 +4,7 @@ import { type CellRange, Grid, columnLetter } from "@cellforge/grid";
 import { parseTsv, rangeSize, rangeToTsv } from "./clipboard";
 import { computeStats } from "./stats";
 import { SyntheticSource } from "./demo";
+import { sampleFromUrl, sampleWorkbook } from "./samples";
 import { type Action, ActionHistory, type ActionRegistry, BlobStore } from "@cellforge/actions";
 import { setCells, sheetActions, type SheetCtx } from "./actions";
 import { BlankSource, EditableSource, isFormula, type Fill } from "./editable";
@@ -88,7 +89,9 @@ const rowFormat = new Intl.NumberFormat();
 
 // /app.html?demo=1 (the landing page's "try the demo" link) opens the 100M
 // row dataset; otherwise start with an empty sheet like any spreadsheet app
-const startWithDemo = new URLSearchParams(location.search).has("demo");
+// /app.html?sample=bank-rec|close|audit|big opens a finance sample (samples.ts)
+const startSample = sampleFromUrl(location.search);
+const startWithDemo = new URLSearchParams(location.search).has("demo") || startSample === "big";
 
 // imported/demo data gets a few empty columns after it, for calculated columns
 const SPARE_COLUMNS = 10;
@@ -110,7 +113,7 @@ let workbook = startWithDemo
 let activeId = workbook.sheets[0].id;
 /** the sheet on screen */
 let source = workbook.sheets[0].source;
-let currentName = startWithDemo ? "demo — synthetic sales" : "Untitled";
+let currentName = startWithDemo ? "demo — 100M-line general ledger" : "Untitled";
 // each sheet keeps its own selection when you switch away and back
 const selections = new Map<string, CellRange>();
 // Fingers need bigger targets than a mouse, and iOS zooms the page when an
@@ -1286,7 +1289,7 @@ async function startAutosave() {
     return;
   }
   saver = new AutoSaver(store);
-  if (startWithDemo) return void snapshotNow();
+  if (startWithDemo || startSample) return void snapshotNow();
   try {
     const last = await AutoSaver.load(store);
     if (!last) return void snapshotNow();
@@ -1311,6 +1314,14 @@ async function startAutosave() {
 }
 
 void startAutosave();
+// a sample from the landing page's links (the big one is the demo, above)
+if (startSample && startSample !== "big") {
+  void sampleWorkbook(startSample).then((s) => {
+    loadWorkbook(s.workbook, s.active, s.name);
+    void snapshotNow();
+    statusLeft.textContent = "Sample data (fictional): read \"Start here\" first.";
+  });
+}
 
 // Save / Save as: one .cellforge file, via the File System Access API where
 // the browser has it (so Ctrl+S saves in place), a download otherwise
@@ -1960,7 +1971,7 @@ document.getElementById("btn-new")!.addEventListener("click", () => {
 
 document.getElementById("btn-demo")!.addEventListener("click", () => {
   if (workbookEdited() && !confirm("Discard your changes and load the demo?")) return;
-  loadSource(new EditableSource(new SyntheticSource(DEMO_ROWS), SPARE_COLUMNS), "demo — synthetic sales");
+  loadSource(new EditableSource(new SyntheticSource(DEMO_ROWS), SPARE_COLUMNS), "demo — 100M-line general ledger");
 });
 
 // --- CSV export ---------------------------------------------------------------
