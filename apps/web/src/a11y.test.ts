@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { iconLabel, isIconOnly, nextFocus } from "./a11y";
+import { iconLabel, isIconOnly, nextFocus, planActions } from "./a11y";
 import { chooseLocale, currentLocale, initialLocale, LOCALE_CHOICES, savedLocaleId, startLocale } from "./locale";
 import { formatValue } from "@cellforge/core";
 
@@ -70,5 +70,29 @@ describe("locale setting", () => {
     expect(formatValue(1234.5, "#,##0.00").text).toBe("1,234.50");
     chooseLocale("de-DE");
     expect(formatValue(1234.5, "#,##0.00").text).toBe("1.234,50");
+  });
+});
+
+describe("dialog footer buttons", () => {
+  const plan = (...b: { text: string; styled?: boolean; hidden?: boolean; disabled?: boolean }[]) => planActions(b);
+
+  it("makes the last action primary and marks Cancel / Close", () => {
+    expect(plan({ text: "Cancel" }, { text: "Add the result sheet" })).toEqual(["dismiss", "primary"]);
+    expect(plan({ text: "Add" }, { text: "Run" }, { text: "Close" })).toEqual(["plain", "primary", "dismiss"]);
+    expect(plan({ text: "Close" })).toEqual(["dismiss"]);
+  });
+
+  it("prefers the last action you can press now", () => {
+    expect(plan({ text: "Close" }, { text: "Match" }, { text: "Add result sheets", disabled: true })).toEqual(["dismiss", "primary", "plain"]);
+    expect(plan({ text: "Close" }, { text: "Add", disabled: true })).toEqual(["dismiss", "primary"]);
+    expect(plan({ text: "Go" }, { text: "Later", hidden: true })).toEqual(["primary", "plain"]);
+  });
+
+  it("makes a destructive main action red", () => {
+    expect(plan({ text: "Cancel" }, { text: "Delete 3 rows" })).toEqual(["dismiss", "danger"]);
+  });
+
+  it("leaves rows that already chose a style", () => {
+    expect(plan({ text: "Cancel" }, { text: "Run", styled: true }, { text: "Save" })).toEqual(["dismiss", "plain", "plain"]);
   });
 });
