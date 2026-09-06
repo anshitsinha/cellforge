@@ -95,7 +95,9 @@
   gap: var(--space-3);
 }
 
-.cf-dialog__body > p {
+/* spacing comes from the grid gap, not paragraph margins */
+.cf-dialog__body :where(p),
+.cf-sidepanel__body :where(p) {
   margin: 0;
 }
 
