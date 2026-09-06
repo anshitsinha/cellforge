@@ -20,6 +20,7 @@ import { rollForward, runBook, runForValues, runReport, workbookEnv, type Render
 import { BLOCK_LABEL, newBlock, newReport, type BlockKind, type ParamFilter, type Report, type ReportBlock } from "./model";
 import { reportHtml, reportPdf, type ChartBlock } from "./output";
 import "./reports.css";
+import { confirmDialog } from "../ui/confirm";
 
 export interface ReportDeps {
   workbook: () => Workbook;
@@ -246,8 +247,8 @@ export function openReports(d: ReportDeps): void {
     };
     size.addEventListener("change", setPage);
     orient.addEventListener("change", setPage);
-    const del = button("Delete report", () => {
-      if (!confirm(`Delete the report "${rep.title}"? Undo brings it back.`)) return;
+    const del = button("Delete report", async () => {
+      if (!(await confirmDialog({ title: `Delete the report "${rep.title}"?`, text: "Undo brings it back.", confirm: "Delete report", danger: true }))) return;
       clearTimeout(saveTimer);
       const id = rep.id;
       void d.run({ type: "report.set", params: { id, report: null } }).then(() => {
