@@ -1,0 +1,219 @@
+/*
+ * cellforge design tokens. Imported first (from the top of style.css), so
+ * every other stylesheet can use them. Docs: docs/dev/ui.md.
+ *
+ * Theme: light by default; dark when the OS asks for it. A page can force
+ * one with <html data-theme="light|dark"> (nothing sets it yet; the grid
+ * and charts repaint on the OS change event, so a future theme switch must
+ * also ask them to redraw).
+ *
+ * The short legacy names at the bottom (--bg, --panel, --border, --text,
+ * --muted, --accent) are read by the grid canvas and charts
+ * (packages/grid/src/theme.ts, charts/render.ts). Keep them.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* ---- type ---------------------------------------------------------- */
+  --font-ui: "Inter var", Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", "Cascadia Code", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  --text-xs: 11px; /* captions, badges, kbd */
+  --text-sm: 12px; /* secondary text, table cells in dense tables */
+  --text-md: 13px; /* body: the app's base size */
+  --text-lg: 15px; /* dialog and panel titles */
+  --text-xl: 18px; /* section headings */
+  --text-2xl: 24px; /* page headings (start screen, empty states) */
+  --leading-tight: 1.25;
+  --leading: 1.45;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* ---- space (4px grid) ---------------------------------------------- */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* ---- shape --------------------------------------------------------- */
+  --radius-sm: 4px; /* chips, small controls, checkboxes */
+  --radius-md: 6px; /* buttons, inputs, menus items */
+  --radius-lg: 10px; /* cards, menus, popovers */
+  --radius-xl: 14px; /* dialogs */
+  --radius-full: 999px;
+
+  --control-h: 30px; /* buttons, inputs, selects */
+  --control-h-sm: 24px;
+  --control-h-lg: 36px;
+
+  /* ---- sizes --------------------------------------------------------- */
+  --dialog-sm: 420px; /* confirmations, one field */
+  --dialog-md: 560px; /* short forms */
+  --dialog-lg: 840px; /* tools with a preview (recon, import, join) */
+  --dialog-xl: 1080px; /* builders (pivot, SQL, reports) */
+  --dialog-top: max(40px, 7vh); /* every modal opens at the same height */
+  --sidepanel-w: 380px;
+  --sidepanel-min: 300px;
+  --sidepanel-max: 640px;
+
+  /* ---- motion -------------------------------------------------------- */
+  --dur-fast: 120ms; /* hovers, presses */
+  --dur-med: 180ms; /* dialogs, menus */
+  --dur-slow: 260ms; /* panels, toasts */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ---- layers -------------------------------------------------------- */
+  --z-panel: 40;
+  --z-chart: 45;
+  --z-dialog: 50;
+  --z-popover: 60;
+  --z-toast: 70;
+
+  /* ---- colour: light ------------------------------------------------- */
+  --surface-0: #ffffff; /* the sheet, inputs */
+  --surface-1: #f7f7f8; /* chrome: toolbars, panels, headers */
+  --surface-2: #ffffff; /* raised: dialogs, menus, popovers */
+  --surface-3: #f0f1f3; /* hover, pressed, selected rows */
+  --surface-sunken: #f2f3f5; /* wells, code, previews */
+  --border-subtle: #ebedf0; /* hairlines inside tables and lists */
+  --border-default: #dfe1e5; /* grid lines, control borders */
+  --border-strong: #c5c9cf; /* hovered controls, emphasis */
+  --text-strong: #0f1115;
+  --text-default: #1b1d21;
+  --text-muted: #5c626c; /* 5.9:1 on surface-1 */
+  --text-subtle: #868c96; /* placeholders, disabled; not for body text */
+  --accent-default: #2557d6; /* links, focus, selection: 6.1:1 on white */
+  --accent-hover: #1d48b8;
+  --accent-solid: #2557d6; /* primary button fill */
+  --accent-soft: rgb(37 87 214 / 0.1); /* selected / active backgrounds */
+  --accent-soft-strong: rgb(37 87 214 / 0.18);
+  --on-accent: #ffffff;
+  --success: #17794b;
+  --success-solid: #1e8a56;
+  --success-soft: rgb(30 138 86 / 0.12);
+  --warning: #965800; /* text on light: 5.0:1 */
+  --warning-solid: #d98a00;
+  --warning-soft: rgb(217 138 0 / 0.14);
+  --danger: #c22d27;
+  --danger-solid: #d0352e;
+  --danger-hover: #b52a24;
+  --danger-soft: rgb(208 53 46 / 0.1);
+  --info: var(--accent-default);
+  --info-soft: var(--accent-soft);
+  /* finance roles */
+  --match: var(--success);
+  --mismatch: var(--danger);
+  --unmatched: var(--warning);
+
+  --scrim: rgb(15 18 25 / 0.36);
+  --focus-ring-color: #2f66e8;
+  --focus-ring: 0 0 0 2px var(--surface-0), 0 0 0 4px var(--focus-ring-color);
+
+  --shadow-1: 0 1px 2px rgb(16 24 40 / 0.06), 0 1px 1px rgb(16 24 40 / 0.04);
+  --shadow-2: 0 4px 12px rgb(16 24 40 / 0.1), 0 1px 3px rgb(16 24 40 / 0.06);
+  --shadow-3: 0 24px 56px -12px rgb(16 24 40 / 0.28), 0 4px 12px rgb(16 24 40 / 0.08);
+  --shadow-inset: inset 0 1px 0 rgb(255 255 255 / 0.6);
+
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235c626c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* ---- colour: dark (OS setting, unless the page forces light) ---------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-0: #17181b;
+    --surface-1: #1e1f23;
+    --surface-2: #232428;
+    --surface-3: #2c2d32;
+    --surface-sunken: #131416;
+    --border-subtle: #2a2b30;
+    --border-default: #34363c;
+    --border-strong: #474a52;
+    --text-strong: #f6f7f8;
+    --text-default: #e6e7ea;
+    --text-muted: #a1a5ad;
+    --text-subtle: #747882;
+    --accent-default: #7aa2ff;
+    --accent-hover: #9ab8ff;
+    --accent-solid: #3d6ae0;
+    --accent-soft: rgb(122 162 255 / 0.14);
+    --accent-soft-strong: rgb(122 162 255 / 0.24);
+    --on-accent: #ffffff;
+    --success: #5fcf98;
+    --success-solid: #23935d;
+    --success-soft: rgb(95 207 152 / 0.14);
+    --warning: #f2b552;
+    --warning-solid: #c98a15;
+    --warning-soft: rgb(242 181 82 / 0.14);
+    --danger: #ff7f75;
+    --danger-solid: #d4433b;
+    --danger-hover: #e0524a;
+    --danger-soft: rgb(255 127 117 / 0.14);
+    --scrim: rgb(4 5 7 / 0.6);
+    --focus-ring-color: #7aa2ff;
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-2: 0 6px 16px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(255 255 255 / 0.03);
+    --shadow-3: 0 28px 64px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.04);
+    --shadow-inset: inset 0 1px 0 rgb(255 255 255 / 0.04);
+    --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a5ad' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  }
+}
+
+/* the same dark values, forced */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #17181b;
+  --surface-1: #1e1f23;
+  --surface-2: #232428;
+  --surface-3: #2c2d32;
+  --surface-sunken: #131416;
+  --border-subtle: #2a2b30;
+  --border-default: #34363c;
+  --border-strong: #474a52;
+  --text-strong: #f6f7f8;
+  --text-default: #e6e7ea;
+  --text-muted: #a1a5ad;
+  --text-subtle: #747882;
+  --accent-default: #7aa2ff;
+  --accent-hover: #9ab8ff;
+  --accent-solid: #3d6ae0;
+  --accent-soft: rgb(122 162 255 / 0.14);
+  --accent-soft-strong: rgb(122 162 255 / 0.24);
+  --on-accent: #ffffff;
+  --success: #5fcf98;
+  --success-solid: #23935d;
+  --success-soft: rgb(95 207 152 / 0.14);
+  --warning: #f2b552;
+  --warning-solid: #c98a15;
+  --warning-soft: rgb(242 181 82 / 0.14);
+  --danger: #ff7f75;
+  --danger-solid: #d4433b;
+  --danger-hover: #e0524a;
+  --danger-soft: rgb(255 127 117 / 0.14);
+  --scrim: rgb(4 5 7 / 0.6);
+  --focus-ring-color: #7aa2ff;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-2: 0 6px 16px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(255 255 255 / 0.03);
+  --shadow-3: 0 28px 64px -12px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.04);
+  --shadow-inset: inset 0 1px 0 rgb(255 255 255 / 0.04);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a5ad' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* ---- legacy short names (the grid canvas and older CSS read these) ---- */
+:root {
+  --bg: var(--surface-0);
+  --panel: var(--surface-1);
+  --border: var(--border-default);
+  --text: var(--text-default);
+  --muted: var(--text-muted);
+  --accent: var(--accent-default);
+  --warn-text: var(--warning);
+}

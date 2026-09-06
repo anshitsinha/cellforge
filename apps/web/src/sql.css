@@ -1,36 +1,27 @@
 /* SQL query panel (sqlpanel.ts). Builds on the palette-form and import-dialog styles. */
 
 .palette.sql-dialog {
-  width: min(1100px, 100%);
-  max-height: calc(100vh - 48px);
-}
-
-.palette-backdrop:has(.sql-dialog) {
-  padding-top: 24px;
-}
-
-.sql-dialog .palette-form {
-  max-height: calc(100vh - 60px);
+  width: min(var(--dialog-xl), 100%);
 }
 
 .sql-layout {
   display: grid;
   grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
-  gap: 12px;
+  gap: var(--space-3);
   min-height: 0;
 }
 
 .sql-side {
   display: grid;
   align-content: start;
-  gap: 6px;
+  gap: var(--space-1-5);
   max-height: 70vh;
   overflow-y: auto;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .sql-tables details {
-  margin: 0 0 2px;
+  margin: 0 0 var(--space-0-5);
 }
 
 .sql-tables summary {
@@ -40,7 +31,7 @@
 .sql-tables ul,
 .sql-saved ul {
   list-style: none;
-  margin: 2px 0 6px;
+  margin: var(--space-0-5) 0 var(--space-1-5);
   padding-left: 14px;
 }
 
@@ -49,8 +40,9 @@
   padding: 1px 0;
 }
 
+/* table and column names: the UI font (they are names, not code) */
 .sql-tables code {
-  font: 12px ui-monospace, Consolas, monospace;
+  font: inherit;
 }
 
 .sql-tables li:hover code,
@@ -61,7 +53,7 @@
 
 .sql-saved {
   border-top: 1px solid var(--border);
-  padding-top: 6px;
+  padding-top: var(--space-1-5);
 }
 
 .sql-saved ul {
@@ -70,7 +62,7 @@
 
 .sql-saved li {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   align-items: center;
 }
 
@@ -83,12 +75,12 @@
 }
 
 .sql-saved-del {
-  padding: 0 6px;
+  padding: 0 var(--space-1-5);
 }
 
 .sql-main {
   display: grid;
-  gap: 8px;
+  gap: var(--space-2);
   align-content: start;
   min-width: 0;
 }
@@ -98,13 +90,13 @@
   box-sizing: border-box;
   min-height: 160px;
   resize: vertical;
-  font: 13px/1.45 ui-monospace, Consolas, monospace;
+  font: var(--text-md)/1.45 var(--font-mono);
   tab-size: 2;
 }
 
 .sql-save-row {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1-5);
 }
 
 .sql-save-row input {

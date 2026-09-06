@@ -2,13 +2,7 @@
 
 .palette.pivot-dialog,
 .palette.profile-dialog {
-  width: min(1040px, 100%);
-  max-height: 84vh;
-}
-
-.palette-backdrop:has(.pivot-dialog),
-.palette-backdrop:has(.profile-dialog) {
-  padding-top: 6vh;
+  width: min(var(--dialog-xl), 100%);
 }
 
 .pivot-builder {
@@ -18,8 +12,8 @@
 }
 
 .pivot-builder h4 {
-  margin: 0 0 6px;
-  font-size: 12px;
+  margin: 0 0 var(--space-1-5);
+  font-size: var(--text-sm);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -28,7 +22,7 @@
 .pivot-fields {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 6px;
+  gap: var(--space-1-5);
   min-height: 0;
 }
 
@@ -47,11 +41,11 @@
   width: 100%;
   display: flex;
   justify-content: space-between;
-  gap: 6px;
+  gap: var(--space-1-5);
   text-align: left;
-  padding: 4px 8px;
+  padding: var(--space-1) var(--space-2);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--text);
   cursor: grab;
@@ -70,13 +64,13 @@
 }
 
 .pivot-field.pivot-used span {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .pivot-zones {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .pivot-zone {
@@ -85,14 +79,14 @@
 
 .pivot-drop {
   display: grid;
-  gap: 6px;
+  gap: var(--space-1-5);
   align-content: start;
   min-height: 64px;
   max-height: 240px;
   overflow-y: auto;
-  padding: 6px;
+  padding: var(--space-1-5);
   border: 1px dashed var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg);
 }
 
@@ -104,7 +98,7 @@
 .pivot-empty {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .pivot-chip-head {
@@ -113,17 +107,17 @@
 
 .pivot-chip {
   display: grid;
-  gap: 4px;
-  padding: 5px 6px;
+  gap: var(--space-1);
+  padding: 5px var(--space-1-5);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--panel);
 }
 
 .pivot-chip-head {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .pivot-chip-name {
@@ -132,52 +126,53 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .pivot-chip-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .palette-form .pivot-chip-controls select {
-  padding: 2px 4px;
-  font-size: 12px;
+  padding: 1px 22px 1px var(--space-1-5);
+  background-position: right 6px center;
+  font-size: var(--text-sm);
   max-width: 100%;
 }
 
 .pivot-icon {
-  padding: 0 6px;
-  font-size: 12px;
+  padding: 0 var(--space-1-5);
+  font-size: var(--text-sm);
   line-height: 18px;
 }
 
 .palette-form .pivot-check {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1-5);
   align-items: center;
 }
 
 .pivot-options {
   display: flex;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .pivot-slicer {
   display: grid;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .pivot-slicer-all {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1-5);
   align-items: center;
 }
 
 .pivot-slicer-all button {
-  padding: 0 8px;
-  font-size: 12px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-sm);
 }
 
 .pivot-slicer-list {
@@ -185,7 +180,7 @@
   gap: 1px;
   max-height: 140px;
   overflow-y: auto;
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .palette-form .pivot-status {
@@ -194,7 +189,7 @@
 }
 
 .palette-form .pivot-status.cleanup-warn {
-  color: #a35200;
+  color: var(--warning);
 }
 
 .pivot-preview {
@@ -218,12 +213,12 @@
 
 .pivot-table tr.pivot-subtotal,
 .pivot-table tr.pivot-grand {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .pivot-table tr.pivot-subtotal th,
 .pivot-table tr.pivot-grand th {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .pivot-table tr.pivot-grand {
@@ -241,7 +236,7 @@
 }
 
 .pivot-more {
-  padding: 4px 6px;
+  padding: var(--space-1) var(--space-1-5);
 }
 
 /* --- column profiles ------------------------------------------------------ */
@@ -249,28 +244,28 @@
 .profile-cards {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 8px;
+  gap: var(--space-2);
   overflow-y: auto;
   min-height: 0;
 }
 
 .profile-card {
   display: grid;
-  gap: 4px;
+  gap: var(--space-1);
   align-content: start;
-  padding: 8px;
+  padding: var(--space-2);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .profile-card h4 {
   display: flex;
   justify-content: space-between;
-  gap: 6px;
+  gap: var(--space-1-5);
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .profile-card h4 span {
@@ -288,7 +283,7 @@
 .profile-card dl {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 1px 8px;
+  gap: 1px var(--space-2);
   margin: 0;
 }
 
@@ -311,26 +306,19 @@
 }
 
 .profile-card h5 {
-  margin: 4px 0 0;
-  font-size: 11px;
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
   color: var(--muted);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .profile-card .profile-warn {
-  color: #a35200;
+  color: var(--warning);
 }
 
 @media (max-width: 640px) {
   .pivot-builder,
   .pivot-zones {
     grid-template-columns: 1fr;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  .palette-form .pivot-status.cleanup-warn,
-  .profile-card .profile-warn {
-    color: #f29900;
   }
 }
