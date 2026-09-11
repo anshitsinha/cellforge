@@ -5,172 +5,567 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="cellforge is a spreadsheet for finance and audit work: messy exports, bank and ledger reconciliations, audit tests and evidence, at up to 100 million rows. It runs entirely in your browser; your data never leaves your computer."
+      content="cellforge is a spreadsheet for finance and audit work: bank reconciliations, month-end close, journal entry tests and evidence packs, on files of up to 100 million rows. It runs entirely on your computer, including the AI. Nothing is uploaded."
     />
-    <meta name="theme-color" content="#1967d2" />
-    <title>cellforge — the spreadsheet for finance and audit work</title>
+    <meta name="theme-color" content="#fbfaf7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0c0f" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <meta property="og:title" content="cellforge: reconcile, test and prove every number" />
+    <meta property="og:description" content="The spreadsheet for finance and audit work. Bank recs, month-end close, journal entry tests and evidence, on your own computer." />
+    <meta property="og:image" content="/og.png" />
+    <title>cellforge: reconcile, test and prove every number</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
   </head>
   <body class="home">
-    <nav class="nav">
-      <a class="logo" href="/">cellforge</a>
-      <div class="nav-links">
-        <a href="#jobs">What it's for</a>
-        <a href="#private">Privacy</a>
-        <a href="#how">How it works</a>
-        <a href="https://github.com/anshitsinha/cellforge/tree/main/docs" target="_blank" rel="noopener">Guide</a>
-        <a class="btn btn-primary btn-small" href="/app.html">Open app</a>
-      </div>
-    </nav>
+    <a class="skip" href="#main">Skip to content</a>
 
-    <header class="hero">
-      <div class="hero-text">
-        <p class="eyebrow">For accountants, auditors and finance analysts · runs 100% in your browser</p>
-        <h1>The spreadsheet for the work <span class="accent">Excel makes hard</span>.</h1>
-        <p class="lede">
-          Messy system exports, bank statements as PDFs, million-row ledgers, reconciliations that
-          won't tie, audit tests and the evidence behind every number. cellforge does them in the
-          spreadsheet you already know how to use, and nothing ever leaves your computer.
-        </p>
-        <div class="cta">
-          <a class="btn btn-primary" href="/app.html">Open the app</a>
-          <a class="btn" href="/app.html?demo=1">Try the 100M-row demo</a>
+    <header class="site-header">
+      <nav class="nav wrap" aria-label="Main">
+        <a class="brand" href="/" aria-label="cellforge home">
+          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="8" class="bm-bg" />
+            <rect x="7" y="7" width="8" height="8" rx="1.5" class="bm-a" />
+            <rect x="17" y="7" width="8" height="8" rx="1.5" class="bm-b" />
+            <rect x="7" y="17" width="8" height="8" rx="1.5" class="bm-b" />
+            <rect x="17" y="17" width="8" height="8" rx="1.5" class="bm-c" />
+          </svg>
+          <span>cellforge</span>
+        </a>
+        <div class="nav-links">
+          <a href="#workflows">Workflows</a>
+          <a href="#ai">Private AI</a>
+          <a href="#scale">Scale</a>
+          <a href="#privacy">Privacy</a>
+          <a href="#switch">Switching</a>
         </div>
-        <p class="fine-print">No sign-up. No upload. Install it and it works offline.</p>
-      </div>
-
-      <!-- a real cellforge grid, auto-scrolling through 100M synthetic rows -->
-      <div class="hero-demo">
-        <div class="demo-chrome">
-          <span></span><span></span><span></span>
-          <em id="demo-label">row 1 of 100,000,000</em>
+        <div class="nav-end">
+          <a class="btn btn-primary btn-sm" href="/app.html">Open app</a>
+          <details class="menu">
+            <summary aria-label="Menu"><span class="menu-icon" aria-hidden="true"></span></summary>
+            <div class="menu-panel">
+              <a href="#workflows">Workflows</a>
+              <a href="#ai">Private AI</a>
+              <a href="#scale">Scale</a>
+              <a href="#privacy">Privacy</a>
+              <a href="#switch">Switching from Excel, IDEA or ACL</a>
+              <a href="/app.html?sample=bank-rec">Try with sample data</a>
+            </div>
+          </details>
         </div>
-        <div class="demo-grid" id="demo-grid"></div>
-      </div>
+      </nav>
     </header>
 
-    <section class="stats">
-      <div><strong>100M</strong><span>rows, scrolled smoothly</span></div>
-      <div><strong>0</strong><span>bytes uploaded</span></div>
-      <div><strong>1 undo</strong><span>for every step, even a whole recipe</span></div>
-      <div><strong>MIT</strong><span>licensed, open source</span></div>
-    </section>
+    <main id="main">
+      <!-- ============================================================ hero -->
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="wrap hero-copy">
+          <p class="eyebrow"><span class="dot" aria-hidden="true"></span>For finance and audit teams</p>
+          <h1 id="hero-title">Reconcile, test and prove every number, <span class="soft">without your data leaving your laptop.</span></h1>
+          <p class="lede">
+            cellforge is the spreadsheet for finance and audit work: bank recs, month-end close, journal entry tests and
+            evidence packs, on files far bigger than Excel will open. It all runs on your computer, including the AI.
+          </p>
+          <div class="cta">
+            <a class="btn btn-primary btn-lg" href="/app.html">Open cellforge <span aria-hidden="true">→</span></a>
+            <a class="btn btn-ghost btn-lg" href="/app.html?sample=bank-rec">Try a bank rec with sample data</a>
+          </div>
+          <ul class="trust" aria-label="At a glance">
+            <li>Free and open source</li>
+            <li>No sign-up</li>
+            <li>Nothing uploaded</li>
+            <li>Works offline</li>
+          </ul>
+        </div>
 
-    <section class="features" id="jobs">
-      <h2>Built for the jobs you actually do</h2>
-      <p class="section-lede">Each one is a command, not an afternoon of formulas.</p>
-      <div class="feature-grid">
-        <article>
-          <h3>Messy exports, cleaned</h3>
-          <p>Report-style exports with titles, subtotals and page footers become a clean table.
-            <code>(1,234.50)</code>, <code>1.234,56</code>, <code>500 CR</code> and any date
-            format turn into real numbers and dates, and you see every value that didn't fit.</p>
-        </article>
-        <article>
-          <h3>Bank statements from PDF</h3>
-          <p>Open the bank's PDF and get the transactions, with wrapped descriptions joined,
-            years filled in and every running balance checked page by page.</p>
-        </article>
-        <article>
-          <h3>Reconciliations that explain themselves</h3>
-          <p>Match ledger to bank by reference, amount and date, with tolerances, fuzzy text and
-            split payments. Keying errors are flagged, and "why don't these match?" tells you.
-            Then the rec statement, with proposed journals.</p>
-        </article>
-        <article>
-          <h3>Audit tests in a click</h3>
-          <p>Duplicates (exact, near and fuzzy), sequence gaps, Benford, journal entry tests,
-            stratification and samples (random, systematic, monetary unit) with the seed
-            recorded.</p>
-        </article>
-        <article>
-          <h3>Evidence for every number</h3>
-          <p>Tick marks, review notes and sign-off. Link a cell to the figure in the bank letter
-            and check it agrees. "Explain this number" traces it to its source, and an evidence
-            pack proves what was done.</p>
-        </article>
-        <article>
-          <h3>Do it again next month</h3>
-          <p>Every step is recorded as a recipe. Tidy it, save it, and run it on next month's
-            files, or a whole folder, as one step you can undo.</p>
-        </article>
-      </div>
-    </section>
+        <div class="wrap stage-wrap">
+          <figure class="stage">
+            <div class="window">
+              <div class="window-bar" aria-hidden="true">
+                <span class="lights"><i></i><i></i><i></i></span>
+                <span class="window-title">Sample — Bank reconciliation · <b>Cash book</b></span>
+                <span class="window-badge">On this computer</span>
+              </div>
+              <picture>
+                <source srcset="/shots/hero-dark.webp" media="(prefers-color-scheme: dark)" />
+                <img
+                  src="/shots/hero-light.webp"
+                  width="1800"
+                  height="1090"
+                  alt="cellforge showing a cash book for October 2026: dates, references, descriptions and amounts, with payments in brackets."
+                  fetchpriority="high"
+                />
+              </picture>
+            </div>
 
-    <section class="features" id="also">
-      <h2>…and everything you expect from a spreadsheet</h2>
-      <div class="feature-grid">
-        <article>
-          <h3>Excel formulas</h3>
-          <p>XLOOKUP, SUMIFS, FILTER, LET, LAMBDA and 160+ more, with dynamic arrays. Open and
-            save <code>.xlsx</code> with formats, conditional formats, validation and notes.</p>
-        </article>
-        <article>
-          <h3>Pivot tables, SQL, charts</h3>
-          <p>Pivot 10 million rows in under a second, query your sheets with SQL, and chart them,
-            from waterfalls to Pareto. Reports and PDF report books with contents.</p>
-        </article>
-        <article>
-          <h3>Templates</h3>
-          <p>Start a monthly close, a bank reconciliation or a set of audit tests from a template
-            with the sheets, checks and sign-off already in place.</p>
-        </article>
-      </div>
-    </section>
+            <div class="float float-result" aria-hidden="true">
+              <div class="fr-head">
+                <span class="fr-icon">⇄</span>
+                <div>
+                  <strong>Reconcile two sheets</strong>
+                  <span>Cash book ⇄ Bank statement</span>
+                </div>
+              </div>
+              <div class="fr-meter"><span style="--p: 95.7%"></span></div>
+              <p class="fr-big"><b data-count="95.7" data-dp="1">95.7</b>% matched</p>
+              <dl class="fr-list">
+                <div><dt>Matched lines</dt><dd>121 of 128</dd></div>
+                <div><dt>Split payment found</dt><dd class="ok">1</dd></div>
+                <div><dt>Keying error</dt><dd class="warn">1</dd></div>
+                <div><dt>Posted twice</dt><dd class="warn">1</dd></div>
+                <div><dt>Left to explain</dt><dd>6 · 3</dd></div>
+              </dl>
+            </div>
 
-    <section class="how" id="private">
-      <h2>Private by design</h2>
-      <ol class="steps">
-        <li>
-          <h3>Nothing leaves your computer</h3>
-          <p>There's no server and no account. Files are read in your browser, and your work is
-            kept in your browser's private storage.</p>
-        </li>
-        <li>
-          <h3>Share safely</h3>
-          <p>Before you send a file, cellforge lists what's hidden in it (hidden rows, notes,
-            history, personal data) and can mask personal data or save a password-protected
-            copy.</p>
-        </li>
-        <li>
-          <h3>Works offline</h3>
-          <p>After the first visit it runs with no connection. Install it from the browser's menu,
-            or build it and run it from a folder.</p>
-        </li>
-      </ol>
-    </section>
+            <div class="float float-why" aria-hidden="true">
+              <span class="why-tag">Why don't these match?</span>
+              <p><b>INV-20470</b> · Thistle Foods</p>
+              <p class="why-row"><span>Cash book</span><s>4,725.00</s></p>
+              <p class="why-row"><span>Bank</span><b>4,752.00</b></p>
+              <p class="why-note">Two digits swapped. Difference 27.00</p>
+            </div>
+            <figcaption class="sr-only">
+              The bank reconciliation sample: 121 of 128 cash book lines matched to the bank automatically, including a
+              payment split in two; one keying error (4,725.00 entered for 4,752.00) and one payment posted twice are
+              flagged.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
 
-    <section class="how" id="how">
-      <h2>How it stays fast</h2>
-      <ol class="steps">
-        <li>
-          <h3>Columnar storage</h3>
-          <p>Each column is a single typed array. 100M numbers is one <code>Float64Array</code>,
-            not 100M objects for the garbage collector to chase.</p>
-        </li>
-        <li>
-          <h3>Virtualized canvas</h3>
-          <p>The grid is one <code>&lt;canvas&gt;</code> that paints only the visible cells, so
-            scrolling 100 rows and 100 million costs the same.</p>
-        </li>
-        <li>
-          <h3>Compiled formulas</h3>
-          <p>A formula filled down a column is one vector operation, compiled to a single loop
-            over typed arrays, 6–22× faster than interpreting it, with bit-identical results.
-            <a href="/bench.html">Run the benchmark</a> in your own browser.</p>
-        </li>
-      </ol>
-    </section>
+      <!-- ========================================================== proof -->
+      <section class="proof wrap" aria-label="In numbers">
+        <div class="proof-item">
+          <strong>100M</strong>
+          <span>rows in one sheet. Excel stops at 1,048,576.</span>
+        </div>
+        <div class="proof-item">
+          <strong>0 bytes</strong>
+          <span>uploaded. No server, no account, no telemetry.</span>
+        </div>
+        <div class="proof-item">
+          <strong>11</strong>
+          <span>journal entry tests, plus Benford, duplicates, gaps and sampling.</span>
+        </div>
+        <div class="proof-item">
+          <strong>≈0.3 s</strong>
+          <span>to clean, match and state a 6,000-line bank month.<a href="#fn-measured" class="fn">*</a></span>
+        </div>
+      </section>
 
-    <section class="closing">
-      <h2>Your next reconciliation is already open.</h2>
-      <a class="btn btn-primary" href="/app.html">Open cellforge</a>
-    </section>
+      <!-- ====================================================== workflows -->
+      <section id="workflows" class="section" aria-labelledby="wf-title">
+        <div class="wrap">
+          <header class="section-head">
+            <p class="kicker">Workflows</p>
+            <h2 id="wf-title">Built around the work you close every month.</h2>
+            <p class="section-lede">
+              The spreadsheet you know, with the tools an analyst actually reaches for: each one is a command, not an
+              afternoon of formulas.
+            </p>
+          </header>
+
+          <!-- bank rec -->
+          <article class="feature reveal" aria-labelledby="f-rec">
+            <div class="feature-copy">
+              <p class="tag tag-rec">Bank reconciliation</p>
+              <h3 id="f-rec">Bank to ledger in minutes, not an afternoon of VLOOKUPs.</h3>
+              <ul class="ticks">
+                <li>Matches by reference, amount and date, with tolerances, similar descriptions and split payments.</li>
+                <li>Flags keying errors (swapped digits, a flipped sign) and duplicate postings, and says why two items don't match.</li>
+                <li>Builds the rec statement, with proposed journals for the items only the bank knows about.</li>
+                <li>Opens bank statements straight from PDF, with every running balance checked.</li>
+              </ul>
+              <a class="link-arrow" href="/app.html?sample=bank-rec">Reconcile a sample month <span aria-hidden="true">→</span></a>
+            </div>
+            <figure class="feature-visual">
+              <div class="shot shot-bank">
+                <picture>
+                  <source srcset="/shots/bank-dark.webp" media="(prefers-color-scheme: dark)" />
+                  <img src="/shots/bank-light.webp" width="1800" height="1090" loading="lazy" alt="The October bank statement sheet: bank-style descriptions such as BGC MORROW RETAIL and FPO ARDEN OFFICE SUPP." />
+                </picture>
+              </div>
+              <div class="card card-stmt">
+                <p class="card-title">Bank reconciliation · 31 Oct 2026</p>
+                <table>
+                  <tbody>
+                    <tr><th scope="row">Balance per bank statement</th><td>260,143.49</td></tr>
+                    <tr><th scope="row">Add: deposits in transit</th><td>10,955.40</td></tr>
+                    <tr><th scope="row">Less: outstanding payments</th><td>(5,262.75)</td></tr>
+                    <tr class="sum"><th scope="row">Adjusted bank balance</th><td>265,836.14</td></tr>
+                    <tr><th scope="row">Balance per cash book</th><td>264,967.92</td></tr>
+                    <tr><th scope="row">Bank-only items (fees, interest)</th><td>(338.78)</td></tr>
+                    <tr><th scope="row">Ledger errors</th><td>1,207.00</td></tr>
+                    <tr class="sum"><th scope="row">Adjusted cash book balance</th><td>265,836.14</td></tr>
+                    <tr class="zero"><th scope="row">Difference</th><td>0.00 <span class="pill ok">✓ Agreed</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <figcaption class="sr-only">The sample's reconciliation statement, which agrees with no difference.</figcaption>
+            </figure>
+          </article>
+
+          <!-- close -->
+          <article class="feature feature-flip reveal" aria-labelledby="f-close">
+            <div class="feature-copy">
+              <p class="tag tag-close">Month-end close</p>
+              <h3 id="f-close">A trial balance that checks itself.</h3>
+              <ul class="ticks">
+                <li>Map accounts to report lines once; next month the mapping is already there.</li>
+                <li>Flux analysis flags every movement over your thresholds and asks for the explanation.</li>
+                <li>Checks run before anything leaves: debits equal credits, every account mapped, no code twice.</li>
+                <li>Clean up messy ERP exports, with titles, subtotals and page footers, in one step, and repeat it next month as a recipe.</li>
+              </ul>
+              <a class="link-arrow" href="/app.html?sample=close">Open a sample close <span aria-hidden="true">→</span></a>
+            </div>
+            <figure class="feature-visual">
+              <div class="shot shot-close">
+                <picture>
+                  <source srcset="/shots/close-dark.webp" media="(prefers-color-scheme: dark)" />
+                  <img src="/shots/close-light.webp" width="2770" height="1460" loading="lazy" alt="The Flux sheet comparing October with September by account. Legal fees, marketing, accrued expenses and a new software account are flagged Explain; the new account shows (not mapped)." />
+                </picture>
+              </div>
+              <div class="card card-checks">
+                <p class="card-title">Data checks</p>
+                <ul>
+                  <li><span class="st ok" aria-hidden="true">✓</span>This month's TB balances</li>
+                  <li><span class="st ok" aria-hidden="true">✓</span>No account code twice</li>
+                  <li><span class="st bad" aria-hidden="true">✕</span>Every account is mapped <em>6420 Software subscriptions</em></li>
+                  <li><span class="st warn" aria-hidden="true">!</span>5 movements to explain</li>
+                </ul>
+              </div>
+              <figcaption class="sr-only">Data checks on the sample: the TB balances, one new account is not mapped, five movements need an explanation.</figcaption>
+            </figure>
+          </article>
+
+          <!-- audit -->
+          <article class="feature reveal" aria-labelledby="f-audit">
+            <div class="feature-copy">
+              <p class="tag tag-audit">Audit tests</p>
+              <h3 id="f-audit">Journal entry testing, without a scripting language.</h3>
+              <ul class="ticks">
+                <li>Eleven journal entry tests in one pass: unbalanced, duplicate, backdated, weekend, after hours, just below an approval limit, unusual user, keywords and more. Every entry scored and ranked.</li>
+                <li>Benford (first and first-two digits, with MAD and chi-square), duplicates exact, near and fuzzy, sequence gaps, stratification, Pareto and ageing.</li>
+                <li>Random, systematic, stratified and monetary unit samples, with the seed recorded so anyone can pick the same sample again.</li>
+              </ul>
+              <a class="link-arrow" href="/app.html?sample=audit">Test a sample journal <span aria-hidden="true">→</span></a>
+            </div>
+            <figure class="feature-visual">
+              <div class="shot shot-journal">
+                <picture>
+                  <source srcset="/shots/journal-dark.webp" media="(prefers-color-scheme: dark)" />
+                  <img src="/shots/journal-light.webp" width="2210" height="1090" loading="lazy" alt="The Population sheet: a month of journal lines with entry number, dates, posting time, user, account, description and amount." />
+                </picture>
+              </div>
+              <div class="card card-je">
+                <p class="card-title">Journal entry tests <span>758 entries · 1,772 lines</span></p>
+                <table>
+                  <thead><tr><th scope="col">Test</th><th scope="col">Entries</th></tr></thead>
+                  <tbody>
+                    <tr><th scope="row">Entries that don't balance</th><td><span class="bar" style="--w: 1"></span>1</td></tr>
+                    <tr><th scope="row">Duplicate entries</th><td><span class="bar" style="--w: 2"></span>2</td></tr>
+                    <tr><th scope="row">Weekend postings</th><td><span class="bar" style="--w: 3"></span>3</td></tr>
+                    <tr><th scope="row">Posted after hours</th><td><span class="bar" style="--w: 2"></span>2</td></tr>
+                    <tr><th scope="row">Just below the approval limit</th><td><span class="bar" style="--w: 8"></span>8</td></tr>
+                    <tr><th scope="row">Keywords (plug, suspense…)</th><td><span class="bar" style="--w: 6"></span>6</td></tr>
+                  </tbody>
+                </table>
+                <p class="card-foot">Top score: <b>100611</b> and <b>100612</b>, a round 25,000.00 adjustment entered twice.</p>
+              </div>
+              <figcaption class="sr-only">Journal entry test results on the sample, with the highest-scoring entries.</figcaption>
+            </figure>
+          </article>
+
+          <!-- evidence -->
+          <article class="feature feature-flip reveal" aria-labelledby="f-evidence">
+            <div class="feature-copy">
+              <p class="tag tag-evidence">Evidence and review</p>
+              <h3 id="f-evidence">Every number explained. Every step signed off.</h3>
+              <ul class="ticks">
+                <li>Tick marks, review notes, and sign-off as prepared and reviewed, on every sheet.</li>
+                <li>"Explain this number" traces a figure through its formulas to the rows and files it came from.</li>
+                <li>Link a cell to the bank letter or invoice that supports it, and check that they agree.</li>
+                <li>An evidence pack keeps the workbook, the fingerprints of every input and a tamper-evident log of every step, in one file.</li>
+              </ul>
+              <a class="link-arrow" href="/app.html?sample=bank-rec">See it on the sample rec <span aria-hidden="true">→</span></a>
+            </div>
+            <figure class="feature-visual">
+              <div class="mock mock-evidence" aria-hidden="true">
+                <div class="mock-head">
+                  <span class="wp">B-1</span>
+                  <strong>Rec</strong>
+                  <span class="signs">
+                    <span class="sign ok">✓ Prepared · A. Khan</span>
+                    <span class="sign ok">✓✓ Reviewed · E. Schmidt</span>
+                  </span>
+                </div>
+                <div class="mock-rows">
+                  <div class="mr"><span>Balance per bank statement</span><b>260,143.49</b><i class="tm tm-agree" title="Agreed to bank letter">⊛</i></div>
+                  <div class="mr"><span>Add: deposits in transit</span><b>10,955.40</b><i class="tm">✓</i></div>
+                  <div class="mr"><span>Less: outstanding payments</span><b>(5,262.75)</b><i class="tm">✓</i></div>
+                  <div class="mr mr-sum"><span>Adjusted bank balance</span><b>265,836.14</b><i class="tm">Σ</i></div>
+                </div>
+                <div class="explain">
+                  <p class="explain-title">Explain this number · B3</p>
+                  <ol>
+                    <li><b>260,143.49</b> typed in, agreed to <u>Bank letter Oct.pdf</u>, page 1</li>
+                    <li>Linked document fingerprint <code>sha-256 3f9c…a1e2</code></li>
+                    <li>Checked against the statement's closing balance: agrees</li>
+                  </ol>
+                </div>
+                <div class="pack">
+                  <span class="pack-icon">▣</span>
+                  <div>
+                    <strong>Evidence pack · Bank rec Oct.cellforge</strong>
+                    <span>Workbook · 2 input files fingerprinted · 14 logged steps, hash-chained</span>
+                  </div>
+                </div>
+              </div>
+              <figcaption class="sr-only">An illustration of a signed-off rec sheet with tick marks, an explanation of one figure and an evidence pack summary.</figcaption>
+            </figure>
+          </article>
+        </div>
+      </section>
+
+      <!-- ============================================================= AI -->
+      <section id="ai" class="section band" aria-labelledby="ai-title">
+        <div class="wrap ai">
+          <div class="ai-copy reveal">
+            <p class="kicker">Private AI</p>
+            <h2 id="ai-title">An AI assistant that never sees the internet.</h2>
+            <p class="section-lede">
+              Say what you want in plain English and see exactly what will change before anything does. The model runs on
+              your computer, inside the browser tab. Nothing you type, and none of your data, is sent anywhere.
+            </p>
+            <ul class="ai-points">
+              <li><b>Shows its plan first.</b> Every request is described in words, which column, which rows, before you press Do it.</li>
+              <li><b>Always undoable.</b> Whatever it does is an ordinary step: Ctrl+Z, history and recipes work as usual.</li>
+              <li><b>Checked against your sheet.</b> The model can only answer with the app's own actions, and each one is checked before it runs.</li>
+              <li><b>Helps where it counts.</b> Rephrases formulas in "Explain this number", finds spelling variants of vendor names, and suggests categories for rows no rule covers.</li>
+            </ul>
+          </div>
+          <div class="ai-side reveal">
+            <figure class="ask-shot">
+              <picture>
+                <source srcset="/shots/ask-dark.webp" media="(prefers-color-scheme: dark)" />
+                <img src="/shots/ask-light.webp" width="1184" height="374" loading="lazy" alt="The ask bar with the request 'highlight amounts over 10000 in red' and its plan: highlight cells in Amount (column G) over 10,000 in red, as a conditional format." />
+              </picture>
+              <figcaption><span class="pill">Ctrl + /</span> The ask bar, on the sample journal.</figcaption>
+            </figure>
+            <ol class="steps" aria-label="Getting started with the local AI">
+              <li>
+                <span class="step-n" aria-hidden="true">1</span>
+                <div><b>Start without a model.</b> The ask bar already understands common requests: sort, filter, highlight, freeze, find duplicates.</div>
+              </li>
+              <li>
+                <span class="step-n" aria-hidden="true">2</span>
+                <div><b>Get a model file.</b> Download a small instruct model in the .gguf format (a Qwen or Llama model of 0.5 to 3 GB) to your computer.</div>
+              </li>
+              <li>
+                <span class="step-n" aria-hidden="true">3</span>
+                <div><b>Load it once.</b> Press Ctrl+K, choose <q>Load a local AI model</q> and pick the file. It's kept in the browser's private storage for next time; remove it whenever you like.</div>
+              </li>
+            </ol>
+            <p class="fine">cellforge never downloads a model for you and never calls an AI service. <a href="https://github.com/anshitsinha/cellforge/blob/main/docs/guide/34-ask-bar.md" rel="noopener">How the ask bar works</a></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================== scale -->
+      <section id="scale" class="section" aria-labelledby="scale-title">
+        <div class="wrap scale">
+          <div class="scale-copy reveal">
+            <p class="kicker">Scale</p>
+            <h2 id="scale-title">Built for the file Excel won't open.</h2>
+            <p class="section-lede">
+              A whole year of journal lines, a full bank history, the ERP export with every column. Size is never the reason
+              something doesn't work.
+            </p>
+            <dl class="facts">
+              <div><dt>100,000,000</dt><dd>rows in one sheet, scrolled as smoothly as 100. Only what's on screen is drawn.</dd></div>
+              <div><dt>≈4 s</dt><dd>to sort all 100 million rows of the demo, and the sort can be undone.</dd></div>
+              <div><dt>6–22×</dt><dd>faster when a formula is filled down a column: it runs as one compiled loop, with results identical to the cell-by-cell answer.</dd></div>
+              <div><dt>&lt; 1 s</dt><dd>for a pivot table over 10 million rows.</dd></div>
+              <div><dt>76 s</dt><dd>to reconcile 3 million ledger lines against 3 million bank lines on a laptop.</dd></div>
+            </dl>
+            <p class="fine" id="fn-measured">
+              * Reconciliation times are from the
+              <a href="https://github.com/anshitsinha/cellforge/blob/main/docs/acceptance.md" rel="noopener">acceptance test</a>
+              on a Windows laptop (Intel i5-10300H). Formula speed-ups are from the <a href="/bench.html">formula benchmark</a>,
+              which you can run in your own browser. Sorting 100M rows needs about 1.7 GB of free memory.
+            </p>
+          </div>
+          <figure class="live reveal">
+            <div class="window">
+              <div class="window-bar">
+                <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="window-title">General ledger · live</span>
+                <span class="window-count" id="demo-label" aria-live="off">line 1 of 100,000,000</span>
+              </div>
+              <div class="live-grid" id="demo-grid" role="img" aria-label="A live cellforge grid scrolling through a 100-million-line general ledger of fictional journal entries."></div>
+            </div>
+            <figcaption>
+              A real cellforge grid, running in this page, jumping through a fictional 100-million-line ledger.
+              <a href="/app.html?sample=big">Open it in the app <span aria-hidden="true">→</span></a>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- ======================================================== privacy -->
+      <section id="privacy" class="section section-tight" aria-labelledby="privacy-title">
+        <div class="wrap">
+          <header class="section-head reveal">
+            <p class="kicker">Privacy</p>
+            <h2 id="privacy-title">Client data stays where it belongs.</h2>
+            <p class="section-lede">No server sees your files, so there is nothing to approve, nothing to breach and nothing to explain to a client.</p>
+          </header>
+          <div class="pillars">
+            <article class="pillar reveal">
+              <span class="pillar-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /></svg>
+              </span>
+              <h3>Nothing leaves your computer</h3>
+              <p>No upload, no account, no telemetry. Files are read in the browser and your work is kept in its private storage.</p>
+            </article>
+            <article class="pillar reveal">
+              <span class="pillar-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0" /><path d="M3 3l18 18" /></svg>
+              </span>
+              <h3>Works offline</h3>
+              <p>After the first visit it runs with no connection at all. Install it from the browser's menu, or run it on an air-gapped machine.</p>
+            </article>
+            <article class="pillar reveal">
+              <span class="pillar-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z" /><path d="M8.5 12l2.5 2.5 4.5-5" /></svg>
+              </span>
+              <h3>Share safely</h3>
+              <p>Before a file goes out, cellforge lists what's hidden in it, masks personal data on request and can save a password-protected copy.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================================================== comparison -->
+      <section class="section section-tight" aria-labelledby="cmp-title">
+        <div class="wrap">
+          <header class="section-head reveal">
+            <p class="kicker">Why switch</p>
+            <h2 id="cmp-title">The spreadsheet you know, with the audit tool built in.</h2>
+          </header>
+          <div class="table-scroll reveal" tabindex="0" role="region" aria-labelledby="cmp-title">
+            <table class="compare">
+              <thead>
+                <tr>
+                  <th scope="col"><span class="sr-only">Capability</span></th>
+                  <th scope="col">Excel</th>
+                  <th scope="col">IDEA / ACL</th>
+                  <th scope="col" class="us">cellforge</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><th scope="row">Rows in a sheet</th><td>1,048,576</td><td>Large</td><td class="us">100M+</td></tr>
+                <tr><th scope="row">Familiar to Excel users</th><td>Yes</td><td>No</td><td class="us">Yes: same formulas, same shortcuts, .xlsx in and out</td></tr>
+                <tr><th scope="row">Bank and ledger reconciliation</th><td>Manual VLOOKUPs</td><td>Partial</td><td class="us">Built in, with the rec statement</td></tr>
+                <tr><th scope="row">Journal entry tests, Benford, sampling</th><td>Manual</td><td>Yes</td><td class="us">Built in</td></tr>
+                <tr><th scope="row">Repeat it next month</th><td>Power Query, hidden</td><td>Scripts</td><td class="us">Recipes you can read</td></tr>
+                <tr><th scope="row">Provable to a reviewer</th><td>No</td><td>Partial</td><td class="us">Sign-off and evidence packs</td></tr>
+                <tr><th scope="row">Plain-English requests</th><td>Cloud AI</td><td>No</td><td class="us">Local AI, on your computer</td></tr>
+                <tr><th scope="row">Price</th><td>Subscription</td><td>Per seat</td><td class="us">Free</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========================================================= switch -->
+      <section id="switch" class="section section-tight" aria-labelledby="switch-title">
+        <div class="wrap">
+          <header class="section-head reveal">
+            <p class="kicker">Switching</p>
+            <h2 id="switch-title">Bring your habits with you.</h2>
+          </header>
+          <div class="switch-cards">
+            <a class="switch-card reveal" href="https://github.com/anshitsinha/cellforge/blob/main/docs/guide/moving-from-excel.md" rel="noopener">
+              <span class="from">From Excel</span>
+              <strong>Your first week, minus the surprises.</strong>
+              <span>Formulas, shortcuts, sheets and .xlsx files work the way you expect. Here's what's different.</span>
+              <span class="go">Read the guide <span aria-hidden="true">→</span></span>
+            </a>
+            <a class="switch-card reveal" href="https://github.com/anshitsinha/cellforge/blob/main/docs/guide/moving-from-idea-acl.md" rel="noopener">
+              <span class="from">From IDEA or ACL</span>
+              <strong>Every command you use, mapped.</strong>
+              <span>Summarise, stratify, gaps, duplicates, join, sample: the equivalent of each, and how the work feels.</span>
+              <span class="go">Read the guide <span aria-hidden="true">→</span></span>
+            </a>
+            <a class="switch-card reveal" href="https://github.com/anshitsinha/cellforge/blob/main/docs/guide/audit-test-catalogue.md" rel="noopener">
+              <span class="from">Reference</span>
+              <strong>The audit test catalogue.</strong>
+              <span>Every test, what it finds, its settings and the sheet it produces.</span>
+              <span class="go">Browse the catalogue <span aria-hidden="true">→</span></span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================== closing -->
+      <section class="closing" aria-labelledby="close-title">
+        <div class="wrap closing-inner reveal">
+          <h2 id="close-title">Your next reconciliation is already open.</h2>
+          <p>Nothing to install, nothing to sign up for. Open it, drop in a file, and start.</p>
+          <div class="cta cta-center">
+            <a class="btn btn-primary btn-lg" href="/app.html">Open cellforge <span aria-hidden="true">→</span></a>
+            <a class="btn btn-ghost btn-lg" href="/app.html?sample=bank-rec">Try with sample data</a>
+          </div>
+          <p class="samples">
+            Or open a sample:
+            <a href="/app.html?sample=bank-rec">bank rec</a> ·
+            <a href="/app.html?sample=close">month-end close</a> ·
+            <a href="/app.html?sample=audit">journal tests</a> ·
+            <a href="/app.html?sample=big">100M-line ledger</a>
+          </p>
+        </div>
+      </section>
+    </main>
 
     <footer class="footer">
-      <span>cellforge · MIT licensed · <a href="/bench.html">benchmark</a></span>
-      <a href="https://github.com/anshitsinha/cellforge" target="_blank" rel="noopener">Source on GitHub</a>
+      <div class="wrap footer-grid">
+        <div class="footer-brand">
+          <a class="brand" href="/" aria-label="cellforge home">
+            <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+              <rect width="32" height="32" rx="8" class="bm-bg" />
+              <rect x="7" y="7" width="8" height="8" rx="1.5" class="bm-a" />
+              <rect x="17" y="7" width="8" height="8" rx="1.5" class="bm-b" />
+              <rect x="7" y="17" width="8" height="8" rx="1.5" class="bm-b" />
+              <rect x="17" y="17" width="8" height="8" rx="1.5" class="bm-c" />
+            </svg>
+            <span>cellforge</span>
+          </a>
+          <p>Open anything. Prove everything. Upload nothing.</p>
+        </div>
+        <nav aria-label="Product">
+          <h2>Product</h2>
+          <a href="/app.html">Open the app</a>
+          <a href="/app.html?sample=bank-rec">Sample data</a>
+          <a href="/bench.html">Benchmark</a>
+        </nav>
+        <nav aria-label="Learn">
+          <h2>Learn</h2>
+          <a href="https://github.com/anshitsinha/cellforge/tree/main/docs/guide" rel="noopener">User guide</a>
+          <a href="https://github.com/anshitsinha/cellforge/blob/main/docs/guide/moving-from-excel.md" rel="noopener">Moving from Excel</a>
+          <a href="https://github.com/anshitsinha/cellforge/blob/main/docs/guide/moving-from-idea-acl.md" rel="noopener">Moving from IDEA or ACL</a>
+        </nav>
+        <nav aria-label="Project">
+          <h2>Project</h2>
+          <a href="https://github.com/anshitsinha/cellforge/blob/main/docs/guide/06-privacy.md" rel="noopener">Privacy</a>
+          <a href="https://github.com/anshitsinha/cellforge" rel="noopener">Source on GitHub</a>
+          <a href="https://github.com/anshitsinha/cellforge/blob/main/LICENSE" rel="noopener">MIT licence</a>
+        </nav>
+      </div>
+      <div class="wrap footer-base">
+        <span>All names and figures in the samples and screenshots are fictional.</span>
+        <span>Made to run on your own computer.</span>
+      </div>
     </footer>
 
     <script type="module" src="/src/home.ts"></script>

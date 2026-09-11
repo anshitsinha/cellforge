@@ -29,7 +29,7 @@ function block(top: number, left: number, rows: (string | null)[][]): Cell[] {
   return rows.flatMap((r, i) => r.map((input, j) => ({ row: top + i, col: left + j, input })));
 }
 
-const header = (cols: number) => ({ type: "format.set", params: { range: { top: 0, left: 0, bottom: 0, right: cols - 1 }, style: { bold: true, fill: "#e8eaed" } } });
+const header = (cols: number) => ({ type: "format.set", params: { range: { top: 0, left: 0, bottom: 0, right: cols - 1 }, style: { bold: true, fill: "#e8eaed", color: "#202124" } } });
 const widths = (list: number[]) => list.map((width, at) => ({ type: "cols.width", params: { at, width } }));
 const freezeTop = { type: "view.freeze", params: { rows: 1, cols: 0 } };
 
