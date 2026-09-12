@@ -4,8 +4,10 @@ cellforge runs entirely in your browser tab.
 
 - **Your files are never uploaded.** They're read and processed on your computer.
 - **No account, no tracking, no analytics.**
-- **The only downloads are the app itself** (and, once they arrive, AI models
-  that you choose to download, which then run on your own graphics card).
+- **The only downloads are the app itself**, and an AI model if you press a
+  Download button for one. The button names the site and the size; the model
+  then runs on this computer and nothing you type is sent anywhere. See
+  [The local AI](46-local-ai.md).
 
 This is a design rule, not a setting: every planned feature, including the
 assistant, is built to work without a server. See the

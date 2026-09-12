@@ -48,7 +48,7 @@ case, spacing, punctuation, `&`/`and` and *Limited/Ltd*, *Incorporated/Inc*,
 common spelling. Tick the groups you want and **Change the ticked
 spellings**; one **Undo** puts them back.
 
-With a local AI model loaded ([the ask bar](34-ask-bar.md#a-local-model)), it
+With a local AI model loaded ([The local AI](46-local-ai.md)), it
 also asks the model for pairs the rules can't see, such as an abbreviation
 and the full name. The model may only pair values that are already in the
 column, and the commoner spelling is kept. Its groups are marked *model* and
