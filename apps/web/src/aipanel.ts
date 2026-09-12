@@ -312,11 +312,11 @@ export function buildAiPanel(deps: AiPanelDeps, onClose: () => void): { root: HT
     return card;
   };
 
-  const pauseCancel = () => {
+  const pauseCancel = (where = "status") => {
     const p = button("Pause", () => localAi.pause());
-    p.dataset.focusKey = "pause";
+    p.dataset.focusKey = `pause-${where}`;
     const c = button("Cancel", () => localAi.cancel(), "quiet", "Stop and delete what has arrived");
-    c.dataset.focusKey = "cancel";
+    c.dataset.focusKey = `cancel-${where}`;
     return h("span", { className: "aip-inline" }, p, c);
   };
 
@@ -366,7 +366,7 @@ export function buildAiPanel(deps: AiPanelDeps, onClose: () => void): { root: HT
     const busyElsewhere = !!s.download && !s.download.paused && !d;
     if (d && !d.paused) {
       el.append(progressBar(d.phase === "checking" ? null : d.loaded / d.total, `Downloading ${m.name}`), h("p", { className: "aip-muted", dataset: { progressText: "" }, textContent: downloadText(d) }));
-      if (d.phase === "downloading") actions.append(pauseCancel());
+      if (d.phase === "downloading") actions.append(pauseCancel(m.id));
     } else if (d?.paused || partial) {
       const have = d?.loaded ?? partial!.bytes;
       el.append(progressBar(have / m.bytes, `${m.name} partly downloaded`), h("p", { className: "aip-muted", textContent: `Paused at ${Math.floor((have / m.bytes) * 100)}% · ${formatBytes(have)} of ${formatBytes(m.bytes)}` }));

@@ -236,6 +236,16 @@ export function setupAskBar(d: AskBarDeps): { open: (text?: string) => void; clo
       }
     };
 
+    const columnNames = (): string[] => {
+      try {
+        const ctx = d.context();
+        const sheet = ctx.sheets.find((s) => s.id === ctx.activeSheet);
+        return (sheet?.columns ?? []).filter((c) => c.trim()).slice(0, 20);
+      } catch {
+        return [];
+      }
+    };
+
     /** What the local AI adds, its state, and the way to set it up. */
     const aiBox = (afterUnknown = false): HTMLElement | null => {
       const ai = d.ai;
@@ -248,7 +258,7 @@ export function setupAskBar(d: AskBarDeps): { open: (text?: string) => void; clo
       let action = "Manage the local AI…";
       switch (s.state) {
         case "ready":
-          text.textContent = `Local AI ready (${s.label.replace(/^Ready: /, "")}). Requests I don't recognise go to it. It runs on this computer.`;
+          text.textContent = `Local AI ready: ${s.label.replace(/^Ready: /, "").replace(/ \((GPU|CPU)\)$/,(_, b: string) => (b === "GPU" ? ", on the graphics card" : ", on the processor"))}. Requests I don't recognise go to it; it runs on this computer.`;
           break;
         case "loading":
         case "downloading":
@@ -305,9 +315,19 @@ export function setupAskBar(d: AskBarDeps): { open: (text?: string) => void; clo
             doBtn.textContent = plan.id === "undo" || plan.id === "redo" ? "Do it" : "Open";
           } else body.append(el("p", "askbar-problem", "That command isn't available right now."));
           break;
-        case "ask":
+        case "ask": {
           for (const q of plan.questions) body.append(el("p", "askbar-question", q));
+          // a column it couldn't find: show the ones there are
+          if (plan.questions.some((q) => /column/i.test(q))) {
+            const cols = columnNames();
+            if (cols.length) body.append(el("p", "askbar-muted", `Columns on this sheet: ${cols.join(", ")}.`));
+          }
+          if (!d.model?.()) {
+            const box = aiBox(true);
+            if (box) body.append(box);
+          }
           break;
+        }
         case "problems": {
           if (plan.explanation) body.append(el("p", "askbar-explain", plan.explanation));
           body.append(el("p", "askbar-problem", "This can't run as it is:"));
