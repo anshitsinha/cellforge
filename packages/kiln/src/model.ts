@@ -171,6 +171,8 @@ export interface Backend {
   truncate(n: number): void;
   /** run one token at position `cached`; returns the logits (valid until the next call) */
   forward(token: number): Float32Array | Promise<Float32Array>;
+  /** free what the backend holds outside the JS heap (GPU buffers); it can't be used afterwards */
+  dispose?(): void;
 }
 
 export function rmsNorm(out: Float32Array, x: Float32Array, w: Float32Array, eps: number) {
