@@ -43,7 +43,8 @@ import { openReports } from "./reports/reportpanel";
 import { openDocuments } from "./docviewer";
 import { openAskGuide } from "./askguide";
 import { openVariants } from "./variants";
-import { hardwareSummary, installModel, loadedModel, pickModelFile, removeModel, restoreModel } from "./localmodel";
+import { aiStatus, currentModel, onAiStatus } from "./localmodel";
+import { openAiPanel, type AiPanelDeps } from "./aipanel";
 import { buildTemplate, pickTemplate, TEMPLATES } from "./templates";
 import { clearLocalData, decryptFile, encryptFile, isEncrypted } from "./sharing";
 import { askPassword, confirmClear, openShareCheck } from "./sharingui";
@@ -341,7 +342,7 @@ const history = new ActionHistory(registry, ctx);
 
 const lineageDeps = () => ({
   workbook: () => workbook,
-  model: () => loadedModel()?.kiln ?? null,
+  model: () => currentModel(),
   sheetId: () => activeId,
   cell: () => ({ ...grid.selection }),
   lastEdit: (sheetId: string, row: number, col: number) => {
@@ -1642,13 +1643,13 @@ function paletteCommands(): Command[] {
       id: "variants",
       title: "Fix spelling variants in this column…",
       hint: "clean spelling variants duplicates names vendors customers case spaces typos abbreviations merge normalise standardise",
-      run: () => void openVariants({ source: () => source, activeSheet: () => activeId, col: () => grid.selection.col, run: (a) => run(a), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus(), model: () => loadedModel()?.kiln ?? null }),
+      run: () => void openVariants({ source: () => source, activeSheet: () => activeId, col: () => grid.selection.col, run: (a) => run(a), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus(), model: () => currentModel() }),
     },
     {
       id: "categorise",
       title: "Categorise…",
       hint: "categorise categorize category tag bulk tagging rules learn uncategorised queue coding expenses",
-      run: () => openCategorise({ workbook: () => workbook, activeSheet: () => activeId, source: () => source, range: () => grid.range, run: (a) => run(a), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus(), model: () => loadedModel()?.kiln ?? null }),
+      run: () => openCategorise({ workbook: () => workbook, activeSheet: () => activeId, source: () => source, range: () => grid.range, run: (a) => run(a), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus(), model: () => currentModel() }),
     },
     ...reviewCommands({
       workbook: () => workbook,
@@ -1673,35 +1674,11 @@ function paletteCommands(): Command[] {
     })),
     { id: "ask-guide", title: "Ask the guide (how do I…)…", keys: "F1", hint: "help how do i question guide docs documentation search", run: () => openAskGuide(paletteCommands, () => grid.focus()) },
     {
-      id: "model-load",
-      title: loadedModel() ? `Local AI model: ${loadedModel()!.name} (change…)` : "Load a local AI model (.gguf file)…",
-      hint: "ai model llm gguf local offline load qwen llama",
-      run: async () => {
-        const hw = await hardwareSummary();
-        if (hw) statusLeft.textContent = `This computer: ${hw}.`;
-        const file = await pickModelFile();
-        if (!file) return;
-        try {
-          const m = await installModel(file, (t) => (statusLeft.textContent = t));
-          statusLeft.textContent = `Loaded ${m.name} (${(m.size / 1024 ** 3).toFixed(2)} GB). The ask bar (Ctrl+/) now uses it for requests it doesn't know.`;
-        } catch (e) {
-          statusLeft.textContent = `Couldn't load the model: ${(e as Error).message}`;
-        }
-      },
+      id: "ai-panel",
+      title: "AI: set up and manage the local model…",
+      hint: "ai assistant local model llm gguf download load remove qwen llama offline private setup",
+      run: () => openAiPanel(aiPanelDeps()),
     },
-    ...(loadedModel()
-      ? [
-          {
-            id: "model-remove",
-            title: "Remove the local AI model",
-            hint: "ai model delete forget",
-            run: async () => {
-              await removeModel();
-              statusLeft.textContent = "Removed the local AI model.";
-            },
-          },
-        ]
-      : []),
     { id: "ask", title: "Ask or do…", keys: "Ctrl /", hint: "ai natural language type what you want plain english", run: () => askBar.open() },
     { id: "share-check", title: "Before you share: check for hidden content…", hint: "share safely hidden sheets rows notes personal data pii history versions privacy", run: () => openShareCheck(workbook, (id) => showSheet(id)) },
     {
@@ -1905,20 +1882,27 @@ setupPalette({
   focusGrid: () => grid.focus(),
 });
 
-// the ask bar (Ctrl+/): plain-English requests turned into actions; a local model can be plugged in later
+// the ask bar (Ctrl+/): plain-English requests turned into actions; requests it doesn't know go to the local AI when one is loaded
 const askBar = setupAskBar({
   catalog: () => registry.catalog(),
   context: () => askContext(workbook, activeId, grid.range),
   run: (a) => run(a),
   commands: paletteCommands,
   focusGrid: () => grid.focus(),
-  // a local model, when one has been picked; one kept from last time loads in the background on first use
-  model: () => {
-    const m = loadedModel();
-    if (!m) void restoreModel();
-    return m?.kiln ?? null;
-  },
+  // the local model, when one is loaded; one kept from last time loads in the background on first use
+  model: () => currentModel(),
+  ai: { status: aiStatus, subscribe: (cb) => onAiStatus(() => cb()), setup: () => openAiPanel(aiPanelDeps()) },
 });
+
+/** What the AI panel needs from the app (also for the shell's "Ask AI" button). */
+function aiPanelDeps(): AiPanelDeps {
+  return {
+    askBar: (text) => askBar.open(text),
+    commands: paletteCommands,
+    askGuide: (q) => openAskGuide(paletteCommands, () => grid.focus(), q),
+    focusGrid: () => grid.focus(),
+  };
+}
 
 function loadSource(next: EditableSource, name: string) {
   const wb = new Workbook({ name: sheetNameFrom(name), source: next });

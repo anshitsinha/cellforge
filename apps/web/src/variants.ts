@@ -87,7 +87,7 @@ export async function openVariants(d: VariantsDeps): Promise<void> {
     return;
   }
   merges.sort((a, b) => b.cells - a.cells);
-  note.textContent = `${merges.length} group${merges.length === 1 ? "" : "s"} of spellings that look like the same thing. Each becomes the commonest spelling. ${model ? "Groups marked model came from the local model: check them." : "Load a local AI model to also find abbreviations and typos."}${rejected ? ` (The model's answer wasn't used: ${rejected}.)` : ""}`;
+  note.textContent = `${merges.length} group${merges.length === 1 ? "" : "s"} of spellings that look like the same thing. Each becomes the commonest spelling. ${model ? "Groups marked model came from the local model: check them." : "Set up the local AI (command palette: AI: set up and manage the local model) to also find abbreviations and typos."}${rejected ? ` (The model's answer wasn't used: ${rejected}.)` : ""}`;
   const table = el("table", { className: "ck-rule-table" });
   const head = el("tr");
   for (const t of ["", "Change", "To", "Cells", "Found by"]) head.append(el("th", { textContent: t }));

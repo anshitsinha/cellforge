@@ -70,7 +70,7 @@ export function openLineage(d: LineageDeps): void {
   const said = el("div", { className: "lineage-model" });
   said.setAttribute("aria-live", "polite");
   if (root.kind === "formula" && root.formula && root.words) {
-    const ask = el("button", { type: "button", textContent: model ? "Explain with the local model" : "Explain with a local model (load one first)", disabled: !model });
+    const ask = el("button", { type: "button", textContent: model ? "Explain with the local model" : "Explain with the local model (set it up first: AI in the command palette)", disabled: !model });
     ask.addEventListener("click", async () => {
       ask.disabled = true;
       said.textContent = "Asking the local model…";

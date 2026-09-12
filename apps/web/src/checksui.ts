@@ -1021,7 +1021,7 @@ export function openCategorise(d: CategoriseDeps): void {
     const learn = button("Learn from what's tagged");
     learn.addEventListener("click", showLearned);
     const model = d.model?.() ?? null;
-    const ask = button("Suggest the rest with the local model", model ? "For rows no rule covers: the model picks one of the categories already in use, from examples of each" : "Load a local AI model first (palette: Load a local AI model)");
+    const ask = button("Suggest the rest with the local model", model ? "For rows no rule covers: the model picks one of the categories already in use, from examples of each" : "Set up the local AI first (command palette: AI: set up and manage the local model)");
     ask.disabled = !model;
     ask.addEventListener("click", () => void suggestWithModel(model!));
     const wrap = el("div", "import-preview");
