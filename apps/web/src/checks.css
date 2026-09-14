@@ -1,20 +1,11 @@
 /* Data checks panel and Categorise dialog (checksui.ts). Builds on the palette-form, import-dialog and audit styles. */
 
-.ck-dialog {
-  max-height: calc(100vh - 48px);
-  overflow-y: auto;
-}
-
-.palette-backdrop:has(.ck-dialog) {
-  padding-top: 24px;
-}
-
 .ck-cat {
-  width: min(920px, 100%);
+  width: min(var(--dialog-xl), 100%);
 }
 
 .ck-confirm {
-  width: min(480px, 100%);
+  width: min(var(--dialog-sm), 100%);
 }
 
 .ck-confirm-list {
@@ -27,28 +18,29 @@
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 6px;
+  gap: var(--space-1-5);
 }
 
 .ck-item {
-  border: 1px solid var(--border);
-  border-left-width: 4px;
-  border-radius: 6px;
-  padding: 6px 8px;
+  border: 1px solid var(--border-subtle);
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  padding: var(--space-1-5) var(--space-2);
   display: grid;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .ck-pass {
-  border-left-color: #1e8e3e;
+  border-left-color: var(--success-solid);
 }
 
 .ck-fail {
-  border-left-color: #d93025;
+  border-left-color: var(--danger-solid);
 }
 
 .ck-warn {
-  border-left-color: #f9ab00;
+  border-left-color: var(--warning-solid);
 }
 
 .ck-off {
@@ -58,27 +50,27 @@
 .ck-head {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: start;
 }
 
 .ck-mark {
-  font-weight: 700;
+  font-weight: var(--weight-bold);
   text-align: center;
   line-height: 1.4;
   color: var(--muted);
 }
 
 .ck-pass .ck-mark {
-  color: #137333;
+  color: var(--success);
 }
 
 .ck-fail .ck-mark {
-  color: #c5221f;
+  color: var(--danger);
 }
 
 .ck-warn .ck-mark {
-  color: #a35200;
+  color: var(--warning);
 }
 
 .ck-text {
@@ -88,14 +80,14 @@
 }
 
 .ck-name {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   overflow-wrap: anywhere;
 }
 
 .ck-where,
 .ck-msg {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .ck-fail .ck-msg {
@@ -104,7 +96,7 @@
 
 .ck-buttons {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
   align-items: center;
 }
 
@@ -133,41 +125,41 @@
   margin: 0;
   padding-left: 30px;
   display: grid;
-  gap: 2px;
-  font-size: 12px;
+  gap: var(--space-0-5);
+  font-size: var(--text-sm);
   max-height: 200px;
   overflow-y: auto;
 }
 
 .ck-summary .ck-good {
-  color: #137333;
-  font-weight: 600;
+  color: var(--success);
+  font-weight: var(--weight-semibold);
 }
 
 .ck-summary .ck-bad {
-  color: #c5221f;
-  font-weight: 600;
+  color: var(--danger);
+  font-weight: var(--weight-semibold);
 }
 
 .ck-form {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2) 10px;
   display: grid;
-  gap: 8px;
+  gap: var(--space-2);
   margin: 0;
 }
 
 .ck-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 12px;
+  gap: var(--space-1-5) var(--space-3);
 }
 
 .ck-ticks {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
+  gap: var(--space-1) var(--space-3);
   grid-column: 1 / -1;
 }
 
@@ -179,18 +171,18 @@
 .ck-cols3 {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px 12px;
+  gap: var(--space-1-5) var(--space-3);
 }
 
 .palette-form h4 {
-  margin: 4px 0 0;
-  font-size: 13px;
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-md);
 }
 
 .ck-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-1-5);
   align-items: center;
 }
 
@@ -201,7 +193,7 @@
 
 .ck-rule-table th,
 .ck-rule-table td {
-  padding: 2px 4px;
+  padding: var(--space-0-5) var(--space-1);
   text-align: left;
   vertical-align: middle;
 }
@@ -223,7 +215,7 @@
 
 .ck-rule-table .ck-ex {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
 }
 
 .ck-learned td:first-child {
@@ -234,21 +226,5 @@
   .ck-fields,
   .ck-cols3 {
     grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  .ck-pass .ck-mark,
-  .ck-summary .ck-good {
-    color: #81c995;
-  }
-
-  .ck-fail .ck-mark,
-  .ck-summary .ck-bad {
-    color: #f28b82;
-  }
-
-  .ck-warn .ck-mark {
-    color: #fdd663;
   }
 }

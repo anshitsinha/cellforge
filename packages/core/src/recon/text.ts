@@ -69,6 +69,85 @@ export function sharesName(a: string, b: string): boolean {
   return nameWords(b).some((w) => wa.has(w));
 }
 
+/** Two name words that are the same, or one is the other cut short (bank lines are often truncated): "ENGINEERI" and "ENGINEERING". */
+function sameWord(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (a.length < 3 || b.length < 3 || /^\d+$/.test(a) || /^\d+$/.test(b)) return false;
+  return a.length < b.length ? b.startsWith(a) : a.startsWith(b);
+}
+
+/** Classes of how two descriptions agree on names (see nameAgreement). */
+export const NAME_CLASSES = 18;
+/** either side has no description at all */
+export const NAME_NO_TEXT = 0;
+/** descriptions on both sides, but one names no one ("CHAPS FEE", "CHEQUE DEPOSIT") */
+export const NAME_NONE = 1;
+
+/**
+ * How two descriptions' name words agree, as a small class: NAME_NO_TEXT,
+ * NAME_NONE, or 2 + 4k + 2·(A has a name word B lacks) + (B has one A
+ * lacks), with k the words in common (a truncated word counts), at most 3.
+ * "BRISTOL WILLOW PLASTICS" against "BRISTOL WILLOW FARMS" is k = 2 with a
+ * word left over on each side; against "BRISTOL WILLOW PLAS" it is k = 3
+ * with nothing left over. Takes the words from partyWords (null: no
+ * description).
+ */
+export function nameAgreement(wa: readonly string[] | null, wb: readonly string[] | null): number {
+  if (!wa || !wb) return NAME_NO_TEXT;
+  if (!wa.length || !wb.length) return NAME_NONE;
+  let inB = 0;
+  for (const a of wa) if (wb.some((b) => sameWord(a, b))) inB++;
+  let inA = 0;
+  for (const b of wb) if (wa.some((a) => sameWord(a, b))) inA++;
+  const k = Math.min(3, inA, inB);
+  return 2 + 4 * k + (inB < wa.length ? 2 : 0) + (inA < wb.length ? 1 : 0);
+}
+
+/** What kind of transaction a description says it is, as bits (0: it doesn't say). */
+export const KIND_CHEQUE = 1;
+export const KIND_CARD = 2;
+export const KIND_FEE = 4;
+export const KIND_INTEREST = 8;
+export const KIND_DIRECT_DEBIT = 16;
+export const KIND_TRANSFER = 32;
+export const KIND_DEPOSIT = 64;
+const KIND_WORDS: Record<string, number> = {
+  CHEQUE: KIND_CHEQUE, CHEQUES: KIND_CHEQUE, CHQ: KIND_CHEQUE, CHK: KIND_CHEQUE,
+  CARD: KIND_CARD, POS: KIND_CARD, VISA: KIND_CARD, MASTERCARD: KIND_CARD, CONTACTLESS: KIND_CARD,
+  FEE: KIND_FEE, FEES: KIND_FEE, CHARGE: KIND_FEE, CHARGES: KIND_FEE, COMMISSION: KIND_FEE,
+  INTEREST: KIND_INTEREST,
+  DD: KIND_DIRECT_DEBIT, DDR: KIND_DIRECT_DEBIT,
+  BGC: KIND_TRANSFER, FPO: KIND_TRANSFER, FPI: KIND_TRANSFER, BACS: KIND_TRANSFER, CHAPS: KIND_TRANSFER, FASTER: KIND_TRANSFER, TRANSFER: KIND_TRANSFER, TRF: KIND_TRANSFER, GIRO: KIND_TRANSFER, SEPA: KIND_TRANSFER, BP: KIND_TRANSFER, SO: KIND_TRANSFER,
+  DEPOSIT: KIND_DEPOSIT, LODGEMENT: KIND_DEPOSIT, COUNTER: KIND_DEPOSIT, PAYING: KIND_DEPOSIT,
+};
+
+const DATE_STAMP = /^\d{1,2}(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2}|\d{4})?$/;
+
+/** The name words of a normalised description (nameWords), without words that say what kind of transaction it is ("COUNTER", "PAYING") or date stamps ("ON 05MAR"). */
+export function partyWords(s: string): string[] {
+  return nameWords(s).filter((w) => !(w in KIND_WORDS) && !DATE_STAMP.test(w));
+}
+
+/**
+ * The kind of transaction a normalised description names, as bits:
+ * cheque, card, fee, interest, direct debit, transfer, deposit. A fee or
+ * interest line is only that ("CHAPS FEE" is a fee, not a transfer); a
+ * cheque can be paid in, so cheque and deposit go together.
+ */
+export function kindOf(s: string): number {
+  let m = 0;
+  for (const w of s.split(" ")) m |= KIND_WORDS[w] ?? 0;
+  if (m & KIND_FEE) return KIND_FEE;
+  if (m & KIND_INTEREST) return KIND_INTEREST;
+  if (m & (KIND_CHEQUE | KIND_DEPOSIT)) m |= KIND_CHEQUE | KIND_DEPOSIT;
+  return m;
+}
+
+/** Both descriptions say what kind of transaction they are, and the kinds differ. */
+export function kindsDiffer(a: number, b: number): boolean {
+  return a !== 0 && b !== 0 && (a & b) === 0;
+}
+
 /** Jaro-Winkler similarity, 0..1. */
 export function jaroWinkler(a: string, b: string): number {
   if (a === b) return a ? 1 : 0;

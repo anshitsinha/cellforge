@@ -75,6 +75,7 @@ import { AutoSaver, fromFile, OpfsStore, packWorkbook, toFile, unpackWorkbook, t
 import { sheetNameProblem, Workbook } from "./workbook";
 import { extractKeys, sortInWorker } from "./sort";
 import { formatBytes, importCsv } from "./importer";
+import { confirmDialog } from "./ui/confirm";
 
 const DEMO_ROWS = 100_000_000;
 
@@ -1718,7 +1719,7 @@ function paletteCommands(): Command[] {
       run: async () => {
         const kind = await pickTemplate();
         if (!kind) return grid.focus();
-        if (workbookEdited() && !confirm("Discard your changes and start from the template?")) return;
+        if (workbookEdited() && !(await confirmDialog({ title: "Start from the template?", text: "Your changes to this workbook will be discarded.", confirm: "Discard and start", danger: true }))) return;
         statusLeft.textContent = "Building the template…";
         const wb = await buildTemplate(kind);
         loadWorkbook(wb, wb.sheets[0].id, TEMPLATES.find((t) => t.kind === kind)!.title);
@@ -1937,13 +1938,13 @@ function loadWorkbook(next: Workbook, active: string, name: string) {
   grid.focus();
 }
 
-document.getElementById("btn-new")!.addEventListener("click", () => {
-  if (workbookEdited() && !confirm("Discard your changes and start a new workbook?")) return;
+document.getElementById("btn-new")!.addEventListener("click", async () => {
+  if (workbookEdited() && !(await confirmDialog({ title: "Start a new workbook?", text: "Your changes to this workbook will be discarded.", confirm: "Discard and start new", danger: true }))) return;
   loadSource(new EditableSource(new BlankSource()), "Untitled");
 });
 
-document.getElementById("btn-demo")!.addEventListener("click", () => {
-  if (workbookEdited() && !confirm("Discard your changes and load the demo?")) return;
+document.getElementById("btn-demo")!.addEventListener("click", async () => {
+  if (workbookEdited() && !(await confirmDialog({ title: "Load the demo?", text: "Your changes to this workbook will be discarded.", confirm: "Discard and load demo", danger: true }))) return;
   loadSource(new EditableSource(new SyntheticSource(DEMO_ROWS), SPARE_COLUMNS), "demo — synthetic sales");
 });
 
@@ -1963,7 +1964,7 @@ async function exportCsvFile() {
   }
   if (
     rows > LARGE_EXPORT_ROWS &&
-    !confirm(`This will build a CSV with ${rowFormat.format(rows)} rows, which can take a while and a lot of memory. Continue?`)
+    !(await confirmDialog({ title: "Export a very large CSV?", text: `This will build a CSV with ${rowFormat.format(rows)} rows, which can take a while and a lot of memory.`, confirm: "Export" }))
   ) {
     return;
   }

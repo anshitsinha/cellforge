@@ -2,13 +2,13 @@
 
 .audit-keys {
   display: grid;
-  gap: 6px;
+  gap: var(--space-1-5);
 }
 
 .audit-key {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 90px;
-  gap: 6px;
+  gap: var(--space-1-5);
 }
 
 .audit-key [hidden] {
@@ -17,7 +17,7 @@
 
 .palette-form .audit-check {
   display: flex;
-  gap: 6px;
+  gap: var(--space-1-5);
   align-items: center;
 }
 
@@ -27,7 +27,7 @@
 
 .audit-result {
   display: grid;
-  gap: 6px;
+  gap: var(--space-1-5);
 }
 
 .audit-chart {
@@ -41,7 +41,7 @@
 }
 
 .audit-bar-hot {
-  fill: #f29900;
+  fill: var(--warning-solid);
   opacity: 0.9;
 }
 
@@ -53,7 +53,7 @@
 
 .audit-axis {
   fill: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-xs);
   text-anchor: middle;
 }
 

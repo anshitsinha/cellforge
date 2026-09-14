@@ -1,47 +1,44 @@
 /* Journal entry tests, overlaps, footing and safe-copy dialogs (jetools.ts). Builds on the palette-form, import-dialog and audit styles. */
-
-.je-dialog {
-  max-height: calc(100vh - 48px);
-  overflow-y: auto;
-}
+/* height, scrolling and position come from the shared dialog rules in style.css */
 
 .je-section {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-1);
 }
 
 .je-section > summary {
   cursor: pointer;
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .je-section[open] > summary {
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 
 .je-map,
 .je-params {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 12px;
+  gap: var(--space-1-5) var(--space-3);
 }
 
 .je-tests {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px 12px;
+  gap: var(--space-1) var(--space-3);
 }
 
 .je-moves {
   display: grid;
-  gap: 6px;
+  gap: var(--space-1-5);
 }
 
 .je-move {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 120px;
-  gap: 6px;
+  gap: var(--space-1-5);
 }
 
 .je-pii {
@@ -53,7 +50,7 @@
 }
 
 .je-pii-hit td:first-child {
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
 .je-pii select {

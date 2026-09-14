@@ -1,14 +1,9 @@
 /* Time and schedule dialogs (timetools.ts). Builds on the palette-form, import-dialog and transform styles. */
 
-.tt-dialog {
-  max-height: calc(100vh - 48px);
-  overflow-y: auto;
-}
-
 .tt-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 12px;
+  gap: var(--space-1-5) var(--space-3);
   align-items: start;
 }
 
@@ -19,17 +14,17 @@
 
 .tt-side {
   display: grid;
-  gap: 6px;
+  gap: var(--space-1-5);
   min-width: 0;
   margin: 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 10px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-1-5) 10px 10px;
 }
 
 .tt-side > legend {
-  font-weight: 600;
-  padding: 0 4px;
+  font-weight: var(--weight-semibold);
+  padding: 0 var(--space-1);
 }
 
 @media (max-width: 560px) {

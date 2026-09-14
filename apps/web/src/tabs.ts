@@ -8,6 +8,7 @@
  */
 import type { Action } from "@cellforge/actions";
 import type { Workbook } from "./workbook";
+import { confirmDialog } from "./ui/confirm";
 
 export interface TabsOptions {
   workbook: () => Workbook;
@@ -146,9 +147,11 @@ export class SheetTabs {
     item("Duplicate", () => void this.opts.run({ type: "sheet.duplicate", params: { sheet: id } }));
     item("Hide", () => void this.opts.run({ type: "sheet.hide", params: { sheet: id, hidden: true } }), onlyOne);
     item("Delete", () => {
-      if (sheet.source.editCount === 0 || confirm(`Delete "${sheet.name}"? You can undo this.`)) {
-        void this.opts.run({ type: "sheet.delete", params: { sheet: id } });
-      }
+      void (async () => {
+        if (sheet.source.editCount === 0 || (await confirmDialog({ title: `Delete "${sheet.name}"?`, text: "You can undo this.", confirm: "Delete sheet", danger: true }))) {
+          void this.opts.run({ type: "sheet.delete", params: { sheet: id } });
+        }
+      })();
     }, onlyOne);
     const swatches = document.createElement("div");
     swatches.className = "swatches";

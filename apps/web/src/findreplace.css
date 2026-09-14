@@ -4,7 +4,7 @@
   background: transparent;
   pointer-events: none;
   justify-content: flex-end;
-  padding: 72px 16px 16px;
+  padding: 72px var(--space-4) var(--space-4);
 }
 
 .find-backdrop .find-dialog {
@@ -15,7 +15,7 @@
 .find-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 14px;
+  gap: var(--space-1-5) 14px;
 }
 
 .palette-form .find-options label {
@@ -48,7 +48,7 @@
   display: flex;
   gap: 10px;
   align-items: baseline;
-  padding: 2px 0;
+  padding: var(--space-0-5) 0;
 }
 
 .find-results li .hp-cell {

@@ -185,6 +185,60 @@ export function modal(back: HTMLElement, opts: ModalOptions = {}): void {
   watch.observe(document.documentElement, { childList: true, subtree: true });
 }
 
+// --- button hierarchy for the existing dialogs' footers -----------------------
+//
+// The older dialogs build their footer (".numfmt-actions") with plain
+// buttons in no fixed order. Until they move to ui/dialog.ts, this gives
+// them the house style: the main action filled (.btn-primary, far right),
+// Cancel / Close as a plain button to its left (.cf-dismiss), and nothing
+// else changed. A row with data-cf-plain, or a row where a button already
+// has a btn-* or "primary" class, keeps its own styling.
+
+export type ActionRole = "primary" | "danger" | "dismiss" | "plain";
+
+const DISMISS = /^(cancel|close|not now|no|back)$/i;
+const DANGER = /^(delete|remove|discard|erase)\b/i;
+
+/** What each footer button should look like, given its text and whether it already has a style or is hidden. */
+export function planActions(buttons: readonly { text: string; styled?: boolean; hidden?: boolean; disabled?: boolean }[]): ActionRole[] {
+  const roles: ActionRole[] = buttons.map((b) => (DISMISS.test(b.text.trim()) ? "dismiss" : "plain"));
+  if (buttons.some((b) => b.styled)) return roles.map((r, i) => (buttons[i].styled ? "plain" : r));
+  // the main action is the last one you can press now (a later step, still
+  // disabled, waits its turn); if none can be pressed, the last one shown
+  const candidates = buttons.map((_, i) => i).filter((i) => roles[i] !== "dismiss" && !buttons[i].hidden);
+  const pick = [...candidates].reverse().find((i) => !buttons[i].disabled) ?? candidates[candidates.length - 1];
+  if (pick !== undefined) roles[pick] = DANGER.test(buttons[pick].text.trim()) ? "danger" : "primary";
+  return roles;
+}
+
+const ROLE_CLASS: Record<ActionRole, string> = { primary: "btn-primary", danger: "btn-danger", dismiss: "cf-dismiss", plain: "" };
+const AUTO_CLASSES = ["btn-primary", "btn-danger", "cf-dismiss"];
+
+/** Apply planActions() to one footer row (safe to call again when its buttons change). */
+export function styleActionRow(row: HTMLElement): void {
+  if (row.hasAttribute("data-cf-plain")) return;
+  const buttons = Array.from(row.children).filter((c): c is HTMLButtonElement => c instanceof HTMLButtonElement);
+  if (!buttons.length) return;
+  const roles = planActions(
+    buttons.map((b) => ({
+      text: b.textContent ?? "",
+      hidden: b.hidden !== false,
+      disabled: b.disabled,
+      styled: !b.dataset.cfAuto && (b.classList.contains("primary") || Array.from(b.classList).some((c) => c.startsWith("btn-"))),
+    })),
+  );
+  buttons.forEach((b, i) => {
+    if (b.dataset.cfAuto) b.classList.remove(...AUTO_CLASSES);
+    const cls = ROLE_CLASS[roles[i]];
+    if (cls) {
+      b.classList.add(cls);
+      b.dataset.cfAuto = "1";
+    } else delete b.dataset.cfAuto;
+  });
+}
+
+const ACTION_ROW = ".palette-backdrop .numfmt-actions";
+
 let installed = false;
 
 /** Apply modal() to every dialog backdrop the app adds, and label icon-only buttons. Call once. */
@@ -204,9 +258,21 @@ export function installA11y(): void {
     if (node.matches(BACKDROP)) modal(node);
     else node.querySelectorAll<HTMLElement>(BACKDROP).forEach((b) => modal(b));
     labelIconButtons(node);
+    // footer buttons: a row, rows inside what was added, or a button added to a row
+    const row = node.closest<HTMLElement>(ACTION_ROW);
+    if (row) styleActionRow(row);
+    node.querySelectorAll<HTMLElement>(".numfmt-actions").forEach((r) => {
+      if (r.closest(BACKDROP)) styleActionRow(r);
+    });
   };
   new MutationObserver((records) => {
-    for (const r of records) r.addedNodes.forEach(visit);
-  }).observe(document.body, { childList: true, subtree: true });
+    for (const r of records) {
+      if (r.type === "attributes") {
+        // a footer button was enabled, disabled, shown or hidden: the main action may move
+        const row = (r.target as HTMLElement).parentElement;
+        if (row?.matches(ACTION_ROW)) styleActionRow(row);
+      } else r.addedNodes.forEach(visit);
+    }
+  }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "hidden"] });
   labelIconButtons(document.body);
 }

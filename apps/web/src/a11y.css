@@ -13,19 +13,28 @@
   white-space: nowrap !important;
 }
 
-/* A visible ring on whatever the keyboard is on. The grid draws its own
-   active cell, but that shows whether or not the grid has focus, so the
-   canvas gets a ring of its own when reached by keyboard. */
-.palette-backdrop :focus-visible,
-.hp-close:focus-visible,
-.sheet canvas[role="application"]:focus-visible {
-  outline: 2px solid var(--accent);
+/*
+ * One focus ring everywhere: 2px in the focus colour, 2px off the element.
+ * Text fields show focus with their border and halo instead (style.css), so
+ * they are left out here. Never remove an outline without a replacement.
+ */
+:where(button, a[href], summary, [tabindex]:not([tabindex="-1"]), input[type="checkbox"], input[type="radio"], input[type="range"], input[type="color"], [role="button"], [role="option"], [role="tab"], [role="menuitem"]):focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+/* inside tight lists and menus the ring sits on the inside edge */
+:where(.menu-item, .palette-item, .hp-step button, .tab, .dv-item, .cf-sidepanel__tab):focus-visible {
+  outline: 2px solid var(--focus-ring-color);
   outline-offset: -2px;
 }
 
-.palette-backdrop button:focus-visible,
-.palette-backdrop a:focus-visible {
-  outline-offset: 1px;
+/* The grid draws its own active cell, but that shows whether or not the
+   grid has focus, so the canvas gets a ring of its own when reached by
+   keyboard. */
+.sheet canvas[role="application"]:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: -2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -42,12 +51,25 @@
 /* Windows High Contrast and other forced-colour modes: the browser swaps
    colours itself; keep focus and selection visible with system colours. */
 @media (forced-colors: active) {
-  .palette-backdrop :focus-visible,
+  :focus-visible,
   .sheet canvas[role="application"]:focus-visible {
+    outline: 2px solid Highlight !important;
+  }
+
+  :where(input, select, textarea):focus {
     outline: 2px solid Highlight;
   }
 
-  .palette {
+  .palette,
+  .cf-dialog,
+  .cf-sidepanel,
+  .cf-toast {
     border: 1px solid CanvasText;
+  }
+
+  .btn-primary,
+  button.primary,
+  .btn-danger {
+    border: 1px solid ButtonText;
   }
 }
