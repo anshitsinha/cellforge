@@ -17,6 +17,14 @@ import { EditableSource } from "./editable";
 import { readSheetColumns } from "./pivotpanel";
 import type { Sheet, Workbook } from "./workbook";
 import "./sql.css";
+import "./analysis.css";
+import { isIdLike, measureColumns, type ColumnInfo } from "./charts/defaults";
+import { quickInfos } from "./pivotpanel";
+import { openSidePanel, type SidePanelContext } from "./ui/sidepanel";
+import { makeButton } from "./ui/dialog";
+import { icon, iconButton } from "./ui/icons";
+import { renderTable } from "./ui/table";
+import { toast } from "./ui/toast";
 
 export interface SqlDeps {
   workbook: () => Workbook;
@@ -158,7 +166,68 @@ export async function putResultOnSheet(d: SqlDeps, result: SqlResult, sql: strin
   });
 }
 
-// ----------------------------------------------------------------- dialog --
+// --------------------------------------------------------------- examples --
+
+export interface SqlExample {
+  title: string;
+  description: string;
+  sql: string;
+}
+
+/** What the examples need to know about a sheet. */
+export interface ExampleSheet {
+  name: string;
+  columns: ColumnInfo[];
+}
+
+/** Profile a sheet's columns from its first rows, for the examples (cheap). */
+export function exampleSheet(sheet: Sheet): ExampleSheet {
+  return { name: sheet.name, columns: quickInfos(readSheetColumns(sheet.source)) };
+}
+
+/**
+ * Finance examples written for the sheets at hand: the totals by the main
+ * category, possible duplicates, the largest items, totals by month and,
+ * with two sheets, the rows of one that the other doesn't have.
+ */
+export function sqlExamples(sheets: readonly ExampleSheet[], active = 0): SqlExample[] {
+  const main = sheets[active] ?? sheets[0];
+  if (!main) return [];
+  const t = sqlName(main.name);
+  const cols = main.columns;
+  const amount = measureColumns(cols, 1)[0];
+  const amountName = amount === undefined ? null : sqlName(cols[amount].name);
+  const cat = cols.find((c) => c.kind === "text" && !isIdLike(c) && c.distinct < c.count && c.distinct <= 200);
+  const ref = cols.find((c) => isIdLike(c) && c.kind === "text") ?? cols.find((c) => isIdLike(c));
+  const date = cols.find((c) => c.kind === "date");
+  const out: SqlExample[] = [{ title: "First 100 rows", description: `Every column of ${main.name}`, sql: `SELECT *\nFROM ${t}\nLIMIT 100` }];
+  if (cat && amountName) {
+    const c = sqlName(cat.name);
+    out.push({ title: `Total by ${cat.name}`, description: `${cols[amount!].name} added up per ${cat.name}, biggest first`, sql: `SELECT ${c}, SUM(${amountName}) AS total, COUNT(*) AS lines\nFROM ${t}\nGROUP BY ${c}\nORDER BY total DESC` });
+  }
+  if (amountName) {
+    const keys = (cat ? [sqlName(cat.name), amountName] : [amountName]).join(", ");
+    out.push({ title: "Possible duplicates", description: `The same ${[cat?.name, cols[amount!].name].filter(Boolean).join(" and ")} more than once`, sql: `SELECT ${keys}, COUNT(*) AS times\nFROM ${t}\nGROUP BY ${keys}\nHAVING COUNT(*) > 1\nORDER BY times DESC` });
+    out.push({ title: "Largest 20", description: `The biggest ${cols[amount!].name} values`, sql: `SELECT *\nFROM ${t}\nORDER BY ${amountName} DESC\nLIMIT 20` });
+  }
+  if (date && amountName) {
+    const d = sqlName(date.name);
+    out.push({ title: "Totals by month", description: `${cols[amount!].name} per month of ${date.name}`, sql: `SELECT YEAR(${d}) AS year, MONTH(${d}) AS month, SUM(${amountName}) AS total, COUNT(*) AS lines\nFROM ${t}\nGROUP BY YEAR(${d}), MONTH(${d})\nORDER BY year, month` });
+  }
+  const other = sheets.find((s) => s !== main && s.columns.length);
+  if (other) {
+    const names = new Map(other.columns.map((c) => [c.name.toLowerCase(), c.name]));
+    const shared = (ref && names.has(ref.name.toLowerCase()) ? ref : null) ?? cols.find((c) => names.has(c.name.toLowerCase()) && c.kind === "text") ?? cols.find((c) => names.has(c.name.toLowerCase()));
+    if (shared) {
+      const k = sqlName(shared.name);
+      const ko = sqlName(names.get(shared.name.toLowerCase())!);
+      out.push({ title: `Not in ${other.name}`, description: `Rows of ${main.name} with no matching ${shared.name} in ${other.name}`, sql: `SELECT a.*\nFROM ${t} AS a\nLEFT JOIN ${sqlName(other.name)} AS b ON a.${k} = b.${ko}\nWHERE b.${ko} IS NULL` });
+    }
+  }
+  return out;
+}
+
+// ------------------------------------------------------------------ panel --
 
 const PREVIEW_ROWS = 200;
 let lastSql = "";
@@ -170,117 +239,209 @@ function starter(wb: Workbook, active: string): string {
   return `SELECT ${cols.slice(0, 4).map(sqlName).join(", ") || "*"}\nFROM ${sqlName(sheet.name)}\nLIMIT 100`;
 }
 
-export function openSql(d: SqlDeps): void {
-  const wb = d.workbook();
-  const back = document.createElement("div");
-  back.className = "palette-backdrop";
-  back.innerHTML = `<div class="palette import-dialog sql-dialog" role="dialog" aria-label="SQL query"><div class="palette-form"></div></div>`;
-  const body = back.querySelector<HTMLElement>(".palette-form")!;
-  type Props = { textContent?: string; className?: string; type?: string; value?: string; title?: string; placeholder?: string; spellcheck?: boolean; rows?: number };
-  const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Props = {}, ...kids: Array<Node | string>): HTMLElementTagNameMap[K] => {
-    const e: HTMLElementTagNameMap[K] = document.createElement(tag);
-    Object.assign(e, props);
-    e.append(...kids);
-    return e;
-  };
-  const button = (text: string, onClick: () => void, title = "") => {
-    const b = el("button", { type: "button", textContent: text, title });
-    b.addEventListener("click", onClick);
-    return b;
-  };
+function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
 
-  // editor
-  const editor = el("textarea", { className: "sql-editor", spellcheck: false, rows: 9 });
+function section(title: string, ...extra: HTMLElement[]): HTMLElement {
+  const s = h("section", "an-section");
+  const head = h("div", "an-section__head");
+  head.append(h("h3", "an-section__title", title), ...extra);
+  s.append(head);
+  return s;
+}
+
+/**
+ * The SQL workbench in the side panel: examples written for this sheet,
+ * the sheets and columns (click to insert), the editor with Run, the result
+ * as a formatted table, and saved queries. Ctrl+Enter runs.
+ */
+export function openSql(d: SqlDeps): void {
+  openSidePanel({
+    id: "sql",
+    title: "SQL query",
+    subtitle: "Every sheet is a table; its first row names the columns",
+    onClose: () => d.focusGrid(),
+    render: (p) => renderSql(p, d),
+  });
+}
+
+function renderSql(p: SidePanelContext, d: SqlDeps): () => void {
+  const wb = d.workbook();
+  const root = h("div", "an-stack an-stack--loose sql-panel");
+  p.body.append(root);
+  let last: { result: SqlResult; sql: string } | null = null;
+
+  // ---- editor
+  const editorSec = section("Query");
+  const editor = h("textarea", "sql-editor");
+  editor.spellcheck = false;
+  editor.rows = 7;
   editor.value = lastSql || starter(wb, d.activeSheet());
   editor.setAttribute("aria-label", "SQL query");
+  editor.setAttribute("aria-describedby", "sql-run-hint");
   const insert = (text: string) => {
     const { selectionStart: a, selectionEnd: b } = editor;
-    editor.setRangeText(text, a, b, "end");
+    const before = editor.value.slice(0, a);
+    const pad = before && !/[\s(,.]$/.test(before) ? " " : "";
+    editor.setRangeText(pad + text, a, b, "end");
     editor.focus();
   };
+  const runRow = h("div", "sql-run-row");
+  const hint = h("span", "an-hint", "");
+  hint.id = "sql-run-hint";
+  hint.append(h("kbd", "an-kbd", "Ctrl"), " + ", h("kbd", "an-kbd", "Enter"), " runs it");
+  const runBtn = makeButton("Run", "primary", "play");
+  runBtn.title = "Run the query (Ctrl+Enter)";
+  runRow.append(hint, runBtn);
+  editorSec.append(editor, runRow);
 
-  // the tables, for reference (click a name to insert it)
-  const tables = el("div", { className: "sql-tables" });
-  tables.setAttribute("aria-label", "Sheets and columns");
+  // ---- result
+  const resultSec = section("Result");
+  const status = h("p", "an-hint sql-status");
+  status.setAttribute("role", "status");
+  const errorBox = h("div", "an-note an-note--error");
+  errorBox.setAttribute("role", "alert");
+  errorBox.hidden = true;
+  const preview = h("div", "sql-preview");
+  resultSec.append(errorBox, status, preview);
+  resultSec.hidden = true;
+
+  // ---- examples
+  const exSec = section("Examples for this workbook");
+  const exList = h("div", "sql-examples");
+  exSec.append(exList);
+  let examples: SqlExample[] = [];
+  try {
+    const sheets = wb.sheets.map(exampleSheet);
+    examples = sqlExamples(sheets, Math.max(0, wb.sheets.findIndex((s) => s.id === d.activeSheet())));
+  } catch {
+    examples = [];
+  }
+  for (const ex of examples) {
+    const b = h("button", "sql-example");
+    b.type = "button";
+    b.append(h("span", "sql-example__title", ex.title), h("span", "sql-example__text", ex.description));
+    b.title = ex.sql;
+    b.addEventListener("click", () => {
+      editor.value = ex.sql;
+      run();
+    });
+    exList.append(b);
+  }
+  if (!examples.length) exSec.hidden = true;
+
+  // ---- tables
+  const tablesSec = section("Sheets and columns");
+  const tables = h("div", "sql-tables");
+  tablesSec.append(tables, h("p", "an-hint", 'Click a name to put it in the query. Names with spaces go in double quotes, like "Bank Feb".'));
   for (const sheet of wb.sheets) {
-    const det = el("details");
+    const det = h("details", "sql-table");
     if (sheet.id === d.activeSheet()) det.open = true;
-    const sum = el("summary", {}, el("code", { textContent: sqlName(sheet.name), title: "Click to insert" }));
-    sum.querySelector("code")!.addEventListener("click", (e) => {
+    const sum = h("summary");
+    const nameBtn = h("button", "sql-name sql-name--table", sqlName(sheet.name));
+    nameBtn.type = "button";
+    nameBtn.title = `Insert ${sqlName(sheet.name)}`;
+    nameBtn.addEventListener("click", (e) => {
       e.preventDefault();
       insert(sqlName(sheet.name));
     });
+    const tIcon = icon("table", { size: 14 });
+    sum.append(tIcon, nameBtn);
     det.append(sum);
-    const list = el("ul");
+    const list = h("div", "an-chips sql-columns");
     let cols: string[] = [];
     try {
       cols = sheetColumnNames(sheet);
     } catch {
       /* an odd sheet: list nothing */
     }
+    sum.append(h("span", "sql-count", `${cols.length}`));
     for (const c of cols) {
-      const li = el("li", {}, el("code", { textContent: sqlName(c), title: "Click to insert" }));
-      li.addEventListener("click", () => insert(sqlName(c)));
-      list.append(li);
+      const b = h("button", "an-chip sql-name", sqlName(c));
+      b.type = "button";
+      b.title = `Insert ${sqlName(c)}`;
+      b.addEventListener("click", () => insert(sqlName(c)));
+      list.append(b);
     }
-    if (!cols.length) list.append(el("li", { className: "hp-muted", textContent: "(empty)" }));
+    if (!cols.length) list.append(h("span", "an-hint", "Empty sheet"));
     det.append(list);
     tables.append(det);
   }
 
-  // saved queries
-  const savedBox = el("div", { className: "sql-saved" });
-  const nameInput = el("input", { type: "text", placeholder: "Name to save as", value: "" });
+  // ---- saved queries
+  const savedSec = section("Saved queries");
+  const savedList = h("ul", "an-list sql-saved");
+  const saveRow = h("div", "an-row");
+  const nameInput = h("input");
+  nameInput.type = "text";
+  nameInput.placeholder = "Name, e.g. Unmatched invoices";
   nameInput.setAttribute("aria-label", "Name for the saved query");
+  const saveBtn = makeButton("Save", "secondary");
+  saveBtn.classList.add("an-fit");
+  saveBtn.title = "Save this query with the workbook";
+  saveRow.append(nameInput, saveBtn);
+  savedSec.append(savedList, saveRow);
   const renderSaved = () => {
     const saved = getSavedQueries();
-    savedBox.replaceChildren(el("strong", { textContent: "Saved queries" }));
-    if (!saved.length) savedBox.append(el("p", { className: "hp-muted", textContent: "None yet. Name a query below and press Save." }));
-    const ul = el("ul");
+    savedList.replaceChildren();
+    if (!saved.length) savedList.append(h("li", "an-hint sql-saved-empty", "None yet. Queries you save go with the workbook."));
     saved.forEach((q, k) => {
-      const load = button(q.name, () => {
+      const li = h("li");
+      const load = h("button", "sql-saved-name");
+      load.type = "button";
+      load.append(icon("database", { size: 14 }), h("span", undefined, q.name));
+      load.title = q.sql;
+      load.addEventListener("click", () => {
         editor.value = q.sql;
         nameInput.value = q.name;
         editor.focus();
-      }, "Open this query in the editor");
-      load.className = "sql-saved-name";
-      const del = button("✕", () => {
-        const next = saved.filter((_, j) => j !== k);
-        void d.run({ type: "sql.setSaved", params: { queries: next, label: `delete query "${q.name}"` } });
-      }, `Delete "${q.name}"`);
-      del.className = "sql-saved-del";
-      del.setAttribute("aria-label", `Delete saved query ${q.name}`);
-      ul.append(el("li", {}, load, del));
+      });
+      const del = iconButton("trash", `Delete saved query ${q.name}`, {
+        size: "sm",
+        onClick: () => {
+          const next = saved.filter((_, j) => j !== k);
+          void d.run({ type: "sql.setSaved", params: { queries: next, label: `delete query "${q.name}"` } });
+          toast({ text: `Deleted the query "${q.name}"`, action: { label: "Undo", run: () => void d.run({ type: "sql.setSaved", params: { queries: saved, label: `restore query "${q.name}"` } }) } });
+        },
+      });
+      li.append(load, del);
+      savedList.append(li);
     });
-    if (saved.length) savedBox.append(ul);
   };
   renderSaved();
   const stopListening = onSavedQueriesChange(renderSaved);
 
-  // results
-  const status = el("p", { className: "sql-status hp-muted", textContent: "Ctrl+Enter runs the query." });
-  status.setAttribute("role", "status");
-  const preview = el("div", { className: "import-preview sql-preview" });
-  let last: { result: SqlResult; sql: string } | null = null;
+  root.append(editorSec, resultSec, exSec, tablesSec, savedSec);
 
-  const toSheet = button("Put the result on a new sheet", () => void putOnSheet());
+  // ---- footer
+  const foot = h("div", "an-footer");
+  const toSheet = makeButton("Add as sheet", "primary");
   toSheet.disabled = true;
-  const putOnSheet = async () => {
-    if (!last) return;
-    const { result, sql } = last;
-    close();
-    await putResultOnSheet(d, result, sql, nameInput.value.trim() || "Query");
-    d.status(`Query result: ${result.rowCount.toLocaleString()} rows on a new sheet`);
+  toSheet.title = "Run a query first";
+  foot.append(h("span", "an-spacer"), toSheet);
+  p.footer.append(foot);
+
+  const showError = (text: string | null) => {
+    errorBox.replaceChildren();
+    errorBox.hidden = !text;
+    if (text) errorBox.append(icon("error"), h("span", undefined, text));
   };
 
-  const run = () => {
+  function run() {
     const sql = editor.value;
     lastSql = sql;
     last = null;
     toSheet.disabled = true;
-    status.className = "sql-status hp-muted";
+    toSheet.title = "Run a query first";
+    resultSec.hidden = false;
+    showError(null);
     status.textContent = "Running…";
     preview.replaceChildren();
+    runBtn.disabled = true;
     // let the status paint before a long query
     setTimeout(() => {
       const t0 = performance.now();
@@ -289,77 +450,114 @@ export function openSql(d: SqlDeps): void {
         const ms = performance.now() - t0;
         last = { result, sql };
         toSheet.disabled = false;
-        status.textContent = `${result.rowCount.toLocaleString()} row${result.rowCount === 1 ? "" : "s"}, ${result.columns.length} column${result.columns.length === 1 ? "" : "s"} in ${ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`}${result.rowCount > PREVIEW_ROWS ? ` (showing the first ${PREVIEW_ROWS})` : ""}`;
-        preview.replaceChildren(previewTable(result));
+        toSheet.title = "Put the whole result on a new sheet";
+        status.textContent = `${result.rowCount.toLocaleString()} row${result.rowCount === 1 ? "" : "s"} · ${result.columns.length} column${result.columns.length === 1 ? "" : "s"} · ${ms < 1000 ? `${Math.max(1, Math.round(ms))} ms` : `${(ms / 1000).toFixed(1)} s`}${result.rowCount > PREVIEW_ROWS ? ` · showing the first ${PREVIEW_ROWS}` : ""}`;
+        preview.replaceChildren(resultTable(result));
       } catch (e) {
-        status.className = "sql-status cleanup-warn";
+        status.textContent = "";
         if (e instanceof SqlError) {
           const hint = /no table/.test(e.reason) ? missingTables(sql, d.workbook()) : null;
-          status.textContent = hint ? `${hint} (line ${e.line}, column ${e.column})` : e.message;
+          showError(hint ? `${hint}. (Line ${e.line}, column ${e.column}.)` : e.message);
           editor.focus();
           editor.setSelectionRange(e.pos, Math.min(sql.length, e.pos + Math.max(1, /\w/.test(sql[e.pos] ?? "") ? (/^\w+/.exec(sql.slice(e.pos))?.[0].length ?? 1) : 1)));
-        } else status.textContent = `The query failed: ${(e as Error).message}`;
+        } else showError(`The query failed: ${(e as Error).message}`);
+      } finally {
+        runBtn.disabled = false;
       }
     }, 0);
-  };
+  }
+  runBtn.addEventListener("click", run);
 
-  const save = () => {
+  toSheet.addEventListener("click", () => {
+    if (!last) return;
+    const { result, sql } = last;
+    const name = nameInput.value.trim() || "Query";
+    void putResultOnSheet(d, result, sql, name)
+      .then(() => toast({ kind: "success", text: `Query result added as a new sheet (${result.rowCount.toLocaleString()} rows)` }))
+      .catch((e: Error) => toast({ kind: "error", title: "Couldn't add the result sheet", text: e.message }));
+    p.close();
+  });
+
+  saveBtn.addEventListener("click", () => {
     const name = nameInput.value.trim();
     if (!name) {
       nameInput.focus();
-      status.className = "sql-status cleanup-warn";
-      status.textContent = "Give the query a name to save it.";
+      nameInput.setAttribute("aria-invalid", "true");
+      nameInput.placeholder = "Give the query a name first";
       return;
     }
+    nameInput.removeAttribute("aria-invalid");
     const saved = getSavedQueries();
     const at = saved.findIndex((q) => q.name.toLowerCase() === name.toLowerCase());
     const next = at >= 0 ? saved.map((q, k) => (k === at ? { name, sql: editor.value } : q)) : [...saved, { name, sql: editor.value }];
     void d.run({ type: "sql.setSaved", params: { queries: next, label: `${at >= 0 ? "update" : "save"} query "${name}"` } });
-    status.className = "sql-status hp-muted";
-    status.textContent = `Saved "${name}" with the workbook.`;
-  };
-
-  const close = () => {
-    stopListening();
-    back.remove();
-    d.focusGrid();
-  };
-
-  const runBtn = button("Run", run, "Run the query (Ctrl+Enter)");
-  runBtn.className = "primary";
-  const closeBtn = button("Close", close);
-  const saveRow = el("div", { className: "sql-save-row" }, nameInput, button("Save", save, "Save this query with the workbook"));
-  const side = el("div", { className: "sql-side" }, el("strong", { textContent: "Tables (sheets)" }), tables, savedBox);
-  const main = el("div", { className: "sql-main" }, editor, saveRow, el("div", { className: "numfmt-actions sql-actions" }, closeBtn, toSheet, runBtn), status, preview);
-
-  body.append(
-    el("h3", { textContent: "SQL query" }),
-    el("p", { textContent: "Each sheet is a table and its first row names the columns. Put names with spaces in double quotes: \"Sales 2024\". Click a name on the left to insert it." }),
-    el("div", { className: "sql-layout" }, side, main),
-  );
+    toast({ kind: "success", text: `${at >= 0 ? "Updated" : "Saved"} the query "${name}" with the workbook` });
+  });
+  nameInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      saveBtn.click();
+    }
+  });
 
   editor.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       run();
-    } else if (e.key === "Tab" && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+    } else if (e.key === "Tab" && !e.shiftKey && !e.ctrlKey && !e.altKey && editor.value.slice(0, editor.selectionStart).split("\n").pop()!.trim() === "") {
+      // Tab indents at the start of a line; elsewhere it moves focus as usual
       e.preventDefault();
       insert("  ");
     }
-  });
-  back.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      close();
-    }
+    // keep the grid's shortcuts out of the editor
     e.stopPropagation();
   });
-  back.addEventListener("mousedown", (e) => {
-    if (e.target === back) close();
+  requestAnimationFrame(() => {
+    editor.focus();
+    editor.setSelectionRange(editor.value.length, editor.value.length);
   });
-  document.body.append(back);
-  editor.focus();
-  editor.setSelectionRange(editor.value.length, editor.value.length);
+  return () => stopListening();
+}
+
+/** The column formats for renderTable: numbers in the result's formats, right-aligned. */
+function resultTable(result: SqlResult): HTMLElement {
+  const n = Math.min(PREVIEW_ROWS, result.rowCount);
+  const rows = Array.from({ length: n }, (_, i) => i);
+  const t = renderTable<number>({
+    columns: result.columns.map((c, k) => ({
+      key: String(k),
+      label: c.name,
+      value: (i: number) => i,
+      format: (i: unknown) => cellText(c, i as number, autoFormat(result, k)),
+      align: c.kind === "number" ? "right" : "left",
+    })),
+    rows,
+    dense: true,
+    zebra: false,
+    maxHeight: "min(52vh, 520px)",
+    empty: "The query returned no rows.",
+    caption: "Query result",
+  });
+  t.element.classList.add("sql-result");
+  return t.element;
+}
+
+/** A result column's format: its own, else #,##0.00 for amounts with decimals. */
+export function autoFormat(result: SqlResult, k: number): string {
+  const fmt = result.numFmts[k];
+  if (fmt && fmt.toLowerCase() !== "general") return fmt;
+  const c = result.columns[k];
+  if (c.kind !== "number") return "";
+  const n = Math.min(c.values.length, 500);
+  let fraction = false;
+  let big = false;
+  for (let i = 0; i < n; i++) {
+    const x = c.values[i];
+    if (x !== x) continue;
+    if (!Number.isInteger(x)) fraction = true;
+    if (Math.abs(x) >= 10000) big = true;
+  }
+  return fraction ? "#,##0.00" : big ? "#,##0" : "";
 }
 
 /** The first rows of a result as an HTML table, numbers in their formats. */

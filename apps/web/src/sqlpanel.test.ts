@@ -3,7 +3,7 @@ import { ActionHistory, BlobStore, type Action } from "@cellforge/actions";
 import { resultRows } from "@cellforge/core";
 import { setCells, sheetActions, type SheetCtx } from "./actions";
 import { BlankSource, EditableSource } from "./editable";
-import { bindSqlStore, getSavedQueries, putResultOnSheet, registerSqlActions, runOnWorkbook, sheetColumnNames, sqlName, type SavedQuery } from "./sqlpanel";
+import { autoFormat, bindSqlStore, exampleSheet, getSavedQueries, putResultOnSheet, registerSqlActions, runOnWorkbook, sheetColumnNames, sqlExamples, sqlName, type SavedQuery } from "./sqlpanel";
 import { Workbook } from "./workbook";
 
 function setup() {
@@ -108,5 +108,49 @@ describe("saved queries", () => {
     await history.undo();
     expect(getSavedQueries()).toEqual([]);
     await expect(history.run({ type: "sql.setSaved", params: { queries: [{ name: "x" }] } })).rejects.toThrow();
+  });
+});
+
+describe("example queries", () => {
+  it("writes finance examples for the sheets at hand, and every one runs", async () => {
+    const { workbook } = await books();
+    const examples = sqlExamples(workbook.sheets.map(exampleSheet), 0);
+    expect(examples.map((e) => e.title)).toEqual(["First 100 rows", "Possible duplicates", "Largest 20", "Totals by month", "Not in Bank Feb"]);
+    for (const ex of examples) expect(() => runOnWorkbook(ex.sql, workbook), ex.title).not.toThrow();
+    const unmatched = runOnWorkbook(examples[4].sql, workbook);
+    expect(resultRows(unmatched).map((r) => r[2])).toEqual(["INV2", "RENT"]);
+    const monthly = runOnWorkbook(examples[3].sql, workbook);
+    expect(resultRows(monthly)).toEqual([
+      [2024, 1, 350.5, 2],
+      [2024, 2, -1200, 1],
+    ]);
+  });
+
+  it("totals by a repeating category when there is one", async () => {
+    const s = setup();
+    await type(s.history, s.gl.id, [
+      ["Vendor", "Amount"],
+      ["Acme", "10"],
+      ["Bolt", "5"],
+      ["Acme", "2.5"],
+    ]);
+    const examples = sqlExamples([exampleSheet(s.gl)]);
+    const total = examples.find((e) => e.title === "Total by Vendor")!;
+    expect(resultRows(runOnWorkbook(total.sql, s.workbook))).toEqual([
+      ["Acme", 12.5, 2],
+      ["Bolt", 5, 1],
+    ]);
+  });
+
+  it("has nothing to offer without sheets", () => {
+    expect(sqlExamples([])).toEqual([]);
+  });
+});
+
+describe("result formats", () => {
+  it("shows amounts with two decimals and big whole numbers with separators", async () => {
+    const { workbook } = await books();
+    const r = runOnWorkbook("SELECT Ref, Amount, Account * 10 AS big, 1 AS one FROM GL", workbook);
+    expect([0, 1, 2, 3].map((k) => autoFormat(r, k))).toEqual(["", "#,##0.00", "#,##0", ""]);
   });
 });
