@@ -57,7 +57,7 @@ function readColumn(src: ChartSource, col: number, r0: number, r1: number): Floa
 }
 
 /** Read names, labels and series out of the chart's range. */
-export function readBlock(src: ChartSource, spec: Pick<ChartSpec, "range" | "seriesIn" | "names" | "labels">): Block {
+export function readBlock(src: ChartSource, spec: Pick<ChartSpec, "range" | "seriesIn" | "names" | "labels" | "series" | "labelCol">): Block {
   const r = clampRange(src, spec.range);
   const byCol = spec.seriesIn === "columns";
   // "point" runs along rows when series are columns, along columns otherwise
@@ -68,11 +68,16 @@ export function readBlock(src: ChartSource, spec: Pick<ChartSpec, "range" | "ser
   const cell = (s: number, p: number) => (byCol ? src.getCell(p, s) : src.getCell(s, p));
   const style = (s: number, p: number) => (byCol ? src.getStyle?.(p, s) : src.getStyle?.(s, p));
   const nameAt = byCol ? r.top : r.left;
-  const labelAt = byCol ? r.left : r.top;
+  // series in columns may name the label column and the series columns (charts/defaults.ts)
+  const labelAt = byCol && spec.labelCol !== undefined && spec.labelCol >= r.left && spec.labelCol <= r.right ? spec.labelCol : byCol ? r.left : r.top;
+  const chosen = byCol && spec.series?.length ? spec.series.filter((c) => c >= r.left && c <= r.right) : null;
+  const order: number[] = [];
+  if (chosen) order.push(...chosen);
+  else for (let s = s0; s <= s1; s++) order.push(s);
 
   const series: Float64Array[] = [];
   const names: string[] = [];
-  for (let s = s0; s <= s1; s++) {
+  for (const s of order) {
     if (byCol) series.push(readColumn(src, s, p0, p1));
     else {
       const a = new Float64Array(Math.max(0, p1 - p0 + 1));
@@ -80,7 +85,7 @@ export function readBlock(src: ChartSource, spec: Pick<ChartSpec, "range" | "ser
       series.push(a);
     }
     const nv = spec.names ? cell(s, nameAt) : null;
-    names.push(nv === null || nv === "" ? `Series ${s - s0 + 1}` : typeof nv === "number" ? formatValue(nv, style(s, nameAt)?.numFmt).text : nv);
+    names.push(nv === null || nv === "" ? `Series ${names.length + 1}` : typeof nv === "number" ? formatValue(nv, style(s, nameAt)?.numFmt).text : nv);
   }
 
   let labelNums: Float64Array | null = null;
@@ -117,7 +122,7 @@ export function readBlock(src: ChartSource, spec: Pick<ChartSpec, "range" | "ser
     labelNums,
     labelTexts,
     series,
-    valueFmt: (s1 >= s0 && p1 >= p0 ? style(s0, p0)?.numFmt : undefined) ?? "",
+    valueFmt: (order.length && p1 >= p0 ? style(order[0], p0)?.numFmt : undefined) ?? "",
     labelFmt: (spec.labels && p1 >= p0 ? style(labelAt, p0)?.numFmt : undefined) ?? "",
     labelsNumeric,
   };

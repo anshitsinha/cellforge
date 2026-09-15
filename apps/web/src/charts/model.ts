@@ -117,6 +117,13 @@ export interface ChartSpec {
    * whenever the sheet changes); `range` only says which sheet it sits on.
    */
   pivot?: PivotChartSource;
+  /**
+   * Series in columns only: the sheet columns to plot (inside the range).
+   * Absent = every column of the range after the label column.
+   */
+  series?: number[];
+  /** Series in columns only: the sheet column with the labels (default: the range's first column). */
+  labelCol?: number;
 }
 
 export function defaultSpec(id: string, range: ChartRange, type: ChartType = "column"): ChartSpec {
