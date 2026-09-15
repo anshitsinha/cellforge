@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { dateToSerial, Table, type ColumnData } from "@cellforge/core";
 import { pivot } from "@cellforge/core";
 import { EditableSource } from "./editable";
-import { defaultZone, describeCell, drillColumns, emptyLayout, looksLikeDates, pivotSheetColumns, pivotTable, placeField, readSheetColumns, toSpec, valueFormat } from "./pivotpanel";
+import { defaultZone, describeCell, drillColumns, emptyLayout, looksLikeDates, pivotSheetColumns, pivotTable, placeField, quickStart, readSheetColumns, toSpec, valueFormat, withValueFormat } from "./pivotpanel";
 import { profileLines, profileOf, topLines } from "./profilepanel";
 
 function text(name: string, values: (string | null)[]): ColumnData {
@@ -212,5 +212,40 @@ describe("pivot panel: the same date twice", () => {
     l = placeField(l, data, 3, "rows");
     expect(l.rows).toEqual([{ field: 3, group: "year" }, { field: 3, group: "month" }]);
     expect(placeField(l, data, 3, "rows").rows.length).toBe(2);
+  });
+});
+
+describe("pivot panel: a first pivot to try", () => {
+  it("suggests the amount by a repeating category", () => {
+    const data = readSheetColumns(sales());
+    expect(quickStart(data)).toEqual({ rows: 0, value: 2 });
+  });
+
+  it("leaves IDs and account codes out, and counts when there is nothing to add up", () => {
+    const src = new EditableSource(
+      new Table([text("Ref", ["R1", "R2", "R3", "R4"]), num("Account", [6000, 6010, 6000, 6010]), text("Status", ["Open", "Closed", "Open", "Open"])]),
+      3,
+    );
+    expect(quickStart(readSheetColumns(src))).toEqual({ rows: 2, value: null });
+  });
+
+  it("has nothing to suggest for a sheet of unique references", () => {
+    const src = new EditableSource(new Table([text("Ref", ["R1", "R2", "R3"])]), 1);
+    expect(quickStart(readSheetColumns(src))).toBeNull();
+  });
+});
+
+describe("pivot panel: number format of the values", () => {
+  it("formats value columns, keeps labels and percentages, and makes General amounts read as amounts", () => {
+    const data = readSheetColumns(sales());
+    let l = placeField(emptyLayout(), data, 0, "rows");
+    l = placeField(l, data, 2, "values");
+    l = { ...l, values: [...l.values, { field: 2, agg: "sum", showAs: "pctGrand" }] };
+    const t = pivotTable(pivot(data.columns, toSpec(l)), data);
+    expect(withValueFormat(t, "#,##0").numFmts).toEqual(["", "#,##0", "0.0%"]);
+    expect(withValueFormat(t, "0.0%").numFmts).toEqual(["", "0.0%", "0.0%"]);
+    expect(withValueFormat(t, "").numFmts).toEqual(["", "#,##0.00", "0.0%"]);
+    const general = { ...t, numFmts: ["", "", "0.0%"] };
+    expect(withValueFormat(general, "").numFmts).toEqual(["", "#,##0.00", "0.0%"]);
   });
 });

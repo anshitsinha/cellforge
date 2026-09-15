@@ -1,123 +1,164 @@
-/* Pivot table builder (pivotpanel.ts) and column profiles (profilepanel.ts). Builds on palette-form and import-dialog. */
+/* Pivot table builder in the side panel (pivotpanel.ts) and column
+   profiles (profilepanel.ts). Tokens only; shared pieces in analysis.css. */
 
-.palette.pivot-dialog,
-.palette.profile-dialog {
-  width: min(var(--dialog-xl), 100%);
-}
-
-.pivot-builder {
-  display: grid;
-  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
-  gap: 10px;
-}
-
-.pivot-builder h4 {
-  margin: 0 0 var(--space-1-5);
+/* ---- fields: a wrap of draggable pills */
+.pivot-search {
+  width: 140px;
+  height: var(--control-h-sm);
   font-size: var(--text-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-}
-
-.pivot-fields {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  gap: var(--space-1-5);
-  min-height: 0;
 }
 
 .pivot-field-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  max-height: 300px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1-5);
+  max-height: 168px;
   overflow-y: auto;
-  display: grid;
-  gap: 3px;
-  align-content: start;
 }
 
 .pivot-field {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
+  display: inline-flex;
+  align-items: center;
   gap: var(--space-1-5);
-  text-align: left;
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
+  height: 28px;
+  min-height: 0;
+  max-width: 100%;
+  padding: 0 var(--space-2-5, 10px) 0 var(--space-1);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
   color: var(--text);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  box-shadow: var(--shadow-1);
   cursor: grab;
-  font: inherit;
 }
 
-.pivot-field span {
+.pivot-field:hover {
+  border-color: var(--border-strong);
+}
+
+.pivot-field:active {
+  cursor: grabbing;
+}
+
+.pivot-field__kind {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--muted);
+}
+
+.pivot-field__name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.pivot-field small {
-  color: var(--muted);
-  flex: none;
+.pivot-field.is-used {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-default));
+  background: var(--accent-soft);
 }
 
-.pivot-field.pivot-used span {
-  font-weight: var(--weight-semibold);
+.pivot-field.is-used .pivot-field__kind {
+  background: var(--accent-solid);
+  color: var(--on-accent);
 }
 
+/* ---- zones: shelves, a label at the left and the fields beside it */
 .pivot-zones {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-2);
+  gap: var(--space-1-5);
 }
 
 .pivot-zone {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-2);
   min-width: 0;
+}
+
+.pivot-zone__title {
+  margin: 0;
+  padding-top: 13px;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
 }
 
 .pivot-drop {
   display: grid;
-  gap: var(--space-1-5);
   align-content: start;
-  min-height: 64px;
-  max-height: 240px;
-  overflow-y: auto;
-  padding: var(--space-1-5);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-md);
-  background: var(--bg);
+  gap: var(--space-1);
+  min-height: 40px;
+  padding: var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+  transition: border-color var(--dur-fast), background var(--dur-fast);
+}
+
+.pivot-zone.is-empty .pivot-drop {
+  border-style: dashed;
+  border-color: var(--border-default);
+  background: transparent;
+  align-content: center;
+}
+
+.pivot-zones.is-dragging .pivot-drop {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-default));
 }
 
 .pivot-drop.pivot-over {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+  border-style: solid;
+  background: var(--accent-soft);
 }
 
 .pivot-empty {
   margin: 0;
-  color: var(--muted);
+  padding-left: var(--space-2);
+  color: var(--text-subtle);
   font-size: var(--text-sm);
-}
-
-.pivot-chip-head {
-  cursor: grab;
+  pointer-events: none;
 }
 
 .pivot-chip {
   display: grid;
   gap: var(--space-1);
-  padding: 5px var(--space-1-5);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--panel);
+  min-width: 0;
+  padding: var(--space-1) var(--space-1) var(--space-1-5) var(--space-1-5);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  box-shadow: var(--shadow-1);
 }
 
 .pivot-chip-head {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: 2px;
+  min-width: 0;
+  cursor: grab;
+}
+
+.pivot-grip {
+  flex: none;
+  width: 6px;
+  height: 12px;
+  margin-right: var(--space-1);
+  background-image: radial-gradient(currentColor 1px, transparent 1.2px);
+  background-size: 3px 4px;
+  color: var(--text-subtle);
 }
 
 .pivot-chip-name {
@@ -126,7 +167,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-weight: var(--weight-semibold);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  color: var(--text-strong);
+}
+
+.pivot-chip-head .btn-icon {
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  color: var(--muted);
 }
 
 .pivot-chip-controls {
@@ -135,23 +185,99 @@
   gap: var(--space-1);
 }
 
-.palette-form .pivot-chip-controls select {
-  padding: 1px 22px 1px var(--space-1-5);
-  background-position: right 6px center;
+.pivot-chip-controls select {
+  flex: 1 1 90px;
+  min-width: 0;
+  height: var(--control-h-sm);
+  min-height: 0;
   font-size: var(--text-sm);
-  max-width: 100%;
+  padding-block: 0;
+  line-height: 1;
 }
 
-.pivot-icon {
-  padding: 0 var(--space-1-5);
-  font-size: var(--text-sm);
-  line-height: 18px;
+.pivot-chip-head .pivot-move {
+  flex: none;
+  width: 68px;
+  height: 22px;
+  min-height: 0;
+  padding-block: 0;
+  padding-left: var(--space-1-5);
+  line-height: 1;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  border-color: transparent;
+  background-color: transparent;
+  box-shadow: none;
 }
 
-.palette-form .pivot-check {
+.pivot-chip-head .pivot-move:hover,
+.pivot-chip-head .pivot-move:focus {
+  border-color: var(--border-default);
+}
+
+.pivot-chip-controls:empty {
+  display: none;
+}
+
+/* ---- filters' item lists */
+.pivot-slicer {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.pivot-slicer input[type="search"] {
+  height: var(--control-h-sm);
+  font-size: var(--text-sm);
+}
+
+.pivot-slicer-all {
   display: flex;
-  gap: var(--space-1-5);
   align-items: center;
+  gap: var(--space-1);
+}
+
+.pivot-slicer-all small {
+  flex: 1;
+}
+
+.pivot-slicer-list {
+  display: grid;
+  gap: 2px;
+  max-height: 160px;
+  overflow-y: auto;
+  font-size: var(--text-sm);
+}
+
+.pivot-slicer-list .an-check {
+  font-size: var(--text-sm);
+}
+
+.pivot-slicer-list .an-check span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pivot-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- result */
+.pivot-start[hidden],
+.pivot-panel [hidden] {
+  display: none !important;
+}
+
+.pivot-format {
+  width: auto;
+  height: var(--control-h-sm);
+  min-height: 0;
+  padding-block: 0;
+  line-height: 1;
+  font-size: var(--text-sm);
 }
 
 .pivot-options {
@@ -159,84 +285,76 @@
   gap: var(--space-4);
 }
 
-.pivot-slicer {
-  display: grid;
-  gap: var(--space-1);
+.pivot-status.is-error {
+  color: var(--danger);
 }
 
-.pivot-slicer-all {
-  display: flex;
-  gap: var(--space-1-5);
-  align-items: center;
+.pivot-table-wrap {
+  max-height: min(50vh, 460px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
 }
 
-.pivot-slicer-all button {
-  padding: 0 var(--space-2);
+.pivot-table {
+  width: 100%;
   font-size: var(--text-sm);
 }
 
-.pivot-slicer-list {
-  display: grid;
-  gap: 1px;
-  max-height: 140px;
-  overflow-y: auto;
-  font-size: var(--text-sm);
-}
-
-.palette-form .pivot-status {
-  margin: 0;
-  color: var(--muted);
-}
-
-.palette-form .pivot-status.cleanup-warn {
-  color: var(--warning);
-}
-
-.pivot-preview {
-  max-height: 36vh;
-}
-
-.pivot-table .pivot-num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+.pivot-table th.pivot-label {
+  text-align: left;
+  font-weight: var(--weight-regular);
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pivot-table thead th {
-  position: sticky;
-  top: 0;
-  background: var(--panel);
-}
-
-.pivot-table tbody th {
-  font-weight: normal;
-}
-
-.pivot-table tr.pivot-subtotal,
-.pivot-table tr.pivot-grand {
   font-weight: var(--weight-semibold);
+  white-space: nowrap;
 }
 
-.pivot-table tr.pivot-subtotal th,
-.pivot-table tr.pivot-grand th {
+.pivot-table td.num {
+  white-space: nowrap;
+}
+
+.pivot-table td.is-negative {
+  color: var(--danger);
+}
+
+.pivot-table tr.pivot-subtotal > *,
+.pivot-table tr.pivot-grand > * {
   font-weight: var(--weight-semibold);
+  color: var(--text-strong);
 }
 
-.pivot-table tr.pivot-grand {
-  border-top: 2px solid var(--text);
+.pivot-table tr.pivot-subtotal {
+  background: var(--surface-1);
+}
+
+.pivot-table tr.pivot-grand > * {
+  border-top: 1.5px solid var(--border-strong);
+  background: var(--surface-1);
 }
 
 .pivot-table td[data-r] {
   cursor: pointer;
 }
 
-.pivot-table td.pivot-picked {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+.pivot-table td[data-r]:hover {
+  background: var(--accent-soft);
 }
 
-.pivot-more {
-  padding: var(--space-1) var(--space-1-5);
+.pivot-table td.pivot-picked {
+  background: var(--accent-soft-strong);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+@media (max-width: 420px) {
+  .pivot-zones {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* --- column profiles ------------------------------------------------------ */
@@ -316,9 +434,3 @@
   color: var(--warning);
 }
 
-@media (max-width: 640px) {
-  .pivot-builder,
-  .pivot-zones {
-    grid-template-columns: 1fr;
-  }
-}
