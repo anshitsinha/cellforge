@@ -14,5 +14,6 @@ you type is sent anywhere. It understands different forms of a word
 (reconcile, reconciling, reconciliation) and the words people use for the same
 thing (rec, VLOOKUP, macro, comment, dupe…).
 
-When a local AI model is loaded (see the developer notes on kiln), it will
-also write a short answer from the passages it found.
+It doesn't need the local AI: the search works the same with or without a
+model. To set up the AI for the ask bar, explanations and categories, see
+[The local AI](46-local-ai.md).

@@ -82,6 +82,13 @@ export class Kiln implements ProposalModel {
     return grammar ? r.text.trim() : r.text;
   }
 
+  /** Free GPU memory now instead of waiting for garbage collection. The Kiln can't be used afterwards. */
+  dispose() {
+    this.history = [];
+    this.lastLogits = null;
+    this.backend.dispose?.();
+  }
+
   /** Clear the KV cache. */
   reset() {
     this.history = [];

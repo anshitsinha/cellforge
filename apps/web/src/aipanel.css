@@ -1,0 +1,294 @@
+/*
+ * The AI panel's content, inside the shared side panel (ui/sidepanel.ts).
+ * Buttons are the kit's (btn-primary, btn-secondary, btn-ghost,
+ * btn-danger-ghost); everything else uses the design tokens.
+ */
+.ai-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  font-size: var(--text-md);
+  line-height: var(--leading);
+  color: var(--text-default);
+}
+
+.ai-panel p {
+  margin: 0;
+}
+
+.ai-panel a {
+  color: var(--accent-default);
+}
+
+.aip-icon {
+  flex: none;
+}
+
+.aip-muted {
+  color: var(--text-muted);
+}
+
+.aip-small {
+  font-size: var(--text-sm);
+}
+
+.aip-note {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.aip-warn {
+  color: var(--warning);
+  font-size: var(--text-sm);
+}
+
+/* privacy */
+.aip-privacy {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--success-soft);
+  border: 1px solid color-mix(in srgb, var(--success-solid) 35%, transparent);
+}
+
+.aip-privacy .aip-icon {
+  color: var(--success);
+  margin-top: 2px;
+}
+
+/* status */
+.aip-status {
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-1);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.aip-status-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.aip-status h3 {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.aip-status-text {
+  display: grid;
+  gap: var(--space-1-5);
+}
+
+.aip-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-full);
+  flex: none;
+  background: var(--text-subtle);
+}
+
+.aip-status-ready .aip-dot {
+  background: var(--success-solid);
+  box-shadow: 0 0 0 3px var(--success-soft);
+}
+
+.aip-status-downloading .aip-dot,
+.aip-status-loading .aip-dot {
+  background: var(--warning-solid);
+  animation: aip-pulse 1.4s ease-in-out infinite;
+}
+
+.aip-status-error .aip-dot {
+  background: var(--danger-solid);
+}
+
+@keyframes aip-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.aip-error {
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--danger-solid) 45%, transparent);
+  background: var(--danger-soft);
+  display: grid;
+  gap: var(--space-1-5);
+}
+
+/* progress */
+.aip-progress {
+  height: 6px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--surface-3);
+}
+
+.aip-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent-solid);
+  border-radius: var(--radius-full);
+  transition: width 0.2s linear;
+}
+
+.aip-progress-indeterminate .aip-progress-fill {
+  width: 35%;
+  animation: aip-slide 1.3s ease-in-out infinite;
+}
+
+@keyframes aip-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+.aip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.aip-inline {
+  display: inline-flex;
+  gap: var(--space-2);
+}
+
+/* model cards */
+.aip-cards {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.aip-card {
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  background: var(--surface-2);
+  display: grid;
+  gap: var(--space-1-5);
+}
+
+.aip-card-recommended {
+  border-color: color-mix(in srgb, var(--accent-default) 55%, var(--border-default));
+}
+
+.aip-card-inuse {
+  border-color: color-mix(in srgb, var(--success-solid) 55%, var(--border-default));
+}
+
+.aip-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.aip-card h4 {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.aip-size {
+  color: var(--text-muted);
+  font-weight: var(--weight-medium);
+}
+
+.aip-badges {
+  display: flex;
+  gap: var(--space-1);
+  flex: none;
+}
+
+.aip-facts {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.aip-card .aip-actions {
+  margin-top: var(--space-1);
+}
+
+/* own files */
+.aip-own {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1-5) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.aip-own-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* what you can do */
+.aip-uses {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1-5);
+}
+
+.aip-use {
+  width: 100%;
+  height: auto;
+  text-align: left;
+  font: inherit;
+  display: grid;
+  gap: var(--space-0-5);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--surface-2);
+  color: var(--text-default);
+  cursor: pointer;
+  white-space: normal;
+}
+
+.aip-use:hover {
+  border-color: var(--accent-default);
+  background: var(--surface-3);
+}
+
+.aip-use span {
+  color: var(--text-muted);
+}
+
+.aip-use em {
+  color: var(--accent-default);
+  font-style: normal;
+}
+
+.aip-use small {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aip-status-downloading .aip-dot,
+  .aip-status-loading .aip-dot,
+  .aip-progress-indeterminate .aip-progress-fill {
+    animation: none;
+  }
+}

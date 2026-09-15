@@ -173,6 +173,9 @@ interface ProposalModel {
 - The KV cache persists between calls and the longest common token prefix
   is reused, so a tool loop that re-sends the same system prompt and
   catalog only pays for the new turn. `kiln.reset()` clears it.
+- `kiln.dispose()` frees the GPU buffers (destroys the WebGPU device) right
+  away instead of waiting for garbage collection; the app calls it before
+  loading another model so two are never held at once.
 
 ## Model manager
 
@@ -194,6 +197,10 @@ interface ProposalModel {
   network, so a cached model works offline.
 - Nothing is downloaded unless `ensure()` is called with a spec that has a
   `url`.
+- The app's catalog of downloadable models (pinned Hugging Face URLs,
+  exact sizes and SHA-256s, each checked to use only tensor types kiln runs)
+  lives in `apps/web/src/aimodels.ts`; `apps/web/src/localmodel.ts` drives
+  `ModelManager.download()` from the AI panel's Download button.
 
 ## Tests and benchmark
 

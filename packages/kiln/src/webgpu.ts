@@ -477,6 +477,11 @@ export class WebGpuBackend implements Backend {
     return out;
   }
 
+  /** Release the GPU device and every buffer on it. */
+  dispose() {
+    this.device.destroy();
+  }
+
   /** Build the backend, or return null when WebGPU (or a suitable adapter) is missing. */
   static async create(config: ModelConfig, weights: ModelWeights, contextLength: number): Promise<WebGpuBackend | null> {
     if (!webGpuAvailable()) return null;

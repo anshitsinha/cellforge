@@ -80,3 +80,53 @@
   color: var(--on-accent);
   border-color: var(--accent-solid);
 }
+
+/* the local AI line under the examples: what it adds, its state, set it up */
+.askbar-ai {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-2);
+  align-items: start;
+  margin: var(--space-1) 0 var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--accent-soft);
+}
+
+.askbar-ai p {
+  margin: 0;
+  font-size: var(--text-md);
+  line-height: var(--leading);
+}
+
+.askbar-ai > button {
+  grid-column: 2;
+  justify-self: start;
+}
+
+.askbar-ai-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: var(--radius-full);
+  background: var(--text-subtle);
+}
+
+.askbar-ai-ready .askbar-ai-dot {
+  background: var(--success-solid);
+}
+
+.askbar-ai-loading .askbar-ai-dot,
+.askbar-ai-downloading .askbar-ai-dot,
+.askbar-ai-paused .askbar-ai-dot {
+  background: var(--warning-solid);
+}
+
+.askbar-ai-error .askbar-ai-dot {
+  background: var(--danger-solid);
+}
+
+.askbar-ai-setup {
+  margin-top: var(--space-1);
+}

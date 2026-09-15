@@ -169,3 +169,23 @@ describe("model cache and downloads", () => {
     expect(await m.isCached(spec)).toBe(false);
   });
 });
+
+describe("checkpoints", () => {
+  it("each checkpoint at least doubles the committed file, so reopening (which copies it in OPFS) stays linear", async () => {
+    const file = Uint8Array.from({ length: 200_000 }, (_, i) => (i * 31) & 255);
+    const spec: ModelSpec = { id: "big", url: "https://models.invalid/big.gguf", sha256: createHash("sha256").update(file).digest("hex"), bytes: file.length };
+    const storage = new MemoryStorage();
+    const reopenedAt: number[] = [];
+    const open = storage.openWriter.bind(storage);
+    storage.openWriter = async (name) => {
+      reopenedAt.push((await storage.size(name)) ?? 0);
+      return open(name);
+    };
+    const { fetch } = server(file, { chunk: 1000 });
+    await new ModelManager({ storage, fetch }).ensure(spec, { checkpointBytes: 1000 });
+    const copied = reopenedAt.reduce((a, b) => a + b, 0);
+    expect(reopenedAt.length).toBeGreaterThan(3);
+    expect(reopenedAt.length).toBeLessThan(12);
+    expect(copied).toBeLessThan(2 * file.length);
+  });
+});
