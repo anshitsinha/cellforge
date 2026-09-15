@@ -4,16 +4,19 @@
  * Use / Remove, "I already have a .gguf file", what stays private, and what
  * the AI can do, with examples that run.
  *
- * Self-contained right-side panel for now (its own CSS, with CSS variables
- * that fall back to the app's current ones). To move it into the shared side
- * panel later, mount `buildAiPanel()`'s element there instead of
- * `openAiPanel()` appending it to the body.
+ * It lives in the shared side panel (id "ai"), so it sits beside the grid
+ * and Back returns to it after a tool it opened. Download and load results
+ * also show as toasts, wherever the user is.
  *
  * For the app shell's "Ask AI" button: `aiStatus()`, `onAiStatus(cb)` and
  * `aiBadge(status)` give the state, a dot colour and a label; clicking the
  * button calls `openAiPanel(deps)` (or `toggleAiPanel(deps)`).
  */
 import "./aipanel.css";
+import { confirmDialog } from "./ui/confirm";
+import { icon } from "./ui/icons";
+import { closeSidePanel, currentSidePanel, openSidePanel, toggleSidePanel, type SidePanelContext } from "./ui/sidepanel";
+import { toast } from "./ui/toast";
 import type { HardwareInfo } from "@cellforge/kiln";
 import { AI_MODELS, describeHardware, formatBytes, modelFit, recommendModel, type CatalogModel } from "./aimodels";
 import { aiStatus, cachedHardware, localAi, onAiStatus, pickModelFile, type AiStatus } from "./localmodel";
@@ -71,46 +74,25 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLEle
   return e;
 }
 
-const SVG = {
-  sparkle:
-    '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2l1.9 5.6L19.5 9.5l-5.6 1.9L12 17l-1.9-5.6L4.5 9.5l5.6-1.9zM19 14l.9 2.6 2.6.9-2.6.9L19 21l-.9-2.6-2.6-.9 2.6-.9zM5 15l.6 1.6 1.6.6-1.6.6L5 19.4l-.6-1.6L2.8 17.2l1.6-.6z"/></svg>',
-  lock: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 1 1 6 0v3z"/></svg>',
-  close: '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6L19 6.4 17.6 5 12 10.6z"/></svg>',
-};
-const icon = (name: keyof typeof SVG) => {
-  const s = document.createElement("span");
-  s.className = "aip-icon";
-  s.innerHTML = SVG[name];
-  return s;
+const kitIcon = (name: string) => {
+  const i = icon(name);
+  i.classList.add("aip-icon");
+  return i;
 };
 
-const button = (text: string, onClick: () => unknown, kind: "primary" | "secondary" | "quiet" | "danger" = "secondary", title?: string) => {
-  const b = h("button", { type: "button", className: `aip-btn aip-btn-${kind}`, textContent: text });
+const BTN = { primary: "btn-primary", secondary: "btn-secondary", quiet: "btn-ghost", danger: "btn-danger-ghost" } as const;
+const button = (text: string, onClick: () => unknown, kind: keyof typeof BTN = "secondary", title?: string) => {
+  const b = h("button", { type: "button", className: `${BTN[kind]} btn-sm`, textContent: text });
   if (title) b.title = title;
   b.addEventListener("click", () => void onClick());
   return b;
 };
 
-/** A button that asks again before doing something it can't undo. */
-const confirmButton = (text: string, sure: string, onClick: () => unknown) => {
-  const b = button(text, () => undefined, "quiet");
-  let armed = false;
-  b.addEventListener("click", () => {
-    if (!armed) {
-      armed = true;
-      b.textContent = sure;
-      b.classList.add("aip-btn-danger");
-      setTimeout(() => {
-        armed = false;
-        b.textContent = text;
-        b.classList.remove("aip-btn-danger");
-      }, 4000);
-      return;
-    }
-    void onClick();
-  });
-  return b;
-};
+/** A Remove button that asks first (the shared confirm dialog). */
+const confirmButton = (text: string, question: { title: string; text: string; confirm: string }, onClick: () => unknown) =>
+  button(text, async () => {
+    if (await confirmDialog({ ...question, danger: true })) await onClick();
+  }, "danger");
 
 const progressBar = (fraction: number | null, label: string) => {
   const bar = h("div", { className: "aip-progress" + (fraction === null ? " aip-progress-indeterminate" : "") }, h("div", { className: "aip-progress-fill" }));
@@ -137,59 +119,64 @@ const speed = (tps: number | null) => (tps === null ? null : tps >= 10 ? `about 
 
 // ---------------------------------------------------------------- panel --
 
-let open: { root: HTMLElement; close: () => void } | null = null;
+export const AI_PANEL_ID = "ai";
 
-export const isAiPanelOpen = () => open !== null;
+export const isAiPanelOpen = () => currentSidePanel() === AI_PANEL_ID;
 
 export function closeAiPanel() {
-  open?.close();
+  if (isAiPanelOpen()) closeSidePanel();
 }
 
-export function toggleAiPanel(deps: AiPanelDeps) {
-  if (open) closeAiPanel();
-  else openAiPanel(deps);
-}
-
-/** Open the AI panel (or bring it to the front). */
-export function openAiPanel(deps: AiPanelDeps): void {
-  if (open) {
-    open.root.querySelector<HTMLElement>(".aip-close")?.focus();
-    return;
-  }
-  const panel = buildAiPanel(deps, () => closeAiPanel());
-  document.body.append(panel.root);
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape" && panel.root.contains(document.activeElement)) {
-      e.preventDefault();
-      closeAiPanel();
-    }
-  };
-  document.addEventListener("keydown", onKey);
-  open = {
-    root: panel.root,
-    close: () => {
-      document.removeEventListener("keydown", onKey);
-      panel.dispose();
-      panel.root.remove();
-      open = null;
-      deps.focusGrid?.();
+const panelOptions = (deps: AiPanelDeps) => {
+  watchAiToasts();
+  return {
+    id: AI_PANEL_ID,
+    title: "Local AI",
+    subtitle: "Runs on this computer",
+    render: (p: SidePanelContext) => {
+      const built = buildAiPanel(deps);
+      p.body.append(built.root);
+      return built.dispose;
     },
+    onClose: () => deps.focusGrid?.(),
   };
-  (panel.root.querySelector<HTMLElement>(".aip-primary-action") ?? panel.root.querySelector<HTMLElement>(".aip-close"))?.focus();
+};
+
+/** Open the AI panel in the side panel (it replaces whatever tool is showing; Back returns to it). */
+export function openAiPanel(deps: AiPanelDeps): void {
+  if (isAiPanelOpen()) return;
+  openSidePanel(panelOptions(deps));
 }
 
-/** The panel's element and its lifecycle, for whichever host shows it. */
-export function buildAiPanel(deps: AiPanelDeps, onClose: () => void): { root: HTMLElement; dispose: () => void } {
-  const root = h("aside", { className: "ai-panel" });
-  root.setAttribute("role", "complementary");
-  root.setAttribute("aria-label", "Local AI");
-  const head = h("header", { className: "aip-head" }, icon("sparkle"), h("h2", { textContent: "Local AI" }));
-  const closeBtn = h("button", { type: "button", className: "aip-close", title: "Close (Esc)" }, icon("close"));
-  closeBtn.setAttribute("aria-label", "Close the AI panel");
-  closeBtn.addEventListener("click", onClose);
-  head.append(closeBtn);
-  const body = h("div", { className: "aip-body" });
-  root.append(head, body);
+/** For a toolbar button: open the AI panel, or close it if it's showing. */
+export function toggleAiPanel(deps: AiPanelDeps): void {
+  toggleSidePanel(panelOptions(deps));
+}
+
+let toastsOn = false;
+/**
+ * Results of downloads and loads as toasts, wherever the user is. Started by
+ * the first openAiPanel(); a shell may call it at start-up too.
+ */
+export function watchAiToasts(): void {
+  if (toastsOn) return;
+  toastsOn = true;
+  let prev = aiStatus();
+  onAiStatus((s) => {
+    const was = prev;
+    prev = s;
+    if (s.error && s.error !== was.error) toast({ kind: "error", title: "Local AI", text: s.error });
+    else if (s.state === "ready" && was.state !== "ready" && s.ready) {
+      const r = s.ready;
+      toast({ kind: "success", title: `Local AI ready: ${r.name}`, text: [r.backend === "GPU" ? "Runs on the graphics card" : "Runs on the processor", speed(r.tokensPerSecond)].filter(Boolean).join(", ") + ". Try it with Ctrl+/." });
+    } else if (was.download && !was.download.paused && s.download?.paused && !s.error) toast({ kind: "info", text: `Download of ${was.download.name} paused. Resume it in the AI panel.` });
+  });
+}
+
+/** The panel's content and its clean-up, for whichever host shows it. */
+export function buildAiPanel(deps: AiPanelDeps): { root: HTMLElement; dispose: () => void } {
+  const root = h("div", { className: "ai-panel" });
+  const body = root;
 
   let hw: HardwareInfo | null = null;
   let hwFailed = false;
@@ -198,11 +185,8 @@ export function buildAiPanel(deps: AiPanelDeps, onClose: () => void): { root: HT
     .catch(() => (hwFailed = true))
     .finally(() => draw(aiStatus(), true));
 
-  /** close the panel, then do something that may open another panel in the same place */
-  const thenClose = (f: () => unknown) => () => {
-    onClose();
-    void f();
-  };
+  /** run something from the panel (a tool opening in the side panel replaces this one; Back returns) */
+  const thenClose = (f: () => unknown) => () => void f();
   const runCommand = (id: string) => deps.commands().find((c) => c.id === id)?.run();
 
   let lastKey = "";
@@ -228,7 +212,7 @@ export function buildAiPanel(deps: AiPanelDeps, onClose: () => void): { root: HT
     h(
       "section",
       { className: "aip-privacy" },
-      icon("lock"),
+      kitIcon("shield"),
       h(
         "p",
         {},
@@ -321,7 +305,7 @@ export function buildAiPanel(deps: AiPanelDeps, onClose: () => void): { root: HT
   };
 
   const computer = () => {
-    const sec = h("section", { className: "aip-section" }, h("h3", { textContent: "This computer" }));
+    const sec = h("section", { className: "cf-section aip-section" }, h("h3", { className: "cf-section__title", textContent: "This computer" }));
     if (!hw) sec.append(h("p", { className: "aip-muted", textContent: hwFailed ? "Couldn't check this computer; all models are shown." : "Checking what this computer can run…" }));
     else {
       const rec = recommendModel(hw);
@@ -331,7 +315,7 @@ export function buildAiPanel(deps: AiPanelDeps, onClose: () => void): { root: HT
   };
 
   const models = (s: AiStatus) => {
-    const sec = h("section", { className: "aip-section" }, h("h3", { textContent: "Recommended models" }));
+    const sec = h("section", { className: "cf-section aip-section" }, h("h3", { className: "cf-section__title", textContent: "Recommended models" }));
     const rec = hw ? recommendModel(hw) : null;
     const list = h("div", { className: "aip-cards" });
     for (const m of AI_MODELS) list.append(card(m, s, rec?.id === m.id));
@@ -349,8 +333,8 @@ export function buildAiPanel(deps: AiPanelDeps, onClose: () => void): { root: HT
 
     const el = h("article", { className: "aip-card" + (recommended ? " aip-card-recommended" : "") + (inUse ? " aip-card-inuse" : "") });
     const badges = h("div", { className: "aip-badges" });
-    if (inUse) badges.append(h("span", { className: "aip-badge aip-badge-ready", textContent: "In use" }));
-    if (recommended) badges.append(h("span", { className: "aip-badge aip-badge-rec", textContent: "Recommended" }));
+    if (inUse) badges.append(h("span", { className: "cf-badge cf-badge--success", textContent: "In use" }));
+    if (recommended) badges.append(h("span", { className: "cf-badge cf-badge--accent", textContent: "Recommended" }));
     el.append(h("div", { className: "aip-card-head" }, h("h4", {}, h("span", { className: "aip-size", textContent: m.size }), " ", m.name), badges));
     el.append(h("p", { textContent: m.goodFor }));
     const facts = h("p", { className: "aip-facts" });
@@ -383,7 +367,7 @@ export function buildAiPanel(deps: AiPanelDeps, onClose: () => void): { root: HT
         u.dataset.focusKey = `use-${m.id}`;
         actions.append(u);
       }
-      const r = confirmButton("Remove", `Remove (frees ${formatBytes(m.bytes)})?`, () => localAi.remove(m.file));
+      const r = confirmButton("Remove", { title: `Remove ${m.name}?`, text: `It is deleted from this browser and frees ${formatBytes(m.bytes)}. You can download it again later.`, confirm: "Remove model" }, () => localAi.remove(m.file));
       r.dataset.focusKey = `remove-${m.id}`;
       actions.append(r, h("span", { className: "aip-muted aip-small", textContent: "Kept in this browser" }));
     } else {
@@ -398,18 +382,18 @@ export function buildAiPanel(deps: AiPanelDeps, onClose: () => void): { root: HT
   };
 
   const ownFile = (s: AiStatus) => {
-    const sec = h("section", { className: "aip-section" }, h("h3", { textContent: "Your own model file" }));
+    const sec = h("section", { className: "cf-section aip-section" }, h("h3", { className: "cf-section__title", textContent: "Your own model file" }));
     const own = s.stored.filter((x) => !x.catalogId && !x.partial);
     for (const f of own) {
       const inUse = s.ready?.file === f.file;
       const row = h("div", { className: "aip-own" }, h("span", { className: "aip-own-name", textContent: f.name, title: f.file }), h("span", { className: "aip-muted aip-small", textContent: formatBytes(f.bytes) }));
-      if (inUse) row.append(h("span", { className: "aip-badge aip-badge-ready", textContent: "In use" }));
+      if (inUse) row.append(h("span", { className: "cf-badge cf-badge--success", textContent: "In use" }));
       else {
         const u = button("Use", () => localAi.useStored(f.file).catch(() => undefined));
         u.dataset.focusKey = `use-own-${f.file}`;
         row.append(u);
       }
-      const r = confirmButton("Remove", "Remove?", () => localAi.remove(f.file));
+      const r = confirmButton("Remove", { title: `Remove ${f.name}?`, text: `It is deleted from this browser and frees ${formatBytes(f.bytes)}. The file on your disk isn't touched.`, confirm: "Remove model" }, () => localAi.remove(f.file));
       r.dataset.focusKey = `remove-own-${f.file}`;
       row.append(r);
       sec.append(row);
@@ -428,7 +412,7 @@ export function buildAiPanel(deps: AiPanelDeps, onClose: () => void): { root: HT
 
   const uses = (s: AiStatus) => {
     const ready = s.state === "ready";
-    const sec = h("section", { className: "aip-section" }, h("h3", { textContent: "What you can do with it" }));
+    const sec = h("section", { className: "cf-section aip-section" }, h("h3", { className: "cf-section__title", textContent: "What you can do with it" }));
     const items: { title: string; text: string; example?: string; go: () => unknown; works?: string }[] = [
       {
         title: "Ask in your own words",
@@ -475,7 +459,7 @@ export function buildAiPanel(deps: AiPanelDeps, onClose: () => void): { root: HT
   };
 
   const more = () => {
-    const sec = h("section", { className: "aip-section aip-more" });
+    const sec = h("section", { className: "cf-section aip-section aip-more" });
     const b = button("Read the guide: Local AI", thenClose(() => (deps.askGuide ? deps.askGuide("local AI model download") : runCommand("ask-guide"))), "quiet");
     sec.append(b);
     return sec;

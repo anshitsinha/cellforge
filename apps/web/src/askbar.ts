@@ -282,7 +282,7 @@ export function setupAskBar(d: AskBarDeps): { open: (text?: string) => void; clo
             : "These work without AI. Set up the local AI to also ask in your own words, explain numbers and suggest categories. It runs on this computer; nothing you type is sent anywhere.";
           action = "Set up the local AI…";
       }
-      const b = el("button", s.state === "none" ? "askbar-ai-setup" : "askbar-link", action);
+      const b = el("button", s.state === "none" ? "btn-primary btn-sm askbar-ai-setup" : "askbar-link", action);
       b.type = "button";
       b.addEventListener("click", () => {
         close();
