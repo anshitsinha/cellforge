@@ -293,6 +293,11 @@ export class Grid {
     this.resize();
   }
 
+  /** Re-read the theme colours and repaint (after an in-app theme switch; the OS switch is handled already). */
+  refreshTheme(): void {
+    this.onThemeChange();
+  }
+
   setSource(source: DataSource): void {
     this.source = source;
     this.columns = new ColumnLayout(source.colCount, this.defaultColumnWidth);
