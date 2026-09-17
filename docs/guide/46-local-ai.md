@@ -6,7 +6,7 @@ formulas, category suggestions and spelling variants. Everything else in
 cellforge works without it, and every place that uses it also works, in a
 plainer way, when it isn't there.
 
-Open the **AI panel** from the **Ask AI** button in the toolbar, from the
+Open the **Private AI** panel from the **Ask AI** button in the toolbar, from the
 ask bar (Ctrl+/) with **Set up the local AI…**, or from the command palette
 with **AI: set up and manage the local model…**
 
@@ -23,9 +23,18 @@ model is downloaded it works offline.
 
 ## Getting a model
 
-The AI panel shows what this computer has (memory, processor cores, whether
-the browser can use the graphics card, free storage for this site) and marks
-one model as **Recommended** for it. There are two ways to get a model.
+The AI panel walks you through three steps:
+
+1. **Start without a model.** The ask bar already understands common
+   requests, so this one is done from the start.
+2. **Get a model.** The panel checks this computer (memory, whether the
+   browser can use the graphics card, free storage for this site) and shows
+   the model that suits it, marked **Recommended for this computer**. The
+   other sizes are one click away.
+3. **Load it once.** After that it's kept in the browser and loads by
+   itself the first time something needs it.
+
+There are two ways to get a model.
 
 **Download one from the list.** Press **Download** on a model card. The file
 goes straight into the browser's private storage for this site, with a

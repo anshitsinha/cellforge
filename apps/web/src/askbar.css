@@ -86,12 +86,24 @@
   display: grid;
   grid-template-columns: auto 1fr;
   gap: var(--space-1) var(--space-2);
-  align-items: start;
-  margin: var(--space-1) 0 var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-default);
+  align-items: center;
+  margin: var(--space-3) 0 var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--accent-default) 25%, var(--border-default));
   border-radius: var(--radius-lg);
-  background: var(--accent-soft);
+  background: linear-gradient(180deg, var(--accent-soft), transparent 80%), var(--surface-2);
+}
+
+.askbar-ai .askbar-ai-kicker {
+  color: var(--accent-default);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.02em;
+}
+
+.askbar-ai > p:not(.askbar-ai-kicker) {
+  grid-column: 2;
+  color: var(--text-muted);
 }
 
 .askbar-ai p {
