@@ -18,7 +18,7 @@ import { icon } from "./ui/icons";
 import { closeSidePanel, currentSidePanel, openSidePanel, toggleSidePanel, type SidePanelContext } from "./ui/sidepanel";
 import { toast } from "./ui/toast";
 import type { HardwareInfo } from "@cellforge/kiln";
-import { AI_MODELS, describeHardware, formatBytes, modelFit, recommendModel, type CatalogModel } from "./aimodels";
+import { AI_MODELS, formatBytes, modelFit, recommendModel, type CatalogModel } from "./aimodels";
 import { aiStatus, cachedHardware, localAi, onAiStatus, pickModelFile, type AiStatus } from "./localmodel";
 
 export { aiStatus, onAiStatus, type AiStatus } from "./localmodel";
@@ -131,8 +131,8 @@ const panelOptions = (deps: AiPanelDeps) => {
   watchAiToasts();
   return {
     id: AI_PANEL_ID,
-    title: "Local AI",
-    subtitle: "Runs on this computer",
+    title: "Private AI",
+    subtitle: "Runs on this computer · nothing is sent anywhere",
     render: (p: SidePanelContext) => {
       const built = buildAiPanel(deps);
       p.body.append(built.root);
@@ -176,293 +176,286 @@ export function watchAiToasts(): void {
 /** The panel's content and its clean-up, for whichever host shows it. */
 export function buildAiPanel(deps: AiPanelDeps): { root: HTMLElement; dispose: () => void } {
   const root = h("div", { className: "ai-panel" });
-  const body = root;
 
   let hw: HardwareInfo | null = null;
   let hwFailed = false;
+  let showOthers = false;
   void cachedHardware()
     .then((x) => (hw = x))
     .catch(() => (hwFailed = true))
     .finally(() => draw(aiStatus(), true));
 
-  /** run something from the panel (a tool opening in the side panel replaces this one; Back returns) */
-  const thenClose = (f: () => unknown) => () => void f();
   const runCommand = (id: string) => deps.commands().find((c) => c.id === id)?.run();
+  const recommended = () => (hw ? recommendModel(hw) : (AI_MODELS.find((m) => m.size === "Medium") ?? AI_MODELS[0]));
 
   let lastKey = "";
   const draw = (s: AiStatus, force = false) => {
-    const key = JSON.stringify([s.state, s.error, s.loading, s.ready, s.stored, s.download && [s.download.id, s.download.paused, s.download.phase]]);
+    const key = JSON.stringify([s.state, s.error, s.loading, s.ready, s.stored, s.download && [s.download.id, s.download.paused, s.download.phase], showOthers]);
     if (!force && key === lastKey) {
       // only the numbers moved: update progress in place (keeps keyboard focus on Pause/Cancel)
       if (s.download) {
-        for (const bar of body.querySelectorAll<HTMLElement>("[data-progress]")) if (!bar.classList.contains("aip-progress-indeterminate")) setProgress(bar, s.download.loaded / s.download.total);
-        for (const t of body.querySelectorAll<HTMLElement>("[data-progress-text]")) t.textContent = downloadText(s.download);
+        for (const bar of root.querySelectorAll<HTMLElement>("[data-progress]")) if (!bar.classList.contains("aip-progress-indeterminate")) setProgress(bar, s.download.loaded / s.download.total);
+        for (const t of root.querySelectorAll<HTMLElement>("[data-progress-text]")) t.textContent = downloadText(s.download);
       }
       return;
     }
     lastKey = key;
-    const focused = document.activeElement instanceof HTMLElement && body.contains(document.activeElement) ? document.activeElement.dataset.focusKey : undefined;
-    body.replaceChildren(privacy(), statusCard(s), computer(), models(s), ownFile(s), uses(s), more());
-    if (focused) body.querySelector<HTMLElement>(`[data-focus-key="${focused}"]`)?.focus();
+    const focused = document.activeElement instanceof HTMLElement && root.contains(document.activeElement) ? document.activeElement.dataset.focusKey : undefined;
+    root.replaceChildren(hero(), steps(s), ...[kept(s)].filter((x): x is HTMLElement => !!x), uses(s), fine());
+    if (focused) root.querySelector<HTMLElement>(`[data-focus-key="${focused}"]`)?.focus();
   };
 
-  // ---- sections --------------------------------------------------------
+  // ---- hero ------------------------------------------------------------
 
-  const privacy = () =>
+  const hero = () =>
     h(
-      "section",
-      { className: "aip-privacy" },
-      kitIcon("shield"),
-      h(
-        "p",
-        {},
-        h("strong", { textContent: "Runs on this computer." }),
-        " Your sheets and what you type are never sent anywhere. The only time cellforge uses the network for AI is a model download you start, from the site named on the button.",
+      "header",
+      { className: "aip-hero" },
+      h("h2", { className: "aip-title", textContent: "An AI assistant that never sees the internet." }),
+      h("p", {
+        className: "aip-lede",
+        textContent: "Say what you want in plain English and see what will change before anything does. The model runs inside this tab: nothing you type, and none of your data, leaves this computer.",
+      }),
+    );
+
+  // ---- the three steps -------------------------------------------------
+
+  const step = (n: number, state: "done" | "current" | "todo", title: string, text: string, ...body: Kid[]) => {
+    const mark = h("span", { className: "aip-step-n" });
+    mark.setAttribute("aria-hidden", "true");
+    if (state === "done") mark.append(kitIcon("check"));
+    else mark.textContent = String(n);
+    const li = h("li", { className: `aip-step aip-step--${state}` }, mark, h("p", { className: "aip-step-text" }, h("b", { textContent: title }), text ? " " + text : ""));
+    // what the step holds (buttons, the model card, progress) uses the card's full width
+    for (const k of body) {
+      if (k instanceof HTMLElement) k.classList.add("aip-step-extra");
+      if (k) li.append(k);
+    }
+    li.setAttribute("aria-label", `Step ${n}${state === "done" ? ", done" : state === "current" ? ", next" : ""}: ${title}`);
+    return li;
+  };
+
+  const steps = (s: AiStatus) => {
+    const haveModel = s.stored.some((x) => !x.partial) || !!s.ready;
+    const ready = s.state === "ready";
+    const ol = h("ol", { className: "aip-steps" });
+    ol.setAttribute("aria-label", "Getting started with the local AI");
+
+    const tryBar = button("Open the ask bar", () => deps.askBar(), "quiet");
+    tryBar.dataset.focusKey = "try-bar";
+    ol.append(step(1, "done", "Start without a model.", "The ask bar (Ctrl+/) already understands common requests: sort, filter, highlight, freeze, find duplicates.", ready ? null : h("div", { className: "aip-actions" }, tryBar)));
+
+    ol.append(
+      step(
+        2,
+        haveModel ? "done" : "current",
+        "Get a model.",
+        haveModel ? "It's kept in this browser's private storage." : "One download, kept in this browser for next time.",
+        haveModel ? null : getModel(s),
       ),
     );
 
-  const statusCard = (s: AiStatus) => {
-    const card = h("section", { className: `aip-status aip-status-${s.state}` });
-    card.setAttribute("aria-live", "polite");
-    const dot = h("span", { className: "aip-dot" });
-    const title = h("h3", {});
-    const lines = h("div", { className: "aip-status-text" });
-    const actions = h("div", { className: "aip-actions" });
-    const d = s.download;
-    switch (s.state) {
-      case "none":
-        title.textContent = "No AI model yet";
-        lines.append(
-          h("p", {
-            textContent: "Pick a model below. It downloads once, is kept in this browser, and works offline after that. Everything else in cellforge works without it.",
-          }),
-        );
-        break;
-      case "stored": {
-        title.textContent = "Kept in this browser, not loaded yet";
-        lines.append(h("p", { textContent: `${s.label.replace(/; it loads when needed$/, "")}. It loads by itself the first time a feature needs it, or load it now.` }));
-        const b = button("Load it now", () => localAi.restore(), "primary");
-        b.classList.add("aip-primary-action");
-        b.dataset.focusKey = "load-now";
-        actions.append(b);
-        break;
-      }
-      case "downloading":
-        title.textContent = d!.phase === "checking" ? `Checking ${d!.name}` : `Downloading ${d!.name}`;
-        lines.append(progressBar(d!.phase === "checking" ? null : d!.loaded / d!.total, "Download progress"), h("p", { className: "aip-muted", dataset: { progressText: "" }, textContent: downloadText(d!) }));
-        if (d!.phase === "downloading") actions.append(pauseCancel());
-        break;
-      case "paused":
-        title.textContent = "Download paused";
-        if (d) {
-          lines.append(progressBar(d.loaded / d.total, "Download progress"), h("p", { className: "aip-muted", textContent: `${d.name}: ${downloadText(d)}. It carries on from here when you resume.` }));
-        } else {
-          const p = s.stored.find((x) => x.partial);
-          lines.append(h("p", { className: "aip-muted", textContent: `${p?.name ?? "A model"} is partly downloaded (${formatBytes(p?.bytes ?? 0)}). Resume it from its card below.` }));
-        }
-        break;
-      case "loading":
-        title.textContent = `Loading ${s.loading!.name}`;
-        lines.append(progressBar(null, "Loading"), h("p", { className: "aip-muted", textContent: s.loading!.step }));
-        break;
-      case "ready": {
-        const r = s.ready!;
-        title.textContent = `Ready: ${r.name}`;
-        const where = r.backend === "GPU" ? "runs on the graphics card" : "runs on the processor";
-        lines.append(h("p", { textContent: [formatBytes(r.size), where, speed(r.tokensPerSecond)].filter(Boolean).join(" · ") }));
-        if (r.gpuFailed) lines.append(h("p", { className: "aip-note", textContent: "The graphics card couldn't run it, so it runs on the processor instead. Answers will be slower." }));
-        else if (r.backend === "CPU")
-          lines.append(h("p", { className: "aip-note", textContent: "This browser has no graphics card it can use for AI (WebGPU), so the model runs on the processor. That works, but answers take longer; the Small model suits this best." }));
-        actions.append(button("Try it in the ask bar", thenClose(() => deps.askBar()), "primary"), button("Unload", () => localAi.unload(), "quiet", "Free the memory; the model stays kept and loads again when needed"));
-        break;
-      }
-      case "error":
-        title.textContent = "Something needs your attention";
-        break;
-    }
-    if (s.error) {
-      const err = h("div", { className: "aip-error" }, h("p", { textContent: s.error }));
-      const row = h("div", { className: "aip-actions" });
-      if (d?.paused) {
-        const m = AI_MODELS.find((x) => x.id === d.id);
-        if (m) row.append(button("Resume", () => localAi.downloadModel(m), "primary"));
-      }
-      row.append(button("Dismiss", () => localAi.clearError(), "quiet"));
-      err.append(row);
-      lines.append(err);
-    }
-    card.append(h("div", { className: "aip-status-head" }, dot, title), lines);
-    if (actions.childElementCount) card.append(actions);
-    return card;
+    const third = ready ? "done" : haveModel ? "current" : "todo";
+    ol.append(step(3, third, "Load it once.", ready ? "" : "It loads by itself the first time something needs it, and stays for next time. Remove it whenever you like.", loadState(s)));
+    return ol;
   };
 
-  const pauseCancel = (where = "status") => {
+  /** Why the recommendation fits, in a few words. */
+  const fitLine = (x: HardwareInfo) => {
+    const gpu = x.webgpu && !x.webgpu.isFallbackAdapter;
+    const mem = x.deviceMemoryGB === null ? null : x.deviceMemoryGB >= 8 ? "8 GB+ memory" : `${x.deviceMemoryGB} GB memory`;
+    return `Fits this computer: ${[mem, gpu ? "a graphics card the browser can use" : "no graphics card the browser can use", x.storageAvailableBytes !== null ? `${formatBytes(x.storageAvailableBytes)} free` : null].filter(Boolean).join(", ")}.`;
+  };
+
+  const pickFile = async () => {
+    const file = await pickModelFile();
+    if (file) await localAi.install(file).catch(() => undefined);
+  };
+
+  /** Step 2: the recommended model, big, with the other sizes behind a toggle. */
+  const getModel = (s: AiStatus) => {
+    const wrap = h("div", { className: "aip-get" });
+    const rec = recommended();
+    wrap.append(modelCard(rec, s, true));
+    const others = AI_MODELS.filter((m) => m.id !== rec.id);
+    const toggle = button(showOthers ? "Hide other sizes" : `Other sizes: ${others.map((m) => m.size).join(", ")}`, () => {
+      showOthers = !showOthers;
+      draw(aiStatus(), true);
+    }, "quiet");
+    toggle.dataset.focusKey = "others";
+    toggle.setAttribute("aria-expanded", String(showOthers));
+    const pick = button("I already have a .gguf file…", pickFile, "quiet");
+    pick.dataset.focusKey = "pick";
+    wrap.append(h("div", { className: "aip-get-more" }, toggle, pick));
+    if (showOthers) for (const m of others) wrap.append(modelCard(m, s, false));
+    if (s.error && !s.stored.some((x) => !x.partial)) wrap.append(errorBox(s));
+    return wrap;
+  };
+
+  /** Step 3: loading, ready, or kept but not loaded yet. */
+  const loadState = (s: AiStatus): HTMLElement | null => {
+    if (s.state === "loading") {
+      return h("div", { className: "aip-load" }, progressBar(null, "Loading"), h("p", { className: "aip-muted aip-small", textContent: `${s.loading!.name}: ${s.loading!.step}` }));
+    }
+    if (s.state === "ready") {
+      const r = s.ready!;
+      const tryIt = button("Try it in the ask bar", () => deps.askBar(), "primary");
+      tryIt.dataset.focusKey = "try-ready";
+      const unload = button("Unload", () => localAi.unload(), "quiet", "Free the memory; the model stays kept and loads again when needed");
+      unload.dataset.focusKey = "unload";
+      const card = h(
+        "div",
+        { className: "aip-ready" },
+        h("div", { className: "aip-ready-head" }, h("span", { className: "aip-dot aip-dot--ready" }), h("strong", { textContent: r.name }), h("span", { className: "cf-badge cf-badge--success", textContent: "Ready" })),
+        h("p", { className: "aip-facts", textContent: [formatBytes(r.size), r.backend === "GPU" ? "on the graphics card" : "on the processor", speed(r.tokensPerSecond)].filter(Boolean).join(" · ") }),
+      );
+      if (r.gpuFailed) card.append(h("p", { className: "aip-note", textContent: "The graphics card couldn't run it, so it runs on the processor instead. Answers will be slower." }));
+      else if (r.backend === "CPU") card.append(h("p", { className: "aip-note", textContent: "This browser can't use the graphics card for AI, so the model runs on the processor: it works, more slowly. The Small model suits this best." }));
+      card.append(h("div", { className: "aip-actions" }, tryIt, unload));
+      return card;
+    }
+    if (s.stored.some((x) => !x.partial)) {
+      const b = button("Load it now", () => localAi.restore(), "primary");
+      b.dataset.focusKey = "load-now";
+      const box = h("div", { className: "aip-actions" }, b);
+      return s.error ? h("div", { className: "aip-get" }, errorBox(s), box) : box;
+    }
+    return null;
+  };
+
+  const errorBox = (s: AiStatus) => {
+    const d = s.download;
+    const row = h("div", { className: "aip-actions" });
+    if (d?.paused) {
+      const m = AI_MODELS.find((x) => x.id === d.id);
+      if (m) row.append(button("Resume", () => localAi.downloadModel(m), "primary"));
+    }
+    row.append(button("Dismiss", () => localAi.clearError(), "quiet"));
+    const box = h("div", { className: "aip-error" }, h("p", { textContent: s.error ?? "" }), row);
+    box.setAttribute("role", "alert");
+    return box;
+  };
+
+  const pauseCancel = (where: string) => {
     const p = button("Pause", () => localAi.pause());
     p.dataset.focusKey = `pause-${where}`;
     const c = button("Cancel", () => localAi.cancel(), "quiet", "Stop and delete what has arrived");
     c.dataset.focusKey = `cancel-${where}`;
-    return h("span", { className: "aip-inline" }, p, c);
+    return h("div", { className: "aip-actions" }, p, c);
   };
 
-  const computer = () => {
-    const sec = h("section", { className: "cf-section aip-section" }, h("h3", { className: "cf-section__title", textContent: "This computer" }));
-    if (!hw) sec.append(h("p", { className: "aip-muted", textContent: hwFailed ? "Couldn't check this computer; all models are shown." : "Checking what this computer can run…" }));
-    else {
-      const rec = recommendModel(hw);
-      sec.append(h("p", { textContent: describeHardware(hw) }), h("p", { className: "aip-muted" }, "Recommended here: ", h("strong", { textContent: `${rec.size} (${rec.name})` }), "."));
-    }
-    return sec;
-  };
-
-  const models = (s: AiStatus) => {
-    const sec = h("section", { className: "cf-section aip-section" }, h("h3", { className: "cf-section__title", textContent: "Recommended models" }));
-    const rec = hw ? recommendModel(hw) : null;
-    const list = h("div", { className: "aip-cards" });
-    for (const m of AI_MODELS) list.append(card(m, s, rec?.id === m.id));
-    sec.append(list, h("p", { className: "aip-muted aip-small", textContent: "All three are Qwen2.5 Instruct models by Alibaba Cloud, published on Hugging Face. Each download is checked against its published size and fingerprint (SHA-256) before it's used." }));
-    return sec;
-  };
-
-  const card = (m: CatalogModel, s: AiStatus, recommended: boolean) => {
-    const stored = s.stored.find((x) => x.file === m.file && !x.partial);
+  const modelCard = (m: CatalogModel, s: AiStatus, hero: boolean) => {
     const partial = s.stored.find((x) => x.file === m.file && x.partial);
-    const inUse = s.ready?.file === m.file;
-    const loadingThis = s.state === "loading" && s.loading?.name === m.name;
     const d = s.download?.id === m.id ? s.download : null;
     const fit = hw ? modelFit(hw, m) : null;
-
-    const el = h("article", { className: "aip-card" + (recommended ? " aip-card-recommended" : "") + (inUse ? " aip-card-inuse" : "") });
-    const badges = h("div", { className: "aip-badges" });
-    if (inUse) badges.append(h("span", { className: "cf-badge cf-badge--success", textContent: "In use" }));
-    if (recommended) badges.append(h("span", { className: "cf-badge cf-badge--accent", textContent: "Recommended" }));
-    el.append(h("div", { className: "aip-card-head" }, h("h4", {}, h("span", { className: "aip-size", textContent: m.size }), " ", m.name), badges));
-    el.append(h("p", { textContent: m.goodFor }));
-    const facts = h("p", { className: "aip-facts" });
-    facts.append(
-      `${formatBytes(m.bytes)} download · ${m.quant} · needs ${m.minMemoryGB} GB memory${m.gpu === "recommended" ? ", graphics card recommended" : ""} · Licence: `,
-      h("a", { href: m.licence.url, target: "_blank", rel: "noopener noreferrer", textContent: m.licence.name }),
-    );
+    const el = h("article", { className: "aip-model" + (hero ? " aip-model--hero" : "") });
+    const head = h("div", { className: "aip-model-head" }, h("span", { className: "aip-size", textContent: m.size }));
+    if (hero) head.append(h("span", { className: "cf-badge cf-badge--accent", textContent: hw ? "Recommended for this computer" : "Recommended" }));
+    el.append(head, h("h4", { className: "aip-model-name", textContent: m.name }), h("p", { className: "aip-model-for", textContent: m.goodFor }));
+    const facts = h("ul", { className: "aip-chips" });
+    facts.setAttribute("aria-label", "Details");
+    for (const f of [`${formatBytes(m.bytes)} download`, `${m.minMemoryGB} GB memory`, m.gpu === "recommended" ? "graphics card recommended" : "no graphics card needed"]) facts.append(h("li", { textContent: f }));
+    facts.append(h("li", {}, h("a", { href: m.licence.url, target: "_blank", rel: "noopener noreferrer", textContent: m.licence.name, title: `Licence. File: ${m.file} (${m.quant})` })));
     el.append(facts);
-    if (m.licence.note && /non-commercial|read the licence/i.test(m.licence.note)) el.append(h("p", { className: "aip-note", textContent: m.licence.note }));
+    if (/non-commercial/i.test(m.licence.note)) el.append(h("p", { className: "aip-note", textContent: m.licence.note }));
+    if (hero && hw) el.append(h("p", { className: "aip-why" }, kitIcon("check"), h("span", { textContent: fitLine(hw) })));
+    else if (hero && hwFailed) el.append(h("p", { className: "aip-why", textContent: "Couldn't check this computer, so this is the usual choice." }));
     if (fit && !fit.fits) el.append(h("p", { className: "aip-warn", textContent: `May not run well here: ${fit.reasons.join("; ")}.` }));
 
-    const actions = h("div", { className: "aip-actions" });
     const busyElsewhere = !!s.download && !s.download.paused && !d;
     if (d && !d.paused) {
-      el.append(progressBar(d.phase === "checking" ? null : d.loaded / d.total, `Downloading ${m.name}`), h("p", { className: "aip-muted", dataset: { progressText: "" }, textContent: downloadText(d) }));
-      if (d.phase === "downloading") actions.append(pauseCancel(m.id));
+      el.append(progressBar(d.phase === "checking" ? null : d.loaded / d.total, `Downloading ${m.name}`), h("p", { className: "aip-muted aip-small", dataset: { progressText: "" }, textContent: downloadText(d) }));
+      if (d.phase === "downloading") el.append(pauseCancel(m.id));
     } else if (d?.paused || partial) {
       const have = d?.loaded ?? partial!.bytes;
-      el.append(progressBar(have / m.bytes, `${m.name} partly downloaded`), h("p", { className: "aip-muted", textContent: `Paused at ${Math.floor((have / m.bytes) * 100)}% · ${formatBytes(have)} of ${formatBytes(m.bytes)}` }));
-      const r = button(`Resume (${formatBytes(m.bytes - have)} left from ${m.site})`, () => localAi.downloadModel(m), "primary");
+      el.append(progressBar(have / m.bytes, `${m.name} partly downloaded`), h("p", { className: "aip-muted aip-small", textContent: `Paused at ${Math.floor((have / m.bytes) * 100)}% · ${formatBytes(have)} of ${formatBytes(m.bytes)}` }));
+      const r = button(`Resume · ${formatBytes(m.bytes - have)} left`, () => localAi.downloadModel(m), "primary", `Carries on downloading from ${m.site}`);
       r.dataset.focusKey = `resume-${m.id}`;
       r.disabled = busyElsewhere;
       const c = button("Cancel", () => localAi.discardPartial(m), "quiet", "Delete the part that has arrived");
       c.dataset.focusKey = `discard-${m.id}`;
-      actions.append(r, c);
-    } else if (stored) {
-      if (!inUse) {
-        const u = button(loadingThis ? "Loading…" : "Use", () => localAi.useStored(m.file).catch(() => undefined), "primary");
-        u.disabled = loadingThis;
-        u.dataset.focusKey = `use-${m.id}`;
-        actions.append(u);
-      }
-      const r = confirmButton("Remove", { title: `Remove ${m.name}?`, text: `It is deleted from this browser and frees ${formatBytes(m.bytes)}. You can download it again later.`, confirm: "Remove model" }, () => localAi.remove(m.file));
-      r.dataset.focusKey = `remove-${m.id}`;
-      actions.append(r, h("span", { className: "aip-muted aip-small", textContent: "Kept in this browser" }));
-    } else {
-      const b = button(`Download ${formatBytes(m.bytes)} from ${m.site}`, () => localAi.downloadModel(m), recommended ? "primary" : "secondary", busyElsewhere ? "One download at a time" : `Downloads ${m.file} from ${m.page}`);
+      el.append(h("div", { className: "aip-actions" }, r, c));
+    } else if (!s.stored.some((x) => x.file === m.file)) {
+      const b = button(`Download ${formatBytes(m.bytes)} from ${m.site}`, () => localAi.downloadModel(m), hero ? "primary" : "secondary", busyElsewhere ? "One download at a time" : `Downloads ${m.file} from ${m.page}`);
       b.disabled = busyElsewhere;
       b.dataset.focusKey = `download-${m.id}`;
-      if (recommended && s.state === "none") b.classList.add("aip-primary-action");
-      actions.append(b, h("a", { className: "aip-small", href: m.page, target: "_blank", rel: "noopener noreferrer", textContent: "About this model" }));
+      if (hero) b.classList.add("aip-cta");
+      el.append(h("div", { className: "aip-actions" }, b, h("a", { className: "aip-small", href: m.page, target: "_blank", rel: "noopener noreferrer", textContent: "About this model" })));
     }
-    el.append(actions);
     return el;
   };
 
-  const ownFile = (s: AiStatus) => {
-    const sec = h("section", { className: "cf-section aip-section" }, h("h3", { className: "cf-section__title", textContent: "Your own model file" }));
-    const own = s.stored.filter((x) => !x.catalogId && !x.partial);
-    for (const f of own) {
+  // ---- models kept -----------------------------------------------------
+
+  const kept = (s: AiStatus): HTMLElement | null => {
+    const files = s.stored.filter((x) => !x.partial);
+    if (!files.length) return null;
+    const sec = h("section", { className: "cf-section aip-section" }, h("h3", { className: "cf-section__title", textContent: "Models in this browser" }));
+    for (const f of files) {
       const inUse = s.ready?.file === f.file;
-      const row = h("div", { className: "aip-own" }, h("span", { className: "aip-own-name", textContent: f.name, title: f.file }), h("span", { className: "aip-muted aip-small", textContent: formatBytes(f.bytes) }));
+      const row = h("div", { className: "aip-kept" }, h("div", { className: "aip-kept-name" }, h("strong", { textContent: f.name, title: f.file }), h("span", { className: "aip-muted aip-small", textContent: formatBytes(f.bytes) })));
       if (inUse) row.append(h("span", { className: "cf-badge cf-badge--success", textContent: "In use" }));
       else {
-        const u = button("Use", () => localAi.useStored(f.file).catch(() => undefined));
-        u.dataset.focusKey = `use-own-${f.file}`;
+        const loadingThis = s.state === "loading" && s.loading?.name === f.name;
+        const u = button(loadingThis ? "Loading…" : "Use", () => localAi.useStored(f.file).catch(() => undefined));
+        u.disabled = loadingThis;
+        u.dataset.focusKey = `use-${f.file}`;
         row.append(u);
       }
-      const r = confirmButton("Remove", { title: `Remove ${f.name}?`, text: `It is deleted from this browser and frees ${formatBytes(f.bytes)}. The file on your disk isn't touched.`, confirm: "Remove model" }, () => localAi.remove(f.file));
-      r.dataset.focusKey = `remove-own-${f.file}`;
+      const r = confirmButton(
+        "Remove",
+        { title: `Remove ${f.name}?`, text: `It is deleted from this browser and frees ${formatBytes(f.bytes)}.${f.catalogId ? " You can download it again later." : " The file on your disk isn't touched."}`, confirm: "Remove model" },
+        () => localAi.remove(f.file),
+      );
+      r.dataset.focusKey = `remove-${f.file}`;
       row.append(r);
       sec.append(row);
     }
-    const pick = button("I already have a .gguf file…", async () => {
-      const file = await pickModelFile();
-      if (file) await localAi.install(file).catch(() => undefined);
-    });
-    pick.dataset.focusKey = "pick";
-    sec.append(
-      h("div", { className: "aip-actions" }, pick),
-      h("p", { className: "aip-muted aip-small", textContent: "Qwen2, Llama or Mistral instruct models in Q4_K_M, Q4_0 or Q8_0 work best. The file is copied into this browser's private storage, so it's there next time." }),
-    );
+    const toggle = button(showOthers ? "Hide other sizes" : "Get another size", () => {
+      showOthers = !showOthers;
+      draw(aiStatus(), true);
+    }, "quiet");
+    toggle.dataset.focusKey = "another";
+    toggle.setAttribute("aria-expanded", String(showOthers));
+    const pick = button("I already have a .gguf file…", pickFile, "quiet");
+    pick.dataset.focusKey = "pick-kept";
+    sec.append(h("div", { className: "aip-get-more" }, toggle, pick));
+    // downloads of another size (in progress or paused) stay visible
+    for (const m of AI_MODELS) {
+      const busy = s.download?.id === m.id || s.stored.some((x) => x.file === m.file && x.partial);
+      const has = s.stored.some((x) => x.file === m.file && !x.partial);
+      if (!has && (busy || showOthers)) sec.append(modelCard(m, s, false));
+    }
     return sec;
   };
+
+  // ---- what it does ----------------------------------------------------
 
   const uses = (s: AiStatus) => {
     const ready = s.state === "ready";
     const sec = h("section", { className: "cf-section aip-section" }, h("h3", { className: "cf-section__title", textContent: "What you can do with it" }));
-    const items: { title: string; text: string; example?: string; go: () => unknown; works?: string }[] = [
-      {
-        title: "Ask in your own words",
-        text: "The ask bar (Ctrl+/) already understands common requests. With the model it also takes ones in your own words, shows what it will do, and every step can be undone.",
-        example: "make the header row stand out and keep it on screen",
-        go: thenClose(() => deps.askBar("make the header row stand out and keep it on screen")),
-      },
-      {
-        title: "Explain this number",
-        text: "Select a cell with a formula, then press Explain with the local model for a short explanation in sentences. Every figure it mentions is checked.",
-        go: thenClose(() => runCommand("explain")),
-        works: "Works without the model too (plain reading).",
-      },
-      {
-        title: "Suggest categories",
-        text: "In Categorise, the model suggests categories for rows no rule covers, picking only from categories you already use.",
-        go: thenClose(() => runCommand("categorise")),
-      },
-      {
-        title: "Find spelling variants",
-        text: "Fix spelling variants in a column: the model also spots abbreviations and typos (\"Acme Ltd\" and \"ACME Limited\").",
-        go: thenClose(() => runCommand("variants")),
-        works: "Works without the model too (rules only).",
-      },
-      {
-        title: "Ask the guide",
-        text: "F1: questions in your own words, answered from the user guide on this computer.",
-        go: thenClose(() => (deps.askGuide ? deps.askGuide("") : runCommand("ask-guide"))),
-        works: "Doesn't need the model.",
-      },
+    const items: { title: string; text: string; go: () => unknown; plain?: string }[] = [
+      { title: "Ask in your own words", text: "“Make the header row stand out and keep it on screen.” You see the plan first, and every step can be undone.", go: () => deps.askBar("make the header row stand out and keep it on screen") },
+      { title: "Explain this number", text: "Rephrases a formula in sentences; every figure it mentions is checked.", go: () => runCommand("explain"), plain: "Plain reading without a model" },
+      { title: "Suggest categories", text: "Fills rows no rule covers, choosing only from categories you already use.", go: () => runCommand("categorise") },
+      { title: "Find spelling variants", text: "Also spots abbreviations and typos, like “Acme Ltd” and “ACME Limited”.", go: () => runCommand("variants"), plain: "Rules only without a model" },
     ];
     const ul = h("ul", { className: "aip-uses" });
     for (const it of items) {
-      const b = h("button", { type: "button", className: "aip-use" }, h("strong", { textContent: it.title }), h("span", { textContent: it.text }));
-      if (it.example) b.append(h("em", { textContent: `Try: “${it.example}”` }));
-      if (it.works) b.append(h("small", { textContent: it.works }));
+      const b = h("button", { type: "button", className: "aip-use" }, h("b", { textContent: it.title }), h("span", { textContent: it.text }));
+      if (it.plain && !ready) b.append(h("small", { textContent: it.plain }));
       b.dataset.focusKey = `use-${it.title}`;
       b.addEventListener("click", () => void it.go());
       ul.append(h("li", {}, b));
     }
-    if (!ready) sec.append(h("p", { className: "aip-muted", textContent: "Until a model is loaded, these work their plain way (the ask bar with its known requests, explanations without the model's sentences)." }));
     sec.append(ul);
     return sec;
   };
 
-  const more = () => {
-    const sec = h("section", { className: "cf-section aip-section aip-more" });
-    const b = button("Read the guide: Local AI", thenClose(() => (deps.askGuide ? deps.askGuide("local AI model download") : runCommand("ask-guide"))), "quiet");
-    sec.append(b);
-    return sec;
+  const fine = () => {
+    const a = h("button", { type: "button", className: "aip-link", textContent: "Read the guide" });
+    a.addEventListener("click", () => void (deps.askGuide ? deps.askGuide("local AI model download") : runCommand("ask-guide")));
+    return h("p", { className: "aip-fine" }, kitIcon("shield"), h("span", {}, "The only network use is a download you start, from the site named on its button. No account, no tracking. ", a));
   };
 
   const unsubscribe = onAiStatus((s) => draw(s));
