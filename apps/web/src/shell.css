@@ -951,7 +951,7 @@
   font-size: var(--text-sm);
   line-height: var(--leading);
   display: -webkit-box;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 5;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -976,15 +976,14 @@
 }
 
 .cf-flow__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  display: grid;
   gap: var(--space-1);
   margin-top: auto;
 }
 
 .cf-flow__actions .btn-sm {
-  height: 30px;
+  justify-content: center;
+  height: 32px;
   padding: 0 var(--space-3);
   border-radius: var(--radius-md);
 }
@@ -1415,6 +1414,16 @@ body.is-start .bottombar {
 }
 
 @media (max-width: 900px) {
+  /* Undo / Redo stay in the Edit menu and on Ctrl+Z / Ctrl+Y */
+  .topbar__group[aria-label="Undo and redo"] {
+    display: none;
+  }
+
+  .save-state {
+    font-size: 0;
+    gap: 0;
+  }
+
   .topbar__ai-label {
     display: none;
   }

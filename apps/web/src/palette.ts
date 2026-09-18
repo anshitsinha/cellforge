@@ -86,7 +86,7 @@ export function fuzzyScore(query: string, text: string): number {
   return score;
 }
 
-const words = (s: string) => s.toLowerCase().split(/[^a-z0-9→]+/).filter(Boolean);
+const words = (s: string) => s.toLowerCase().split(/[^\p{L}\p{N}→]+/u).filter(Boolean);
 
 /**
  * How well a command matches a query (-1: not at all). The title is matched
