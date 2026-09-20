@@ -588,13 +588,21 @@ export function suggestedCommandIds(ctx: SheetContext): string[] {
   return [...new Set(out)].slice(0, 5);
 }
 
+/**
+ * Nothing typed or loaded on a sheet. Cheap at any size (usedRange() walks
+ * every edit and, on a sorted sheet, the whole row order).
+ */
+export function sheetIsBlank(src: EditableSource): boolean {
+  return src.editCount === 0 && src.getColumnName(0) === undefined && src.getCell(0, 0) === null;
+}
+
 /** The context for suggestions, read cheaply from a sheet (row 1 or column names; never scans data). */
 export function sheetContext(wb: Workbook, src: EditableSource): SheetContext {
-  const used = src.usedRange();
+  const empty = sheetIsBlank(src);
   const headers: string[] = [];
-  for (let c = 0; c < Math.min(used.cols, 40); c++) {
+  for (let c = 0; c < (empty ? 0 : Math.min(src.colCount, 40)); c++) {
     const name = src.getColumnName(c) ?? src.getCell(0, c);
     if (name !== null && name !== undefined && name !== "") headers.push(String(name).toLowerCase());
   }
-  return { sheetCount: wb.sheets.length, empty: used.rows === 0 && used.cols === 0, headers, rows: used.rows };
+  return { sheetCount: wb.sheets.length, empty, headers, rows: src.rowCount };
 }

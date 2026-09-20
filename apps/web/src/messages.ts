@@ -25,6 +25,8 @@ export interface Notifier {
   (text: string): void;
   /** close a progress toast that never got its result */
   endProgress(): void;
+  /** an error, whatever its wording (it stays until closed) */
+  error(text: string): void;
 }
 
 /** A status callback that shows toasts (show is injectable for tests). */
@@ -51,5 +53,9 @@ export function createNotifier(show: (o: { kind: ToastKind; text: string; durati
     show({ kind, text });
   }) as Notifier;
   notify.endProgress = endProgress;
+  notify.error = (text: string) => {
+    endProgress();
+    show({ kind: "error", text });
+  };
   return notify;
 }

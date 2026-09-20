@@ -53,7 +53,7 @@ import { confirmDialog } from "./ui/confirm";
 import { openDialog } from "./ui/dialog";
 import { icon } from "./ui/icons";
 import { mountSidePanelHost, onSidePanelChange } from "./ui/sidepanel";
-import { buildCommands, COMMAND_GROUPS, devMode, sheetContext, suggestedCommandIds, type AppCommand, type CommandDeps, type ThemeChoice } from "./commands";
+import { buildCommands, COMMAND_GROUPS, devMode, sheetContext, sheetIsBlank, suggestedCommandIds, type AppCommand, type CommandDeps, type ThemeChoice } from "./commands";
 import { buildMenuModel, menuButton, menuEntries, setupMenuBar } from "./menubar";
 import { setupRail } from "./rail";
 import { setupStartScreen } from "./startscreen";
@@ -127,8 +127,7 @@ mountSidePanelHost(sheet);
 
 /** The sheet's size, quietly, on the left of the status bar. */
 function updateStatus() {
-  const { rows, cols } = source.usedRange();
-  statusLeft.textContent = rows || cols ? `${rowFormat.format(source.rowCount)} row${source.rowCount === 1 ? "" : "s"} · ${source.colCount} column${source.colCount === 1 ? "" : "s"}` : "";
+  statusLeft.textContent = !sheetIsBlank(source) ? `${rowFormat.format(source.rowCount)} row${source.rowCount === 1 ? "" : "s"} · ${source.colCount} column${source.colCount === 1 ? "" : "s"}` : "";
 }
 
 function syncFormulaBar() {
@@ -431,7 +430,7 @@ async function run(action: Action) {
     refresh();
     return applied;
   } catch (e) {
-    notify((e as Error).message);
+    notify.error((e as Error).message);
     return null;
   }
 }
@@ -1756,9 +1755,7 @@ const rail = setupRail(document.getElementById("rail")!, {
 
 /** Nothing in the workbook yet (one sheet, nothing typed or loaded). */
 function isEmptyWorkbook() {
-  if (workbook.sheets.length !== 1) return false;
-  const used = workbook.sheets[0].source.usedRange();
-  return used.rows === 0 && used.cols === 0;
+  return workbook.sheets.length === 1 && sheetIsBlank(workbook.sheets[0].source);
 }
 
 // the start screen: for a new or empty workbook, instead of a blank grid

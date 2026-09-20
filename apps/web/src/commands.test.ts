@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCommands, COMMAND_GROUPS, devMode, GROUP_ICONS, suggestedCommandIds, type AppCommand, type CommandDeps } from "./commands";
+import { buildCommands, COMMAND_GROUPS, devMode, GROUP_ICONS, sheetContext, sheetIsBlank, suggestedCommandIds, type AppCommand, type CommandDeps } from "./commands";
 import { buildMenuModel, MENUS, menuEntries, type MenuEntry } from "./menubar";
 import { commandScore, paletteView, WEAK_MATCH } from "./palette";
 import { classifyMessage, createNotifier } from "./messages";
@@ -69,6 +69,12 @@ describe("command registry", () => {
     expect(devMode("")).toBe(false);
     expect(devMode("?dev=1")).toBe(true);
     expect(devMode("?a=b&dev=1")).toBe(true);
+  });
+
+  it("reads a sheet cheaply for suggestions", () => {
+    const wb = new Workbook();
+    expect(sheetIsBlank(wb.sheets[0].source)).toBe(true);
+    expect(sheetContext(wb, wb.sheets[0].source)).toMatchObject({ empty: true, sheetCount: 1, headers: [] });
   });
 
   it("suggests what fits the sheet", () => {
@@ -196,6 +202,8 @@ describe("messages", () => {
     notify("Downloaded gl.csv");
     expect(shown[0].closed).toBe(true);
     expect(shown[1]).toMatchObject({ kind: "success", text: "Downloaded gl.csv" });
+    notify.error("Invalid range");
+    expect(shown[2]).toMatchObject({ kind: "error", text: "Invalid range" });
     notify.endProgress();
   });
 });
