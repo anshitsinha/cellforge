@@ -3,6 +3,8 @@ import {
   errors,
   evaluate,
   parseFormula,
+  Table,
+  type ColumnData,
   type EvalContext,
   type Node,
   type RangeRef,
@@ -145,6 +147,16 @@ export class EditableSource implements DataSource {
     if (n === 0) this.editsPerColumn.delete(col);
     else this.editsPerColumn.set(col, n);
     this.cache.clear();
+  }
+
+  /**
+   * The imported column behind `col`, if it's safe to read directly: the base
+   * is a columnar Table and nobody has edited that column. Callers still need
+   * to apply rowOrder themselves. Used by the fast paths in sort and stats.
+   */
+  baseColumn(col: number): ColumnData | null {
+    if (!(this.base instanceof Table) || this.editsPerColumn.has(col)) return null;
+    return this.base.columns[col] ?? null;
   }
 
   // ---------------------------------------------------------------------------
