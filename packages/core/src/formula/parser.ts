@@ -17,14 +17,14 @@ import type { BinaryOp, Node } from "./ast";
 type Token =
   | { t: "num"; v: number }
   | { t: "str"; v: string }
-  | { t: "ref"; row: number; col: number }
+  | { t: "ref"; row: number; col: number; absRow: boolean; absCol: boolean }
   | { t: "ident"; v: string }
   | { t: "op"; v: string }
   | { t: "eof" };
 
 export class FormulaSyntaxError extends Error {}
 
-const REF = /^\$?([A-Za-z]{1,3})\$?(\d+)/;
+const REF = /^(\$?)([A-Za-z]{1,3})(\$?)(\d+)/;
 const NUMBER = /^(\d+\.?\d*|\.\d+)(e[-+]?\d+)?/i;
 const IDENT = /^[A-Za-z_][A-Za-z0-9_.]*/;
 const OPS = ["<>", "<=", ">=", "+", "-", "*", "/", "^", "&", "=", "<", ">", "(", ")", ",", ":", "%"];
@@ -79,7 +79,13 @@ function tokenize(src: string): Token[] {
     // would tokenize as ref LOG10 + "(".
     m = REF.exec(rest);
     if (m && !/[A-Za-z0-9_(]/.test(rest[m[0].length] ?? "")) {
-      tokens.push({ t: "ref", col: columnIndex(m[1]), row: Number(m[2]) - 1 });
+      tokens.push({
+        t: "ref",
+        col: columnIndex(m[2]),
+        row: Number(m[4]) - 1,
+        absCol: m[1] === "$",
+        absRow: m[3] === "$",
+      });
       i += m[0].length;
       continue;
     }
@@ -178,17 +184,19 @@ export function parseFormula(src: string): Node {
           const end = peek();
           if (end.t !== "ref") throw new FormulaSyntaxError("Expected a cell after ':'");
           pos++;
+          // normalise B5:A1 to A1:B5, keeping each edge's $ with its edge
+          const [t, b] = tok.row <= end.row ? [tok, end] : [end, tok];
+          const [l, r] = tok.col <= end.col ? [tok, end] : [end, tok];
           return {
             type: "range",
-            range: {
-              top: Math.min(tok.row, end.row),
-              bottom: Math.max(tok.row, end.row),
-              left: Math.min(tok.col, end.col),
-              right: Math.max(tok.col, end.col),
-            },
+            range: { top: t.row, bottom: b.row, left: l.col, right: r.col },
+            absTop: t.absRow,
+            absBottom: b.absRow,
+            absLeft: l.absCol,
+            absRight: r.absCol,
           };
         }
-        return { type: "ref", row: tok.row, col: tok.col };
+        return { type: "ref", row: tok.row, col: tok.col, absRow: tok.absRow, absCol: tok.absCol };
       }
       case "ident": {
         if (isOp("(")) {

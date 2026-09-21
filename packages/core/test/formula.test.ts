@@ -33,8 +33,10 @@ describe("arithmetic", () => {
     expect(run("=50%")).toBe(0.5);
   });
 
-  it("doesn't show float noise", () => {
-    expect(run("=0.1+0.2")).toBe(0.3);
+  it("uses plain IEEE doubles (display formatting hides the noise)", () => {
+    expect(run("=0.1+0.2")).toBe(0.1 + 0.2);
+    expect(run("=1/0*0")).toBe("#DIV/0!");
+    expect(run("=10^400")).toBe("#NUM!");
   });
 
   it("returns errors instead of throwing", () => {
