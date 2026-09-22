@@ -1494,3 +1494,11 @@ body.is-start .bottombar {
     padding: 0 var(--space-2);
   }
 }
+
+/* the name box grows for long references (C59000001) instead of running into fx */
+.formula-bar .cell-ref {
+  flex: none;
+  width: auto;
+  min-width: 80px;
+  white-space: nowrap;
+}
