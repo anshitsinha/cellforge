@@ -10,11 +10,11 @@ import { describe, expect, it } from "vitest";
 const root = new URL("../../../", import.meta.url);
 const read = (path: string) => readFileSync(new URL(path, root), "utf8");
 
-/** Every string literal inside paletteCommands(): the titles, among other things. */
+/** Every string literal in the command registry (apps/web/src/commands.ts): the titles, among other things. */
 function paletteStrings(): Set<string> {
-  const app = read("apps/web/src/app.ts");
-  const start = app.indexOf("function paletteCommands(");
-  const end = app.indexOf("setupPalette(", start);
+  const app = read("apps/web/src/commands.ts");
+  const start = app.indexOf("export function buildCommands(");
+  const end = app.indexOf("export function suggestedCommandIds(", start);
   expect(start).toBeGreaterThan(0);
   return new Set([...app.slice(start, end).matchAll(/"([^"\n]+)"/g)].map((m) => m[1]));
 }
@@ -24,7 +24,7 @@ function paletteStrings(): Set<string> {
 const COMING_SOON: string[] = [];
 
 /** Commands without a trailing "…" that the pages below name. */
-const NAMED = ["Show history and versions", "Number format: Percent", "Number format: Number", "Export Excel (.xlsx)", "Export CSV", "Load the 100M-row demo", "Circle invalid data", "Fill down"];
+const NAMED = ["Show history and versions", "Number format: Percent", "Number format: Number", "Export Excel (.xlsx)", "Export CSV", "Try the sample: 100M-line ledger", "Circle invalid data", "Fill down"];
 
 const pages = [
   ...readdirSync(new URL("docs/tutorials/", root)).map((f) => `docs/tutorials/${f}`),

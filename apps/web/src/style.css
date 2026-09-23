@@ -439,89 +439,9 @@ th.num {
 }
 
 /* =========================================================================
- * App chrome (toolbar, format bar, formula bar, status bar)
+ * App chrome (format bar, formula bar). The shell's own parts (top bar,
+ * menu bar, rail, palette list, tabs, status bar) are in shell.css.
  * ========================================================================= */
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 44px;
-  padding: var(--space-1-5) var(--space-3);
-  background: var(--panel);
-  border-bottom: 1px solid var(--border-subtle);
-  min-width: 0;
-}
-
-.logo {
-  font-weight: var(--weight-bold);
-  font-size: var(--text-lg);
-  letter-spacing: -0.02em;
-  color: var(--text-strong);
-  text-decoration: none;
-}
-
-.logo,
-.file-name {
-  white-space: nowrap;
-}
-
-.status-hint {
-  display: inline-flex;
-  gap: var(--space-2);
-  align-items: center;
-  color: var(--warn-text);
-  margin-left: var(--space-3);
-}
-
-.status-hint button {
-  padding: 0 var(--space-2);
-  font-size: var(--text-sm);
-}
-
-.save-state {
-  color: var(--muted);
-  font-size: var(--text-sm);
-  white-space: nowrap;
-}
-
-.file-name {
-  color: var(--text);
-  font-weight: var(--weight-medium);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-
-.toolbar-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: var(--space-0-5);
-  min-width: 0;
-}
-
-/* quiet chrome: toolbar buttons are ghost buttons */
-.toolbar-actions button {
-  white-space: nowrap;
-  flex-shrink: 0;
-  background: transparent;
-  border-color: transparent;
-  color: var(--text);
-  padding: 4px 10px;
-}
-
-.toolbar-actions button:hover:not(:disabled) {
-  background: var(--surface-3);
-  border-color: transparent;
-}
-
-.toolbar-sep {
-  width: 1px;
-  align-self: stretch;
-  margin: var(--space-1) var(--space-1-5);
-  background: var(--border-default);
-}
 
 .format-bar {
   display: flex;
@@ -1052,46 +972,6 @@ th.num {
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 
-.palette-list {
-  list-style: none;
-  margin: 0;
-  padding: var(--space-1-5);
-  overflow-y: auto;
-}
-
-.palette-item {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 7px 10px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-}
-
-.palette-item small {
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-  flex: 1;
-}
-
-.palette-item kbd {
-  margin-left: auto;
-  flex: none;
-}
-
-.palette-item.selected {
-  background: var(--accent-soft-strong);
-  color: var(--text-strong);
-}
-
-.palette-empty {
-  padding: var(--space-3);
-  color: var(--muted);
-}
-
 .palette-form {
   display: grid;
   align-content: start;
@@ -1315,69 +1195,15 @@ th.num {
   color: var(--text-strong);
 }
 
-.status-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-3);
-  min-height: 24px;
-  padding: 3px var(--space-3);
-  /* keep clear of the iPhone home indicator */
-  padding-bottom: max(3px, env(safe-area-inset-bottom));
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  background: var(--panel);
-  border-top: 1px solid var(--border-subtle);
-}
-
-.status-bar span {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-
 /* --- small screens ----------------------------------------------------------- */
 
 @media (max-width: 760px) {
-  /* Toolbar: logo stays put, the buttons become one row you can swipe
-     sideways rather than wrapping into a tall block over the sheet. */
-  .toolbar {
-    gap: var(--space-2);
-    padding: var(--space-1-5) var(--space-2);
-  }
-
-  .file-name {
-    display: none;
-  }
-
-  .toolbar-actions {
-    overflow-x: auto;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-    /* fade the right edge so it's obvious there's more to swipe to */
-    mask-image: linear-gradient(to right, #000 85%, transparent);
-    padding-right: var(--space-6);
-  }
-
-  .toolbar-actions::-webkit-scrollbar {
-    display: none;
-  }
-
   .formula-bar {
     height: 36px;
   }
 
   .cell-ref {
     width: 64px;
-  }
-
-  /* status bar: two short lines instead of one long clipped one */
-  .status-bar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0;
   }
 
   .palette-backdrop {
@@ -1404,95 +1230,6 @@ th.num {
   #formula-input {
     font-size: 16px;
   }
-}
-
-/* --- sheet tabs ------------------------------------------------------------ */
-
-.sheet-tabs {
-  display: flex;
-  align-items: stretch;
-  gap: var(--space-0-5);
-  min-height: 34px;
-  padding: 0 var(--space-1-5);
-  border-top: 1px solid var(--border-default);
-  background: var(--panel);
-  overflow: hidden;
-}
-
-.tab-tool {
-  flex: none;
-  width: 30px;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 17px;
-  line-height: 1;
-  padding: 0;
-  cursor: pointer;
-  border-radius: var(--radius-md);
-  margin: 3px 0;
-}
-
-.tab-tool:hover:not(:disabled) {
-  background: var(--surface-3);
-  color: var(--text);
-}
-
-.tab-strip {
-  display: flex;
-  gap: var(--space-0-5);
-  overflow-x: auto;
-  scrollbar-width: none;
-  min-width: 0;
-}
-
-.tab-strip::-webkit-scrollbar {
-  display: none;
-}
-
-.tab {
-  flex: none;
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 0;
-  border-bottom: 3px solid var(--tab-color, transparent);
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: var(--text-md);
-  cursor: pointer;
-}
-
-.tab:hover:not(:disabled) {
-  color: var(--text);
-  background: var(--surface-3);
-}
-
-.tab.active {
-  color: var(--text-strong);
-  font-weight: var(--weight-semibold);
-  background: var(--bg);
-  box-shadow: inset 0 2px 0 var(--accent);
-}
-
-.tab.dragging {
-  opacity: 0.4;
-}
-
-.tab.drop-target {
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-
-.tab-rename {
-  width: 160px;
-  margin: var(--space-1) 0;
-  padding: 0 var(--space-2);
-  border-color: var(--accent);
-  font-size: var(--text-md);
 }
 
 /* --- menus ----------------------------------------------------------------- */
