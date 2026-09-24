@@ -5,6 +5,8 @@
  * with instructions that name the commands to run, checks, conditional
  * formats, workpaper references and a tick-mark legend.
  */
+import "./analysis.css";
+import { openDialog } from "./ui/dialog";
 import { ActionHistory, BlobStore, type Action } from "@cellforge/actions";
 import { Table, type ColumnData, type CheckDef } from "@cellforge/core";
 import { setCells, sheetActions, type SheetCtx } from "./actions";
@@ -262,28 +264,35 @@ export async function buildTemplate(kind: TemplateKind): Promise<Workbook> {
 
 /** The gallery: resolves with the chosen kind, or null. */
 export function pickTemplate(): Promise<TemplateKind | null> {
-  return new Promise((resolve) => {
-    const back = document.createElement("div");
-    back.className = "palette-backdrop";
-    back.innerHTML = `<div class="palette import-dialog" role="dialog" aria-label="New from a template"><div class="palette-form"><h3>New from a template</h3><div class="template-cards"></div><div class="numfmt-actions"><button type="button">Cancel</button></div></div></div>`;
-    const cards = back.querySelector<HTMLElement>(".template-cards")!;
-    const done = (k: TemplateKind | null) => {
-      back.remove();
-      resolve(k);
-    };
-    for (const t of TEMPLATES) {
-      const card = document.createElement("button");
-      card.type = "button";
-      card.className = "template-card";
-      card.append(Object.assign(document.createElement("strong"), { textContent: t.title }), Object.assign(document.createElement("span"), { textContent: t.summary }));
-      card.addEventListener("click", () => done(t.kind));
-      cards.append(card);
-    }
-    back.querySelector(".numfmt-actions button")!.addEventListener("click", () => done(null));
-    back.addEventListener("keydown", (e) => e.key === "Escape" && done(null));
-    document.body.append(back);
-    cards.querySelector("button")?.focus();
+  const cards = document.createElement("div");
+  cards.className = "an-cards";
+  let chosen: TemplateKind | null = null;
+  const dlg = openDialog({
+    title: "New from a template",
+    subtitle: "A workbook laid out for the job, ready for your data",
+    size: "lg",
+    body: cards,
+    actions: [{ label: "Cancel", dismiss: true }],
   });
+  for (const t of TEMPLATES) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "an-card";
+    const title = document.createElement("span");
+    title.className = "an-card__title";
+    title.textContent = t.title;
+    const text = document.createElement("span");
+    text.className = "an-card__text";
+    text.textContent = t.summary;
+    card.append(title, text);
+    card.addEventListener("click", () => {
+      chosen = t.kind;
+      dlg.close(t.kind);
+    });
+    cards.append(card);
+  }
+  cards.querySelector("button")?.focus();
+  return dlg.closed.then(() => chosen);
 }
 
 /** For tests: a small table as a sheet. */
