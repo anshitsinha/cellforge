@@ -5,6 +5,7 @@
  * (the original is never changed); tools that add columns write them next
  * to the source column as one undo step, warning before they overwrite.
  */
+import { openToolDialog, openToolNotice, type ToolPreview, type ToolSpec } from "./tooldialog";
 import type { Action } from "@cellforge/actions";
 import { columnIndex, formatValue, isDateFormat, Table, type ColumnData } from "@cellforge/core";
 import { columnLetter, type CellRange, type CellRef } from "@cellforge/grid";
@@ -28,7 +29,6 @@ import { readSheet, type SheetData } from "./audittools";
 import { setCells } from "./actions";
 import { EditableSource } from "./editable";
 import "./transformtools.css";
-import { modal } from "./a11y";
 
 export type TransformKind = "dedupe" | "split" | "unpivot" | "pivot" | "extract" | "goalseek";
 
@@ -402,20 +402,8 @@ function numericColumns(data: SheetData): Set<number> {
 
 // ---------------------------------------------------------------- tools --
 
-interface Preview {
-  lines: { text: string; warn?: boolean }[];
-  table?: string[][];
-  /** Does the work, or null when there's nothing to do. */
-  apply: (() => Promise<void>) | null;
-  ok: string;
-}
-
-interface Tool {
-  title: string;
-  intro: string;
-  fields: HTMLElement[];
-  compute(): Preview;
-}
+type Preview = ToolPreview;
+type Tool = ToolSpec;
 
 interface Ctx {
   d: TransformDeps;
@@ -758,116 +746,9 @@ export function openTransform(kind: TransformKind, d: TransformDeps): void {
   const src = d.source();
   const data = readSheet(src);
   const c: Ctx = { d, src, data, sheet: d.sheetName().slice(0, 18), sheetId: d.activeSheet() };
-  const back = document.createElement("div");
-  back.className = "palette-backdrop";
-  modal(back);
-  back.innerHTML = `<div class="palette import-dialog" role="dialog"><div class="palette-form tx-form"></div></div>`;
-  const body = back.querySelector<HTMLElement>(".palette-form")!;
-  const close = () => {
-    back.remove();
-    d.focusGrid();
-  };
-  back.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") close();
-  });
-  const h = document.createElement("h3");
-  const buttons = document.createElement("div");
-  buttons.className = "numfmt-actions";
-
   if (kind !== "goalseek" && (!data.names.length || !data.rows)) {
-    h.textContent = "Nothing to work on";
-    const p = document.createElement("p");
-    p.textContent = "This sheet has no data. Open or paste the data first; the first row (or the column names) should name the columns.";
-    const ok = document.createElement("button");
-    ok.type = "button";
-    ok.textContent = "Close";
-    ok.addEventListener("click", close);
-    buttons.append(ok);
-    body.append(h, p, buttons);
-    document.body.append(back);
-    ok.focus();
+    openToolNotice("Nothing to work on", "This sheet has no data yet. Open or paste the data first, with a header row (or column names) naming the columns.", d.focusGrid);
     return;
   }
-
-  const tool = TOOLS[kind](c);
-  back.querySelector(".palette")!.setAttribute("aria-label", tool.title);
-  h.textContent = tool.title;
-  const intro = document.createElement("p");
-  intro.className = "hp-muted";
-  intro.textContent = tool.intro;
-  const fields = document.createElement("div");
-  fields.className = "fields";
-  fields.append(...tool.fields);
-  const result = document.createElement("div");
-  result.className = "tx-result";
-  result.setAttribute("aria-live", "polite");
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.textContent = "Cancel";
-  const okBtn = document.createElement("button");
-  okBtn.type = "button";
-  buttons.append(cancel, okBtn);
-  body.append(h, intro, fields, result, buttons);
-
-  let preview: Preview | null = null;
-  const update = () => {
-    result.replaceChildren();
-    try {
-      preview = tool.compute();
-    } catch (e) {
-      preview = null;
-      const p = document.createElement("p");
-      p.className = "cleanup-warn";
-      p.textContent = (e as Error).message;
-      result.append(p);
-      okBtn.disabled = true;
-      return;
-    }
-    for (const l of preview.lines) {
-      const p = document.createElement("p");
-      p.textContent = l.text;
-      if (l.warn) p.className = "cleanup-warn";
-      result.append(p);
-    }
-    if (preview.table) {
-      const table = document.createElement("table");
-      preview.table.forEach((row, i) => {
-        const tr = document.createElement("tr");
-        for (const v of row) {
-          const cell = document.createElement(i ? "td" : "th");
-          cell.textContent = v;
-          tr.append(cell);
-        }
-        table.append(tr);
-      });
-      const wrap = document.createElement("div");
-      wrap.className = "import-preview";
-      wrap.append(table);
-      result.append(wrap);
-    }
-    okBtn.textContent = preview.ok;
-    okBtn.disabled = !preview.apply;
-  };
-  let timer = 0;
-  const later = () => {
-    clearTimeout(timer);
-    timer = window.setTimeout(update, 200);
-  };
-  fields.addEventListener("input", later);
-  fields.addEventListener("change", later);
-  update();
-
-  cancel.addEventListener("click", close);
-  okBtn.addEventListener("click", () => {
-    clearTimeout(timer);
-    update();
-    const apply = preview?.apply;
-    if (!apply) return;
-    back.remove();
-    void apply()
-      .catch((e: unknown) => d.status((e as Error).message))
-      .finally(() => d.focusGrid());
-  });
-  document.body.append(back);
-  (fields.querySelector(kind === "goalseek" ? "label:nth-child(2) input" : "select, input") as HTMLElement | null)?.focus();
+  openToolDialog(TOOLS[kind](c), { focusGrid: d.focusGrid, ...(kind === "goalseek" ? { focus: "label:nth-child(2) input" } : {}) });
 }
