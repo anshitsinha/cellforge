@@ -1,0 +1,319 @@
+/* History and Inspect panels (historypanel.ts, inspectpanel.ts) in the
+   shared side panel. Tokens only. */
+
+/* ---- timeline: a vertical rail of steps */
+.hist-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.hist-step__btn {
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: auto;
+  min-height: 32px;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-1);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  text-align: left;
+  font-weight: var(--weight-regular);
+  cursor: pointer;
+}
+
+.hist-step__btn:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+
+.hist-step__btn:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+/* the rail line through the dots */
+.hist-step__btn::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--space-1) + 7px);
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border-default);
+}
+
+.hist-step:first-child .hist-step__btn::before {
+  top: 50%;
+}
+
+.hist-step:last-child .hist-step__btn::before {
+  bottom: 50%;
+}
+
+.hist-dot {
+  position: relative;
+  z-index: 1;
+  justify-self: center;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  background: var(--surface-1);
+}
+
+.hist-step.is-done .hist-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.hist-step.is-current .hist-dot {
+  width: 14px;
+  height: 14px;
+  border: 3px solid var(--accent);
+  background: var(--surface-0);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.hist-step.is-current .hist-step__btn {
+  background: var(--accent-soft);
+}
+
+.hist-step.is-current .hist-step__label {
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.hist-step.is-undone .hist-step__label,
+.hist-step.is-undone .hist-step__time {
+  color: var(--text-subtle);
+  text-decoration: line-through;
+  text-decoration-color: var(--border-strong);
+}
+
+.hist-step__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hist-step__time {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- the cell's past */
+.hist-cell {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.hist-cell li {
+  display: grid;
+  gap: 1px;
+  padding: var(--space-1-5) var(--space-2);
+  border-left: 2px solid var(--border-default);
+}
+
+.hist-cell li.is-now {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.hist-cell small {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.hist-cell span {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+  color: var(--text-strong);
+}
+
+/* ---- versions and comparisons */
+.hist-versions li .btn-icon {
+  color: var(--muted);
+}
+
+.hist-changes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.hist-changes li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: baseline;
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-sm);
+}
+
+.hist-ref {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+.hist-ref:hover {
+  text-decoration: underline;
+}
+
+.hist-diff {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+}
+
+.hist-diff del,
+.hist-diff ins {
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.hist-diff del {
+  background: var(--danger-soft);
+  color: var(--danger);
+  text-decoration: line-through;
+}
+
+.hist-diff ins {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+/* ---- inspect */
+.insp-formula {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+  color: var(--text-strong);
+}
+
+.insp-value {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.insp-value b {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.insp-steps,
+.insp-steps ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.insp-steps ul {
+  margin-left: var(--space-2);
+  padding-left: var(--space-3);
+  border-left: 1px dashed var(--border-default);
+}
+
+.insp-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  padding: 3px 0;
+  font-size: var(--text-sm);
+}
+
+.insp-step code {
+  font-family: var(--font-mono);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.insp-step span {
+  color: var(--muted);
+}
+
+.insp-step strong {
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.insp-places {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.insp-place {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 24px;
+  min-height: 0;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  background: var(--surface-0);
+  box-shadow: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.insp-place::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--swatch, var(--accent));
+}
+
+.insp-place:hover {
+  border-color: var(--swatch, var(--accent));
+}
