@@ -1,6 +1,6 @@
 # History and versions
 
-Open the history panel with **History** on the toolbar or **Ctrl+Shift+H**.
+Open the history panel with **View > Show history and versions** or **Ctrl+Shift+H**.
 
 ## This session
 

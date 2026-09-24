@@ -28,7 +28,7 @@ characters, unique (ignoring upper/lower case), not empty, without
 ## Opening files
 
 **Open** and **New** start a new workbook. A CSV opens as one sheet named
-after the file; a `.cellforge` file opens with all its sheets. **New** and **100M demo** ask before discarding unsaved changes.
+after the file; a `.cellforge` file opens with all its sheets. Starting a new workbook, a template or a sample asks before discarding unsaved changes.
 
 Formulas can use values from other sheets, like `=Sales!B4`; see
 [formulas](#/guide/03-formulas).

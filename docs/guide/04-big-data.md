@@ -6,13 +6,13 @@ reason something doesn't work.
 ## What you can do at scale today
 
 - **Open big CSV files.** Files are read in the background while the page
-  stays usable; progress shows in the status bar.
+  stays usable; progress shows in a message at the bottom of the window.
 - **Scroll 100 million rows** smoothly. Only the cells on screen are ever drawn.
 - **Fill a formula down millions of rows** instantly; it's compiled into a fast loop.
 - **Sort 100 million rows** in seconds.
 - **Select a whole column** and see its sum, average and count.
 
-Try it with the **100M demo** button.
+Try it with **Help > Sample data > Try the sample: 100M-line ledger**, or the 100M-line ledger card on the start screen.
 
 ## Why it's fast
 

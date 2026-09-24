@@ -1,35 +1,56 @@
 # Getting started
 
-cellforge is a spreadsheet that runs entirely in your browser, on your own
-computer. Nothing you open or type is uploaded anywhere: there is no server
-and no account.
+cellforge is a spreadsheet for finance and audit work that runs entirely in
+your browser, on your own computer. Nothing you open or type is uploaded
+anywhere: there is no server and no account.
 
-## Open it
+## The start screen
 
-- **A blank sheet:** open the app. It starts with an empty sheet, like any spreadsheet.
-- **Your own data:** click **Open**, or drag an Excel (`.xlsx`), `.csv`, `.tsv` or `.txt` file
-  anywhere onto the window. Big files stream in, so the page stays responsive
+A new or empty workbook opens on the **start screen** instead of a blank
+grid. From there you can:
+
+- **Open a file or drop it here**: Excel (`.xlsx`), `.csv`, `.tsv`, `.txt`,
+  JSON, Parquet or a `.cellforge` workbook. A **PDF bank statement** becomes
+  a sheet of transactions. You can also drag a file anywhere onto the
+  window, at any time. Big files stream in, so the page stays responsive
   while they load.
-- **The 100M-row demo:** click **100M demo** to see what scale feels like:
-  a generated sales table with one hundred million rows.
+- **Start a workflow**: Bank reconciliation, Month-end close, Audit tests or
+  a 100M-line ledger. **Try with sample data** opens the workbook with
+  fictional data filled in, so you can try every step first; the second
+  button opens the same layout empty, for your own data.
+- **Set up private AI**: pick a model that runs on this computer (see
+  [Local AI](#/guide/46-local-ai)).
+- **Blank workbook** starts an empty sheet; **Esc** goes back to the sheet.
+
+The start screen comes back from **File > New workbook** and
+**Help > Start screen**. **Help > Sample data** opens the samples directly.
 
 ## Find your way around
 
 | Area | What it does |
 | --- | --- |
-| Toolbar | Undo / Redo, Fill down, Sort, New, Open, Save, Export, Demo; the format bar under it |
-| Name box (left of the formula bar) | The selected cell, e.g. `B4` |
-| Formula bar | What's in the cell: the formula itself, not its result |
+| Top bar | The file name and whether it's saved; Undo / Redo; **Search commands** (**Ctrl+K**); **Open**, **Save** (a menu with Save as and the Excel and CSV exports), **Share** (check for hidden content, a password-protected copy, an evidence pack); **Ask AI**; and **?** for help |
+| Menu bar | **File, Edit, View, Insert, Format, Data, Reconcile, Audit, Review, Reports, AI, Help**. Every command, with its shortcut. **Alt** or **F10** moves to it from the keyboard |
+| Format bar | Bold, sizes, number formats, colours, alignment, borders for the selection |
+| Name box and formula bar | The selected cell (e.g. `B4`) and what's in it: the formula itself, not its result |
+| Left bar | One button per job: **Data**, **Reconcile**, **Audit**, **Review**, **Reports** and **AI**. Each opens a panel with that job's tools, a line on what each does, and the next step |
+| Side panel | Tools that need the sheet in view (the job panels, AI, history, explain, pivot fields) open on the right; the grid makes room |
 | Grid | Your data. Only what's on screen is drawn, so size doesn't slow it down |
-| Status bar | Row and column counts on the left; sum / average / count of the selection on the right |
+| Bottom bar | Sheet tabs on the left; the sheet's size and the selection's sum, average and count on the right |
+
+Results, warnings and errors appear as short messages at the bottom of the
+window. Errors stay until you close them.
+
+**View > Theme** switches between light, dark and the computer's setting.
+**View > Collapse the side bar** keeps only the icons on the left bar.
 
 ## Save your work
 
 You don't have to: cellforge **saves as you go**, on this computer, in the
 browser's private storage. Close the tab, restart the computer, or have the
 browser crash in the middle of an edit, and the next time you open
-cellforge everything is back, including undo. The word next to the file
-name says **saved** once a change is safely stored.
+cellforge everything is back, including undo. **Saved on this computer**
+next to the file name means a change is safely stored.
 
 To keep a copy somewhere else, or to send one, press **Save** (**Ctrl+S**).
 That writes one `.cellforge` file with every sheet, formula, format and
@@ -37,8 +58,8 @@ the imported data inside. **Open** (**Ctrl+O**) opens it again. In Chrome
 and Edge, Ctrl+S after the first save updates the same file; in other
 browsers each save downloads a new copy. **Ctrl+Shift+S** is Save as.
 
-**Export CSV** still downloads the sheet on screen as plain values for
-other tools.
+The **Save** menu also has **Export Excel (.xlsx)** for the whole workbook
+and **Export CSV** for the sheet on screen, as plain values for other tools.
 
 A few things to know:
 

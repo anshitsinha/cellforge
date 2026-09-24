@@ -72,8 +72,8 @@ tracker shows this expanded, with the first unticked step as the current one.
 - [x] Independent review of every screen with screenshots: problems ranked, a new layout, six workstreams
 - [x] Design system: tokens for both themes, one button and table style, shared dialog, side panel, toasts, confirm, icons
 - [x] Landing page for finance and audit analysts; finance sample data instead of the sales demo
-- [ ] Local AI you can find: an AI panel with recommended models, download on request, status everywhere
-- [ ] App shell: Ask AI button, menu bar, side rail for the main jobs, start screen, a palette without engine internals
+- [x] Local AI you can find: an AI panel with recommended models, download on request, status everywhere
+- [x] App shell: Ask AI button, menu bar, side rail for the main jobs, start screen, a palette without engine internals
 - [ ] Every tool dialog on the shared components, with better defaults and empty states
 - [ ] Browser check of every screen in both themes; guides updated
 

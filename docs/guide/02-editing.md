@@ -13,7 +13,7 @@ cancels. You can also type in the formula bar.
 ## Undo and redo
 
 Every change can be undone with **Ctrl+Z** and redone with **Ctrl+Y**,
-including sorts of millions of rows. The status bar says what was undone.
+including sorts of millions of rows, or with the arrows in the top bar.
 
 Under the hood, every change is recorded as an *action*: a small, exact
 description of what happened. That's what will let cellforge replay your
@@ -27,7 +27,7 @@ The top cell is copied into every selected row; formulas adjust their
 references as they go, just as in Excel.
 
 Filling a formula down a huge column is instant: cellforge stores it once and,
-where it can, compiles it into a fast loop. The status bar tells you whether a
+where it can, compiles it into a fast loop. The message afterwards tells you whether a
 fill was *compiled* or *interpreted*.
 
 ## Sort
@@ -107,7 +107,7 @@ cancels. You can also type in the formula bar.
 ## Undo and redo
 
 Every change can be undone with **Ctrl+Z** and redone with **Ctrl+Y**,
-including sorts of millions of rows. The status bar says what was undone.
+including sorts of millions of rows, or with the arrows in the top bar.
 
 Under the hood, every change is recorded as an *action*: a small, exact
 description of what happened. That's what will let cellforge replay your
@@ -121,7 +121,7 @@ The top cell is copied into every selected row; formulas adjust their
 references as they go, just as in Excel.
 
 Filling a formula down a huge column is instant: cellforge stores it once and,
-where it can, compiles it into a fast loop. The status bar tells you whether a
+where it can, compiles it into a fast loop. The message afterwards tells you whether a
 fill was *compiled* or *interpreted*.
 
 ## Sort

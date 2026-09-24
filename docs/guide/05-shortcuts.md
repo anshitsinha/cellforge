@@ -1,5 +1,7 @@
 # Keyboard shortcuts
 
+**Help > Keyboard shortcuts** shows these in the app.
+
 | Keys | Action |
 | --- | --- |
 | Arrows, Tab, Enter, PgUp / PgDn, Home / End | Move |
@@ -23,6 +25,7 @@
 | Ctrl + Shift + V | Paste values only |
 | Ctrl + Z / Ctrl + Y | Undo / redo |
 | Ctrl + K | Command palette: search every command |
+| Alt (on its own) or F10 | Move to the menu bar; arrows to move, Enter to open, Esc to leave |
 | Ctrl + F | Find |
 | Ctrl + H | Find and replace |
 | Ctrl + Shift + H | History and versions panel |

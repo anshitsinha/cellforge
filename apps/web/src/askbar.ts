@@ -258,7 +258,7 @@ export function setupAskBar(d: AskBarDeps): { open: (text?: string) => void; clo
       let action = "Manage the local AI…";
       switch (s.state) {
         case "ready":
-          text.textContent = `Local AI ready: ${s.label.replace(/^Ready: /, "").replace(/ \((GPU|CPU)\)$/,(_, b: string) => (b === "GPU" ? ", on the graphics card" : ", on the processor"))}. Requests I don't recognise go to it; it runs on this computer.`;
+          text.textContent = `${s.label.replace(/^Ready: /, "").replace(/ \((GPU|CPU)\)$/,(_, b: string) => (b === "GPU" ? ", on the graphics card" : ", on the processor"))}. Requests I don't recognise go to it; it runs on this computer.`;
           break;
         case "loading":
         case "downloading":
@@ -279,7 +279,7 @@ export function setupAskBar(d: AskBarDeps): { open: (text?: string) => void; clo
         default:
           text.textContent = afterUnknown
             ? "With the local AI you can ask in your own words instead. It runs on this computer; nothing you type is sent anywhere."
-            : "These work without AI. Set up the local AI to also ask in your own words, explain numbers and suggest categories. It runs on this computer; nothing you type is sent anywhere.";
+            : "These work without AI. Set up the local AI to also ask in your own words, explain numbers and suggest categories. Nothing you type leaves this computer.";
           action = "Set up the local AI…";
       }
       const b = el("button", s.state === "none" ? "btn-primary btn-sm askbar-ai-setup" : "askbar-link", action);
@@ -288,7 +288,8 @@ export function setupAskBar(d: AskBarDeps): { open: (text?: string) => void; clo
         close();
         ai.setup();
       });
-      box.append(dot, text, b);
+      const head = el("p", "askbar-ai-kicker", s.state === "ready" ? "Private AI · ready" : s.state === "loading" || s.state === "downloading" ? "Private AI · getting ready" : "Private AI");
+      box.append(dot, head, text, b);
       return box;
     };
 
