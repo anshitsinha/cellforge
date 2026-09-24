@@ -5,12 +5,13 @@
  * one undo step.
  */
 import "./findreplace.css";
+import "./analysis.css";
 import type { Action } from "@cellforge/actions";
 import { type CellRange, columnLetter } from "@cellforge/grid";
 import { compileQuery, find, findNext, type FindOptions, planReplace, replaceAction, replacementInput, type Match } from "./findreplace";
 import { setCells } from "./actions";
 import type { Workbook } from "./workbook";
-import { modal } from "./a11y";
+import { iconSvg } from "./ui/icons";
 
 export interface FindReplaceDeps {
   workbook: () => Workbook;
@@ -45,36 +46,56 @@ export function openFindReplace(d: FindReplaceDeps, mode: "find" | "replace"): v
   const startRange = d.range();
   const hasRange = startRange.bottom > startRange.top || startRange.right > startRange.left;
 
+  // a floating card at the top right: the sheet stays usable behind it, so it isn't modal
   const back = document.createElement("div");
-  back.className = "palette-backdrop find-backdrop";
-  // the sheet stays usable behind Find, so it isn't modal
-  modal(back, { modal: false });
-  back.innerHTML = `<div class="palette find-dialog" role="dialog" aria-label="Find and replace"><div class="palette-form">
-    <h3></h3>
-    <label>Find <input type="text" data-k="query" spellcheck="false" autocomplete="off"></label>
-    <label data-k="replace-row">Replace with <input type="text" data-k="replacement" spellcheck="false" autocomplete="off"></label>
-    <div class="find-options">
-      <label><input type="checkbox" data-k="matchCase"> Match case</label>
-      <label><input type="checkbox" data-k="wholeCell"> Whole cell</label>
-      <label><input type="checkbox" data-k="regex"> Regular expression</label>
-    </div>
-    <div class="find-options">
-      <label>Within <select data-k="scope"><option value="selection">Selection</option><option value="sheet">Sheet</option><option value="all">All sheets</option></select></label>
-      <label>Search <select data-k="order"><option value="rows">By rows</option><option value="cols">By columns</option></select></label>
-      <label>Look in <select data-k="lookIn"><option value="values">Values</option><option value="formulas">Formulas</option></select></label>
-    </div>
-    <p class="find-status" aria-live="polite"></p>
-    <div class="numfmt-actions">
-      <button type="button" data-act="mode"></button>
-      <button type="button" data-act="all">Find all</button>
-      <button type="button" data-act="prev" title="Shift+Enter">Previous</button>
-      <button type="button" data-act="next" title="Enter">Find next</button>
-      <button type="button" data-act="replace">Replace</button>
-      <button type="button" data-act="replaceAll">Replace all</button>
-      <button type="button" data-act="close" title="Esc">Close</button>
-    </div>
-    <ul class="find-results"></ul>
-  </div></div>`;
+  back.className = "find-bar";
+  back.setAttribute("role", "dialog");
+  back.setAttribute("aria-modal", "false");
+  back.setAttribute("aria-labelledby", "find-title");
+  back.innerHTML = `
+    <header class="find-head">
+      <h2 class="cf-sr-only" id="find-title">Find and replace</h2>
+      <div class="find-tabs" role="tablist" aria-label="Find or replace">
+        <button type="button" role="tab" data-act="tab-find">Find</button>
+        <button type="button" role="tab" data-act="tab-replace">Replace</button>
+      </div>
+      <button type="button" class="btn-ghost btn-icon btn-sm" data-act="close" aria-label="Close (Esc)" title="Close (Esc)">${iconSvg("close", { size: 14 })}</button>
+    </header>
+    <div class="find-body">
+      <div class="find-field">
+        ${iconSvg("search", { size: 14, className: "find-field__icon" })}
+        <input type="text" data-k="query" spellcheck="false" autocomplete="off" aria-label="Find" placeholder="Find in the sheet">
+        <span class="find-count" aria-hidden="true"></span>
+      </div>
+      <div class="find-field" data-k="replace-row">
+        ${iconSvg("redo", { size: 14, className: "find-field__icon" })}
+        <input type="text" data-k="replacement" spellcheck="false" autocomplete="off" aria-label="Replace with" placeholder="Replace with">
+      </div>
+      <div class="find-options">
+        <label class="find-toggle" title="Match case"><input type="checkbox" data-k="matchCase"><span>Aa</span><span class="cf-sr-only">Match case</span></label>
+        <label class="find-toggle" title="Whole cell only"><input type="checkbox" data-k="wholeCell"><span>[ab]</span><span class="cf-sr-only">Whole cell</span></label>
+        <label class="find-toggle" title="Regular expression"><input type="checkbox" data-k="regex"><span>.*</span><span class="cf-sr-only">Regular expression</span></label>
+        <span class="find-sep"></span>
+        <label class="find-select"><span class="cf-sr-only">Within</span><select data-k="scope" title="Where to look"><option value="selection">In the selection</option><option value="sheet">In this sheet</option><option value="all">In all sheets</option></select></label>
+        <details class="find-more">
+          <summary>More</summary>
+          <div class="find-more__body">
+            <label class="an-field"><span>Search</span><select data-k="order"><option value="rows">By rows</option><option value="cols">By columns</option></select></label>
+            <label class="an-field"><span>Look in</span><select data-k="lookIn"><option value="values">Values</option><option value="formulas">Formulas</option></select></label>
+          </div>
+        </details>
+      </div>
+      <p class="find-status" aria-live="polite"></p>
+      <div class="find-actions">
+        <button type="button" class="btn-ghost btn-sm" data-act="all">Find all</button>
+        <span class="an-spacer"></span>
+        <button type="button" class="btn-secondary btn-sm" data-act="replace">Replace</button>
+        <button type="button" class="btn-secondary btn-sm" data-act="replaceAll">Replace all</button>
+        <button type="button" class="btn-secondary btn-icon btn-sm" data-act="prev" title="Previous (Shift+Enter)" aria-label="Previous match">${iconSvg("chevron-up", { size: 14 })}</button>
+        <button type="button" class="btn-primary btn-sm" data-act="next" title="Next (Enter)">Next</button>
+      </div>
+      <ul class="find-results" aria-label="Matches"></ul>
+    </div>`;
   const $ = <T extends HTMLElement>(sel: string) => back.querySelector<T>(sel)!;
   const query = $<HTMLInputElement>("[data-k=query]");
   const replacement = $<HTMLInputElement>("[data-k=replacement]");
@@ -86,6 +107,7 @@ export function openFindReplace(d: FindReplaceDeps, mode: "find" | "replace"): v
   const lookIn = $<HTMLSelectElement>("[data-k=lookIn]");
   const status = $<HTMLElement>(".find-status");
   const results = $<HTMLUListElement>(".find-results");
+  const count = $<HTMLElement>(".find-count");
 
   query.value = last.query;
   replacement.value = last.replacement;
@@ -100,11 +122,13 @@ export function openFindReplace(d: FindReplaceDeps, mode: "find" | "replace"): v
   let replacing = mode === "replace";
   const setMode = (m: "find" | "replace") => {
     replacing = m === "replace";
-    $("h3").textContent = replacing ? "Find and replace" : "Find";
+    $("[data-act=tab-find]").setAttribute("aria-selected", String(!replacing));
+    $("[data-act=tab-replace]").setAttribute("aria-selected", String(replacing));
+    back.classList.toggle("is-replacing", replacing);
     $("[data-k=replace-row]").hidden = !replacing;
     $("[data-act=replace]").hidden = !replacing;
     $("[data-act=replaceAll]").hidden = !replacing;
-    $("[data-act=mode]").textContent = replacing ? "Find only" : "Replace…";
+    $("[data-act=all]").hidden = replacing;
     // replacing changes what was typed, so that's what it searches
     lookIn.disabled = replacing;
     if (replacing) lookIn.value = "formulas";
@@ -142,7 +166,8 @@ export function openFindReplace(d: FindReplaceDeps, mode: "find" | "replace"): v
 
   const say = (text: string, problem = false) => {
     status.textContent = text;
-    status.classList.toggle("cleanup-warn", problem);
+    status.classList.toggle("is-error", problem);
+    count.textContent = "";
   };
 
   const address = (m: { sheetId: string; row: number; col: number }, withSheet: boolean) => {
@@ -184,13 +209,15 @@ export function openFindReplace(d: FindReplaceDeps, mode: "find" | "replace"): v
     if (!list) return;
     results.replaceChildren();
     const capped = list.length >= (o.limit ?? 10_000);
+    const counted = `${list.length.toLocaleString()}${capped ? "+" : ""}`;
     say(list.length ? `${list.length.toLocaleString()}${capped ? "+" : ""} ${list.length === 1 ? "cell" : "cells"} found.` + (list.length > SHOW_MAX ? ` Showing the first ${SHOW_MAX.toLocaleString()}.` : "") : "No matches.");
+    count.textContent = list.length ? counted : "";
     const multi = new Set(list.map((m) => m.sheetId)).size > 1 || o.scope === "all";
     for (const m of list.slice(0, SHOW_MAX)) {
       const li = document.createElement("li");
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "hp-cell";
+      b.className = "find-ref";
       b.textContent = address(m, multi);
       b.title = "Show it in the sheet";
       b.addEventListener("click", () => jump(m));
@@ -252,7 +279,7 @@ export function openFindReplace(d: FindReplaceDeps, mode: "find" | "replace"): v
     if (!query.value) return say("");
     try {
       compileQuery(query.value, options());
-      if (status.classList.contains("cleanup-warn")) say("");
+      if (status.classList.contains("is-error")) say("");
     } catch (e) {
       say((e as Error).message, true);
     }
@@ -261,9 +288,10 @@ export function openFindReplace(d: FindReplaceDeps, mode: "find" | "replace"): v
   regex.addEventListener("change", check);
   wholeCell.addEventListener("change", check);
 
-  $(".numfmt-actions").addEventListener("click", (e) => {
+  back.addEventListener("click", (e) => {
     const act = (e.target as HTMLElement).closest("button")?.dataset.act;
-    if (act === "mode") setMode(replacing ? "find" : "replace");
+    if (act === "tab-find") setMode("find");
+    else if (act === "tab-replace") setMode("replace");
     else if (act === "all") findAll();
     else if (act === "prev") next(true);
     else if (act === "next") next(false);

@@ -1,0 +1,135 @@
+/* Conditional formatting rules (cfmanager.ts) and the rule editor. Tokens only. */
+
+.cf-editor [hidden],
+.cf-list[hidden] {
+  display: none !important;
+}
+
+.cf-editor .cf-fields,
+.cf-editor .cf-custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.cf-editor .cf-fields > input:not([type="checkbox"]):not([type="color"]) {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+.cf-editor .cf-fields > select {
+  flex: 0 1 auto;
+}
+
+.cf-editor .cf-formula {
+  flex: 1 1 100% !important;
+  font-family: var(--font-mono);
+}
+
+.cf-editor .cf-hint {
+  flex-basis: 100%;
+}
+
+.cf-editor .cf-format {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.cf-editor .cf-custom {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.cf-editor input[type="color"] {
+  width: 32px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: none;
+}
+
+.cf-editor .cf-sample,
+.cf-list .cf-sample {
+  display: inline-grid;
+  place-items: center;
+  min-width: 88px;
+  height: var(--control-h);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  font-variant-numeric: tabular-nums;
+}
+
+.cf-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.cf-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1-5) var(--space-2);
+  border-radius: var(--radius-md);
+}
+
+.cf-row:hover {
+  background: var(--surface-3);
+}
+
+.cf-list .cf-sample {
+  min-width: 0;
+  width: 56px;
+  height: 24px;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.cf-desc {
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cf-range {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.cf-tools {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cf-tools .btn-icon {
+  color: var(--muted);
+}
+
+.cf-editor .cf-fields select,
+.cf-editor .cf-fields input:not([type="checkbox"]):not([type="color"]) {
+  width: auto;
+}
+
+.cf-editor .cf-format .an-field,
+.cf-editor .cf-format label.an-field {
+  display: grid;
+  align-items: stretch;
+  gap: var(--space-1);
+  font-weight: var(--weight-regular);
+}
+
+.cf-editor .cf-format .an-row {
+  margin: 0;
+}

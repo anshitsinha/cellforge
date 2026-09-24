@@ -10,7 +10,9 @@ import { parseRanges, rangesToText } from "./cfmanager";
 import type { EditableSource } from "./editable";
 import { allowed, describeDv, errorText, listChoices, typedValue, type DvContext, type DvKind, type DvOp, type DvRule } from "./validation";
 import type { Workbook } from "./workbook";
-import { modal } from "./a11y";
+import "./analysis.css";
+import { openDialog } from "./ui/dialog";
+import { toast } from "./ui/toast";
 
 export interface DvDeps {
   workbook: () => Workbook;
@@ -92,45 +94,29 @@ export function invalidCells(source: EditableSource, ctx: DvContext, limit = 10_
 
 /** Ask what to do about a value that breaks a rule: true = keep it. */
 export function askAboutInvalid(rule: DvRule): Promise<boolean> {
-  return new Promise((resolve) => {
-    const { title, message } = errorText(rule, dateText);
-    const style = rule.errorStyle ?? "stop";
-    const back = document.createElement("div");
-    back.className = "palette-backdrop";
-    modal(back);
-    back.innerHTML = `<div class="palette" role="alertdialog"><div class="palette-form"><h3></h3><p></p><div class="numfmt-actions"></div></div></div>`;
-    back.querySelector("h3")!.textContent = title;
-    back.querySelector("p")!.textContent = message + (style === "warning" ? " Keep it anyway?" : "");
-    const actions = back.querySelector<HTMLElement>(".numfmt-actions")!;
-    const button = (label: string, keep: boolean) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = label;
-      b.addEventListener("click", () => {
-        back.remove();
-        resolve(keep);
-      });
-      actions.append(b);
-      return b;
-    };
-    let first: HTMLButtonElement;
-    if (style === "stop") first = button("OK", false);
-    else if (style === "warning") {
-      button("No, change it", false);
-      first = button("Yes, keep it", true);
-    } else {
-      button("Cancel", false);
-      first = button("OK", true);
-    }
-    back.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        back.remove();
-        resolve(false);
-      }
-    });
-    document.body.append(back);
-    first.focus();
+  const { title, message } = errorText(rule, dateText);
+  const style = rule.errorStyle ?? "stop";
+  const actions =
+    style === "stop"
+      ? [{ label: "Change it", id: "no", kind: "primary" as const }]
+      : style === "warning"
+        ? [
+            { label: "No, change it", id: "no" },
+            { label: "Yes, keep it", id: "keep", kind: "primary" as const },
+          ]
+        : [
+            { label: "Cancel", id: "no" },
+            { label: "OK", id: "keep", kind: "primary" as const },
+          ];
+  const dlg = openDialog({
+    title,
+    size: "sm",
+    role: "alertdialog",
+    body: [message + (style === "warning" ? " Keep it anyway?" : "")],
+    actions,
+    initialFocus: "primary",
   });
+  return dlg.closed.then((r) => r === "keep");
 }
 
 let openList: HTMLElement | null = null;
@@ -314,16 +300,32 @@ export function openValidationDialog(d: DvDeps): void {
   const src = d.source();
   const sel = d.range();
   const existing = src.validationAt(sel.top, sel.left);
-  const back = document.createElement("div");
-  back.className = "palette-backdrop";
-  modal(back);
-  back.innerHTML = `<div class="palette import-dialog" role="dialog" aria-label="Data validation"><div class="palette-form"><h3>Data validation</h3></div></div>`;
-  const body = back.querySelector<HTMLElement>(".palette-form")!;
-  const field = (label: string, el: HTMLElement) => {
+  const body = document.createElement("div");
+  body.className = "an-stack an-stack--loose dv-dialog";
+  const field = (label: string, el: HTMLElement, hint?: string) => {
     const l = document.createElement("label");
-    l.append(label + " ", el);
-    body.append(l);
+    l.className = "an-field";
+    const cap = document.createElement("span");
+    cap.textContent = label;
+    l.append(cap, el);
+    if (hint) l.append(Object.assign(document.createElement("small"), { className: "an-hint", textContent: hint }));
     return l;
+  };
+  const row = (...kids: HTMLElement[]) => {
+    const r = document.createElement("div");
+    r.className = "an-row";
+    r.append(...kids);
+    return r;
+  };
+  const section = (title: string, ...kids: HTMLElement[]) => {
+    const s = document.createElement("section");
+    s.className = "an-section";
+    const head = document.createElement("div");
+    head.className = "an-section__head";
+    head.append(Object.assign(document.createElement("h3"), { className: "an-section__title", textContent: title }));
+    s.append(head, ...kids);
+    body.append(s);
+    return s;
   };
   const input = (value: string, label: string) => Object.assign(document.createElement("input"), { value, ariaLabel: label });
   const select = (opts: [string, string][], value: string, label: string) => {
@@ -332,107 +334,104 @@ export function openValidationDialog(d: DvDeps): void {
     for (const [v, t] of opts) s.append(new Option(t, v, false, v === value));
     return s;
   };
-  const applies = input(rangesToText(existing && existing.ranges.some((r) => r.top <= sel.top && r.bottom >= sel.bottom) ? [sel] : [sel]), "Applies to");
+  const applies = input(rangesToText([sel]), "Applies to");
   const kind = select(KINDS, existing?.kind ?? "list", "Allow");
   const op = select(OPS, existing?.op ?? "between", "Comparison");
   const fmtIn = (n: number | undefined) => (n === undefined ? "" : kind.value === "date" ? dateText(n) : String(n));
   const a = input(fmtIn(existing?.a), "Minimum or value");
   const b = input(fmtIn(existing?.b), "Maximum");
   const list = input(existing?.source ? `=${existing.source}` : (existing?.list ?? []).join(", "), "Choices");
+  list.placeholder = "Approved, Rejected, On hold";
   const formula = input(existing?.formula ?? "=", "Formula");
+  formula.className = "an-mono";
   const blank = Object.assign(document.createElement("input"), { type: "checkbox", checked: existing?.allowBlank !== false });
   const title = input(existing?.inputTitle ?? "", "Input title");
+  title.placeholder = "e.g. Approval status";
   const msg = input(existing?.inputMessage ?? "", "Input message");
-  const style = select([["stop", "Stop: don't allow it"], ["warning", "Warning: ask"], ["info", "Information: allow and say"]], existing?.errorStyle ?? "stop", "When a value breaks the rule");
+  msg.placeholder = "e.g. Pick one from the list";
+  const style = select([["stop", "Stop: don't allow it"], ["warning", "Warning: ask first"], ["info", "Note: allow it and say so"]], existing?.errorStyle ?? "stop", "When a value breaks the rule");
   const errMsg = input(existing?.errorMessage ?? "", "Error message");
-  field("Cells", applies);
-  field("Allow", kind);
+  errMsg.placeholder = "Shown instead of the standard message";
+
+  section("The rule", row(field("Cells", applies), field("Allow", kind)));
   const opRow = field("Value is", op);
-  const aRow = field("", a);
+  const aRow = field("Value", a);
   const bRow = field("and", b);
-  const listRow = field("Choices (comma-separated, or =Sheet!$A$2:$A$20)", list);
-  const fRow = field("Formula that must be TRUE (for the first cell)", formula);
+  const cmpRow = row(opRow, aRow, bRow);
+  const listRow = field("Choices", list, "Separate them with commas, or point at a range like =Lists!$A$2:$A$20.");
+  const fRow = field("Formula that must be TRUE", formula, "Written for the first cell; it moves for the others like a copied formula.");
   const bl = document.createElement("label");
-  bl.append(blank, " Allow blank cells");
-  body.append(bl);
-  field("Message when selected: title", title);
-  field("message", msg);
-  field("When a value breaks the rule", style);
-  field("Error message (optional)", errMsg);
-  const error = Object.assign(document.createElement("p"), { className: "cleanup-warn", hidden: true });
-  body.append(error);
+  bl.className = "an-check";
+  bl.append(blank, Object.assign(document.createElement("span"), { textContent: "Blank cells are allowed" }));
+  body.lastElementChild!.append(cmpRow, listRow, fRow, bl);
+  section("When the cell is selected", row(field("Title", title), field("Message", msg)));
+  section("When a value breaks the rule", row(field("Then", style), field("Message (optional)", errMsg)));
+
   const sync = () => {
     const k = kind.value as DvKind;
     const cmp = ["whole", "decimal", "date", "textLength"].includes(k);
-    opRow.hidden = aRow.hidden = !cmp;
+    cmpRow.hidden = !cmp;
     bRow.hidden = !cmp || !(op.value === "between" || op.value === "notBetween");
+    aRow.querySelector("span")!.textContent = bRow.hidden ? "Value" : "From";
     listRow.hidden = k !== "list";
     fRow.hidden = k !== "custom";
-    a.placeholder = k === "date" ? "2024-01-31" : "0";
+    a.placeholder = k === "date" ? "2026-01-31" : "0";
+    b.placeholder = k === "date" ? "2026-12-31" : "100";
   };
   kind.addEventListener("change", sync);
   op.addEventListener("change", sync);
   sync();
 
-  const actions = document.createElement("div");
-  actions.className = "numfmt-actions";
-  const clear = Object.assign(document.createElement("button"), { type: "button", textContent: "Clear validation" });
-  const cancel = Object.assign(document.createElement("button"), { type: "button", textContent: "Cancel" });
-  const ok = Object.assign(document.createElement("button"), { type: "button", textContent: "OK" });
-  actions.append(clear, cancel, ok);
-  body.append(actions);
-  const close = () => {
-    back.remove();
-    d.focusGrid();
-  };
-  cancel.addEventListener("click", close);
-  back.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") close();
+  openDialog({
+    title: "Data validation",
+    subtitle: "Limit what can be typed into the selected cells: a dropdown list, a range of numbers or dates",
+    size: "md",
+    body,
+    initialFocus: kind,
+    actions: [
+      {
+        label: "Clear validation",
+        start: true,
+        kind: "ghost",
+        title: "Remove the rules from these cells",
+        onClick: async () => {
+          const ranges = parseRanges(applies.value, src.rowCount, src.colCount);
+          for (const range of ranges) await d.run({ type: "validation.clear", params: { range } });
+          toast({ text: "Validation cleared. Ctrl+Z brings it back." });
+        },
+      },
+      { label: "Cancel", dismiss: true },
+      {
+        label: "Save rule",
+        kind: "primary",
+        onClick: () => {
+          const k = kind.value as DvKind;
+          const ranges = parseRanges(applies.value, src.rowCount, src.colCount);
+          const num = (t: string) => {
+            if (t.trim() === "") return undefined;
+            const n = k === "date" ? parseDateLoose(t) : Number(t);
+            if (n === null || Number.isNaN(n)) throw new Error(k === "date" ? `"${t}" isn't a date.` : `"${t}" isn't a number.`);
+            return n;
+          };
+          const rule: Omit<DvRule, "id"> = { kind: k, ranges, ...(blank.checked ? {} : { allowBlank: false }) };
+          if (["whole", "decimal", "date", "textLength"].includes(k)) Object.assign(rule, { op: op.value, a: num(a.value), ...(bRow.hidden ? {} : { b: num(b.value) }) });
+          if (k === "list") {
+            const t = list.value.trim();
+            if (!t) throw new Error("Type the choices, or point at a range.");
+            if (t.startsWith("=")) rule.source = t.slice(1);
+            else rule.list = t.split(",").map((x) => x.trim()).filter(Boolean);
+          }
+          if (k === "custom") rule.formula = formula.value;
+          if (title.value.trim()) rule.inputTitle = title.value.trim();
+          if (msg.value.trim()) rule.inputMessage = msg.value.trim();
+          if (style.value !== "stop") rule.errorStyle = style.value as "warning";
+          if (errMsg.value.trim()) rule.errorMessage = errMsg.value.trim();
+          void d.run({ type: "validation.add", params: { rule } });
+        },
+      },
+    ],
+    onClose: () => d.focusGrid(),
   });
-  clear.addEventListener("click", () => {
-    try {
-      const ranges = parseRanges(applies.value, src.rowCount, src.colCount);
-      back.remove();
-      void (async () => {
-        for (const range of ranges) await d.run({ type: "validation.clear", params: { range } });
-        d.focusGrid();
-      })();
-    } catch (e) {
-      error.textContent = (e as Error).message;
-      error.hidden = false;
-    }
-  });
-  ok.addEventListener("click", () => {
-    try {
-      const k = kind.value as DvKind;
-      const ranges = parseRanges(applies.value, src.rowCount, src.colCount);
-      const num = (t: string) => {
-        if (t.trim() === "") return undefined;
-        const n = k === "date" ? parseDateLoose(t) : Number(t);
-        if (n === null || Number.isNaN(n)) throw new Error(k === "date" ? `"${t}" isn't a date.` : `"${t}" isn't a number.`);
-        return n;
-      };
-      const rule: Omit<DvRule, "id"> = { kind: k, ranges, ...(blank.checked ? {} : { allowBlank: false }) };
-      if (["whole", "decimal", "date", "textLength"].includes(k)) Object.assign(rule, { op: op.value, a: num(a.value), ...(bRow.hidden ? {} : { b: num(b.value) }) });
-      if (k === "list") {
-        const t = list.value.trim();
-        if (t.startsWith("=")) rule.source = t.slice(1);
-        else rule.list = t.split(",").map((x) => x.trim()).filter(Boolean);
-      }
-      if (k === "custom") rule.formula = formula.value;
-      if (title.value.trim()) rule.inputTitle = title.value.trim();
-      if (msg.value.trim()) rule.inputMessage = msg.value.trim();
-      if (style.value !== "stop") rule.errorStyle = style.value as "warning";
-      if (errMsg.value.trim()) rule.errorMessage = errMsg.value.trim();
-      back.remove();
-      void d.run({ type: "validation.add", params: { rule } }).then(() => d.focusGrid());
-    } catch (e) {
-      error.textContent = (e as Error).message;
-      error.hidden = false;
-    }
-  });
-  document.body.append(back);
-  kind.focus();
 }
 
 /** A one-line description for the status bar ("B2:B20 takes a whole number between 1 and 10"). */
