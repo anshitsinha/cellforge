@@ -21,7 +21,7 @@ import { toast } from "../ui/toast";
 import { makeButton } from "../ui/dialog";
 import { readSheetColumns, type SheetColumns } from "../pivotpanel";
 import { buildChart, clampRange, comboLines, guessLayout, makeResolver, type ChartData, type ChartSource } from "./data";
-import { isIdLike, profileColumns, suggestChart, type ColumnInfo } from "./defaults";
+import { isIdLike, lastFilledRow, profileColumns, suggestChart, type ColumnInfo } from "./defaults";
 import { CHART_TYPES, colLetters, defaultSpec, formatRange, limitText, parseLimit, parseRange, type ChartSpec, type ChartType, type Limit, type SavedPivot } from "./model";
 import { chartInput, isColumnSource } from "./pivotchart";
 import { pivotChartSpec, PIVOT_CHART_TYPES } from "./pivotspec";
@@ -133,9 +133,12 @@ export function specFromSelection(deps: ChartDeps): { spec: ChartSpec; note: str
   if (src?.usedRange) {
     const u = src.usedRange();
     if (u.rows > 0 && u.cols > 0) {
-      if (r.top === r.bottom && r.left === r.right) r = { top: 0, left: 0, bottom: u.rows - 1, right: u.cols - 1 };
+      if (r.top === r.bottom && r.left === r.right) {
+        r = { top: 0, left: 0, bottom: u.rows - 1, right: u.cols - 1 };
+        r.bottom = lastFilledRow(src, 0, r.bottom, 0, r.right);
+      }
       // the whole table is selected: a summary of every row is fair game
-      whole = r.top === 0 && r.left === 0 && r.bottom >= u.rows - 1 && r.right >= u.cols - 1;
+      whole = r.top === 0 && r.left === 0 && r.bottom >= lastFilledRow(src, 0, u.rows - 1, 0, u.cols - 1) && r.right >= u.cols - 1;
     }
   }
   const id = freshId();

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CellValue } from "@cellforge/grid";
 import type { ChartSource } from "./data";
 import { buildChart } from "./data";
-import { dateGroupFor, describeColumn, isIdLike, measureColumns, profileColumns, suggestChart, type ColumnInfo } from "./defaults";
+import { dateGroupFor, describeColumn, isIdLike, lastFilledRow, measureColumns, profileColumns, suggestChart, type ColumnInfo } from "./defaults";
 import { defaultSpec } from "./model";
 
 function sheet(rows: CellValue[][], fmts: Record<number, string> = {}): ChartSource {
@@ -142,5 +142,41 @@ describe("charting chosen columns", () => {
     const src = sheet([["Month", "A", "B"], ["Jan", 1, 2], ["Feb", 3, 4]]);
     const data = buildChart(src, defaultSpec("c", whole(src)));
     expect(data.series.map((s) => s.name)).toEqual(["A", "B"]);
+  });
+});
+
+describe("balanced journals", () => {
+  it("counts lines rather than adding amounts that net to nothing", () => {
+    const rows: CellValue[][] = [["Entry", "Date", "Account", "Amount"]];
+    for (let i = 0; i < 30; i++) {
+      const amt = 100 + i * 37.5;
+      rows.push([1000 + i, 46023 + (i % 9), 4000, amt], [1000 + i, 46023 + (i % 9), 2000, -amt]);
+    }
+    const src = sheet(rows, { 1: "yyyy-mm-dd" });
+    const cols = profileColumns(src, whole(src), true);
+    expect(cols[3].balanced).toBe(true);
+    expect(suggestChart(cols, { canPivot: true })).toMatchObject({ kind: "pivot", rowField: 1, group: "day", agg: "count", values: [1], title: "Lines by day" });
+  });
+
+  it("an amount column of one sign is never balanced", () => {
+    expect(describeColumn(0, "Amount", [10, 20, 30]).balanced).toBeUndefined();
+    expect(describeColumn(0, "Amount", [10, -2, 30]).balanced).toBeUndefined();
+  });
+});
+
+describe("trial balances and trailing blanks", () => {
+  it("plots the net balance, not Debit and Credit beside it", () => {
+    const cols = [describeColumn(0, "Code", [1000, 1100, 2000]), describeColumn(1, "Debit", [10, 20, null]), describeColumn(2, "Credit", [null, null, 30]), describeColumn(3, "Balance", [10, 20, -30])];
+    expect(measureColumns(cols)).toEqual([3]);
+    // without a net column, both sides
+    expect(measureColumns(cols.slice(0, 3))).toEqual([1, 2]);
+  });
+
+  it("finds the last row with data under a used area padded with blanks", () => {
+    const rows: CellValue[][] = [["A", "B"], [1, 2], [3, null]];
+    const src = sheet(rows);
+    const padded: ChartSource = { ...src, getCell: (r, c) => (r < 3 ? src.getCell(r, c) : null) };
+    expect(lastFilledRow(padded, 0, 1999, 0, 1)).toBe(2);
+    expect(lastFilledRow(padded, 0, 1999, 0, 1, 10)).toBe(1999);
   });
 });

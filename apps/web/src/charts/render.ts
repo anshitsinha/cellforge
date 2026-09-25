@@ -412,6 +412,7 @@ function drawAxes(ctx: CanvasRenderingContext2D, data: ChartData, area: Rect, th
   const scaleOf = (s: Series) => (s.axis === 1 && y1 ? y1 : y0);
 
   // gridlines and value labels
+  let lastRight = -Infinity;
   ctx.lineWidth = 1;
   ctx.font = font(11);
   ctx.fillStyle = theme.muted;
@@ -428,6 +429,10 @@ function drawAxes(ctx: CanvasRenderingContext2D, data: ChartData, area: Rect, th
     }
     ctx.stroke();
     if (horiz) {
+      // value labels along the bottom: skip one that would run into the last
+      const half = ctx.measureText(yLabels[i]).width / 2;
+      if (p - half < lastRight + 6) return;
+      lastRight = p + half;
       ctx.textAlign = "center";
       ctx.fillText(yLabels[i], p, plot.y + plot.h + 10);
     } else {

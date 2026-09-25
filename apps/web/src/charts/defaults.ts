@@ -32,6 +32,11 @@ export interface ColumnInfo {
   max: number;
   /** longest text seen, in characters */
   maxLength: number;
+  /**
+   * Numbers of both signs that add up to (about) nothing, like the lines of
+   * a balanced journal: totals of them mean little, counts do.
+   */
+  balanced?: boolean;
 }
 
 export type ChartSuggestion =
@@ -43,6 +48,8 @@ export type ChartSuggestion =
 const ID_WORDS = /(^|[\s_\-./#])(id|ids|ref|refs|reference|no|nr|num|number|code|codes|account|acct|gl|key|invoice|inv|doc|document|voucher|je|batch|sku|ean|upc|zip|postcode|postal|phone|tel|iban|seq|sequence|line|row|index|#)($|[\s_\-./#:])/i;
 /** Header words that mark a measure worth plotting. */
 const MEASURE_WORDS = /amount|amt|total|value|balance|debit|credit|sales|revenue|income|cost|expense|spend|price|net|gross|qty|quantity|units|volume|budget|actual|forecast|variance|profit|margin|fee|paid|due|outstanding|tax|vat amount|turnover|count/i;
+/** Header words for a single net figure. */
+const PRIMARY_WORDS = /^(net |closing |ending )?(amount|balance|net|total|value)( \(.*\))?$/i;
 /** Header words for dates. */
 const DATE_WORDS = /date|day|period|month|posted|posting|when|time/i;
 
@@ -79,6 +86,9 @@ export function describeColumn(col: number, name: string, values: readonly CellV
   let min = Infinity;
   let max = -Infinity;
   let maxLength = 0;
+  let sum = 0;
+  let abs = 0;
+  let negatives = 0;
   const seen = new Set<string | number>();
   for (const v of values) {
     if (v === null || v === "" || v === undefined) continue;
@@ -91,6 +101,9 @@ export function describeColumn(col: number, name: string, values: readonly CellV
       if (v < min) min = v;
       if (v > max) max = v;
       seen.add(v);
+      sum += v;
+      abs += Math.abs(v);
+      if (v < 0) negatives++;
     } else {
       const s = String(v);
       texts++;
@@ -102,7 +115,7 @@ export function describeColumn(col: number, name: string, values: readonly CellV
   let kind: ColumnKind = "empty";
   if (count) kind = numbers >= count * 0.9 ? (dateFormatted ? "date" : "number") : "text";
   if (kind === "number" && !dateFormatted && DATE_WORDS.test(name) && integer && min > 20000 && max < 80000 && !MEASURE_WORDS.test(name)) kind = "date";
-  return { col, name, kind, count, distinct: seen.size, integer: kind !== "text" && integer, sorted: kind !== "text" && sorted, min: count && kind !== "text" ? min : 0, max: count && kind !== "text" ? max : 0, maxLength };
+  return { col, name, kind, count, distinct: seen.size, integer: kind !== "text" && integer, sorted: kind !== "text" && sorted, min: count && kind !== "text" ? min : 0, max: count && kind !== "text" ? max : 0, maxLength, ...(kind === "number" && negatives > 0 && negatives < numbers && Math.abs(sum) <= abs * 0.005 ? { balanced: true } : {}) };
 }
 
 /**
@@ -125,7 +138,9 @@ export function isIdLike(c: ColumnInfo): boolean {
 export function measureColumns(cols: readonly ColumnInfo[], limit = 4): number[] {
   const nums = cols.filter((c) => c.kind === "number" && !isIdLike(c) && c.count > 0);
   const named = nums.filter((c) => MEASURE_WORDS.test(c.name));
-  const pick = named.length ? named : nums;
+  // a net figure (Balance, Amount, Net, Total) says it all: Debit and Credit beside it repeat it
+  const net = named.filter((c) => PRIMARY_WORDS.test(c.name));
+  const pick = net.length ? net : named.length ? named : nums;
   return pick.slice(0, limit).map((c) => c.col);
 }
 
@@ -160,20 +175,39 @@ export function suggestChart(cols: readonly ColumnInfo[], opts: { canPivot?: boo
     return { kind: "none", reason: "None of these columns hold amounts to chart (IDs, codes and text are left out). Select a column of numbers." };
   }
   const what = measures.length === 1 ? nameOf(measures[0]) : measures.map(nameOf).join(", ");
+  // a balanced journal's amounts add up to nothing: count the lines instead
+  const netsToNothing = !!cols.find((c) => c.col === measures[0])?.balanced;
 
   if (date) {
     const unique = date.distinct === date.count;
     if (unique && date.sorted) return { kind: "range", type: "line", labelCol: date.col, series: measures, title: `${what} over time` };
     if (opts.canPivot) {
       const group = dateGroupFor(date.min, date.max);
+      if (netsToNothing) return { kind: "pivot", type: "column", rowField: date.col, group, values: [date.col], agg: "count", title: `Lines by ${GROUP_WORD[group]}` };
       return { kind: "pivot", type: "column", rowField: date.col, group, values: measures.slice(0, 2), agg: "sum", title: `${measures.slice(0, 2).map(nameOf).join(" and ")} by ${GROUP_WORD[group]}` };
     }
     return { kind: "range", type: unique ? "line" : "column", labelCol: date.col, series: measures, title: `${what} by ${date.name || "date"}` };
   }
   if (cat && opts.canPivot && cat.distinct < cat.count) {
+    if (netsToNothing) return { kind: "pivot", type: cat.distinct > 8 ? "bar" : "column", rowField: cat.col, values: [cat.col], agg: "count", title: `Lines by ${cat.name || "category"}` };
     return { kind: "pivot", type: cat.distinct > 8 ? "bar" : "column", rowField: cat.col, values: measures.slice(0, 1), agg: "sum", title: `${nameOf(measures[0])} by ${cat.name || "category"}` };
   }
   const label = labelText && labelText.col !== measures[0] ? labelText : null;
   const long = (label?.maxLength ?? 0) > 14 || (label?.count ?? 0) > 12;
   return { kind: "range", type: label && long ? "bar" : "column", labelCol: label?.col ?? null, series: measures, title: label ? `${what} by ${label.name || "item"}` : what };
+}
+
+/**
+ * The last row of top..bottom with anything in left..right, scanning up
+ * from the bottom (a sheet's used area often ends in blank rows). Gives up
+ * after `maxScan` blank rows and keeps the bottom.
+ */
+export function lastFilledRow(src: Pick<ChartSource, "getCell">, top: number, bottom: number, left: number, right: number, maxScan = 100_000): number {
+  for (let r = bottom, n = 0; r > top && n < maxScan; r--, n++) {
+    for (let c = left; c <= right; c++) {
+      const v = src.getCell(r, c);
+      if (v !== null && v !== "") return r;
+    }
+  }
+  return bottom - maxScan >= top ? bottom : top;
 }
