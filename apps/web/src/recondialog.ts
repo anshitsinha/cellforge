@@ -412,7 +412,7 @@ interface ReconState {
 const states = new WeakMap<Workbook, ReconState>();
 
 const OTHER_SIDE = /bank|statement|stmt|supplier|customer|vendor|creditor|debtor|counterparty/i;
-const OUR_SIDE = /cash ?book|ledger|gl|books|nominal|ap|ar|payables|receivables|ours/i;
+const OUR_SIDE = /cash ?book|ledger|\bgl\b|books|nominal|\bap\b|\bar\b|payables|receivables|ours/i;
 
 /**
  * Which two sheets to reconcile: sheets with an amount column only; side B

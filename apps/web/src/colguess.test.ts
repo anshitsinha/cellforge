@@ -56,6 +56,21 @@ describe("column guessing", () => {
     expect(defaultDuplicateKeys(odd).map((k) => k.col)).toEqual([1]);
   });
 
+  it("doesn't take the user who posted a journal for the counterparty", () => {
+    const journal: ColumnSample[] = [
+      { name: "User", values: Array.from({ length: n }, (_, i) => ["akhan", "cnguyen", "dokafor"][i % 3]) },
+      { name: "Description", values: Array.from({ length: n }, (_, i) => `Invoice INV-${2000 + i} Vantage Kitchens`) },
+      { name: "Amount", values: ledger[5].values },
+      { name: "Reference", values: Array.from({ length: n }, (_, i) => `INV-${2000 + i}`) },
+      { name: "Entry", values: Array.from({ length: n }, (_, i) => 100400 + Math.floor(i / 2)) },
+    ];
+    expect(guessRoles(journal).party).toBe(-1);
+    expect(defaultDuplicateKeys(journal)).toEqual([
+      { col: 3, how: "text" },
+      { col: 2, how: "exact" },
+    ]);
+  });
+
   it("picks the vendor-like column for spelling variants", () => {
     expect(nameColumn(ledger)).toBe(2);
     const noHeader = ledger.map((s) => ({ ...s, name: "" }));

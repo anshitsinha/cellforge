@@ -43,6 +43,9 @@ const NAME = {
   account: /account|acct|\bgl\b|nominal|ledger|cost cent|\bcode\b/i,
 };
 
+/** people who entered or approved a line: they repeat, but they are not the counterparty */
+const ACTOR = /\buser\b|preparer|prepared|approv|entered|created|posted by|keyed|operator|login/i;
+
 const isBlank = (v: unknown) => v === null || v === undefined || (typeof v === "string" && !v.trim());
 
 /** The kind of one column, from its values (and its header for numbers that might be dates or codes). */
@@ -124,15 +127,16 @@ export function guessRoles(samples: readonly ColumnSample[], profiles = profileC
   take("date", (p) => p.kind === "date" && NAME.date.test(p.name));
   take("amount", (p) => (p.kind === "amount" || p.kind === "number") && NAME.amount.test(p.name), (p) => (/amount|amt/i.test(p.name) ? 2 : /balance/i.test(p.name) ? -1 : 0));
   take("account", (p) => (p.kind === "code" || p.kind === "reference" || p.kind === "number" || p.kind === "text") && NAME.account.test(p.name) && !NAME.party.test(p.name) && !NAME.description.test(p.name));
-  take("reference", (p) => p.kind !== "date" && p.kind !== "amount" && NAME.reference.test(p.name) && !NAME.description.test(p.name));
-  take("party", (p) => (p.kind === "text" || p.kind === "reference") && NAME.party.test(p.name));
+  // a document reference (invoice, cheque) beats a journal or entry number, which lines of one entry share
+  take("reference", (p) => p.kind !== "date" && p.kind !== "amount" && NAME.reference.test(p.name) && !NAME.description.test(p.name), (p) => (/ref|invoice|\binv\b|doc|voucher|cheque|check|receipt/i.test(p.name) ? 2 : /entry|journal|\bje\b/i.test(p.name) ? -1 : 0));
+  take("party", (p) => (p.kind === "text" || p.kind === "reference") && NAME.party.test(p.name) && !ACTOR.test(p.name));
   take("description", (p) => (p.kind === "text" || p.kind === "reference") && NAME.description.test(p.name));
   // by values
   take("date", (p) => p.kind === "date");
   take("amount", (p) => p.kind === "amount", (p) => p.filled);
   take("reference", (p) => p.kind === "reference", (p) => p.distinctShare);
   // a name repeats (several rows per vendor); a description is longer and mostly unique
-  take("party", (p) => p.kind === "text" && p.distinctShare < 0.9 && p.avgLength <= 40, (p) => -p.distinctShare);
+  take("party", (p) => p.kind === "text" && !ACTOR.test(p.name) && p.distinctShare < 0.9 && p.avgLength <= 40, (p) => -p.distinctShare);
   take("description", (p) => p.kind === "text", (p) => p.avgLength);
   return roles;
 }
@@ -164,7 +168,7 @@ export function nameColumn(samples: readonly ColumnSample[]): number {
   const profiles = profileColumns(samples);
   const r = guessRoles(samples, profiles);
   if (r.party >= 0) return r.party;
-  const text = profiles.filter((p) => p.kind === "text" && p.distinctShare < 1).sort((a, b) => a.distinctShare - b.distinctShare || a.avgLength - b.avgLength)[0];
+  const text = profiles.filter((p) => p.kind === "text" && !ACTOR.test(p.name) && p.distinctShare < 1).sort((a, b) => a.distinctShare - b.distinctShare || a.avgLength - b.avgLength)[0];
   return text ? text.index : (r.description >= 0 ? r.description : -1);
 }
 
