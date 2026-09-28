@@ -587,7 +587,8 @@ export function previewTable(result: SqlResult, limit = PREVIEW_ROWS): HTMLTable
 export function cellText(c: ColumnData, i: number, fmt: string): string {
   if (c.kind === "number") {
     const x = c.values[i];
-    return x !== x ? "" : formatValue(x, fmt || "General").text;
+    // float dust like 1e-12 (amounts that net to nothing) shows as 0
+    return x !== x ? "" : formatValue(Math.abs(x) < 1e-6 ? 0 : x, fmt || "General").text;
   }
   const code = c.codes[i];
   return code ? c.dict[code - 1] : "";

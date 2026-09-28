@@ -31,7 +31,7 @@ export function profileOf(data: SheetColumns, c: number): DataProfile {
 export function profileLines(p: DataProfile, numFmt = ""): [string, string, boolean?][] {
   const lines: [string, string, boolean?][] = [];
   // without a format: whole numbers with separators, others with up to 4 decimals
-  const fmt = (v: number) => formatValue(v, p.type === "date" && p.numbers ? numFmt || "yyyy-mm-dd" : numFmt || (Number.isInteger(v) ? "#,##0" : "#,##0.00##")).text;
+  const fmt = (v: number) => formatValue(Math.abs(v) < 1e-6 ? 0 : v, p.type === "date" && p.numbers ? numFmt || "yyyy-mm-dd" : numFmt || (Number.isInteger(v) ? "#,##0" : "#,##0.00##")).text;
   const day = (v: number) => formatValue(v, "yyyy-mm-dd").text;
   lines.push(["Rows", count(p.count)]);
   lines.push(["Blank", `${count(p.blanks)} (${pct(p.blanks, p.count)})`, p.blanks > 0 && p.blanks === p.count]);

@@ -51,7 +51,11 @@ export function sheetFacts(sheetId: string, sheetName: string, data: SheetColumn
   const amount = measureColumns(infos, 1)[0] ?? null;
   const category = infos.find((c) => c.kind === "text" && !isIdLike(c) && c.distinct < c.count && c.distinct <= 60)?.col ?? null;
   const date = infos.find((c) => c.kind === "date")?.col ?? null;
-  return { sheetId, sheetName, names: data.names, rows: data.rows, headerRow: data.first === 1, amount, category, date };
+  // the used area often ends in blank rows: count up to the last row with something in it
+  let rows = data.rows;
+  const filled = (c: (typeof data.columns)[number], i: number) => (c.kind === "number" ? c.values[i] === c.values[i] : c.codes[i] !== 0);
+  while (rows > 0 && !data.columns.some((c) => filled(c, rows - 1))) rows--;
+  return { sheetId, sheetName, names: data.names, rows, headerRow: data.first === 1, amount, category, date };
 }
 
 const id = () => newId("b");
@@ -95,8 +99,8 @@ function keyFigures(f: SheetFacts, where = ""): string {
   if (f.amount === null) return `${f.sheetName} has {{=TEXT(${f.rows},"#,##0")}} lines.`;
   const col = columnLetter(f.amount);
   const name = f.names[f.amount];
-  if (!where) return `Total ${name}: {{=TEXT(SUM(${col}:${col}),"#,##0.00")}} across {{=TEXT(COUNT(${col}:${col}),"#,##0")}} lines.`;
-  return `Total ${name}: {{=TEXT(SUMIFS(${col}:${col},${where}),"#,##0.00")}} across {{=TEXT(COUNTIFS(${where},${col}:${col},">-1E+300"),"#,##0")}} lines.`;
+  if (!where) return `Total ${name}: {{=TEXT(ROUND(SUM(${col}:${col}),2),"#,##0.00")}} across {{=TEXT(COUNT(${col}:${col}),"#,##0")}} lines.`;
+  return `Total ${name}: {{=TEXT(ROUND(SUMIFS(${col}:${col},${where}),2),"#,##0.00")}} across {{=TEXT(COUNTIFS(${where},${col}:${col},">-1E+300"),"#,##0")}} lines.`;
 }
 
 /** A starter report for the sheet. */

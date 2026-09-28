@@ -852,7 +852,8 @@ function renderPivot(p: SidePanelContext, d: PivotDeps, data: SheetColumns, shee
   };
 
   // ---- preview
-  const fmtCell = (v: string | number | null, fmt: string) => (v === null ? "" : typeof v === "number" ? formatValue(v, fmt).text : v);
+  // float dust like 1e-12 (debits and credits that net to nothing) shows as 0
+  const fmtCell = (v: string | number | null, fmt: string) => (v === null ? "" : typeof v === "number" ? formatValue(Math.abs(v) < 1e-6 ? 0 : v, fmt).text : v);
   const renderPreview = () => {
     preview.replaceChildren();
     setDrill(null);
