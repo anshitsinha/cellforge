@@ -528,3 +528,12 @@ button.tk-step__btn:hover {
   flex-wrap: wrap;
   row-gap: 0;
 }
+
+/* panels and dialogs: wide tables scroll inside their wrapper instead of widening the panel */
+:where(.cf-sidepanel__body, .cf-dialog__body) :where(.cf-section, .tk-tabs, .tk-tabs__panel, .rc-tab, .audit-result, .var-result, div) {
+  min-width: 0;
+}
+
+:where(.cf-sidepanel__body, .cf-dialog__body) .table-wrap {
+  max-width: 100%;
+}
