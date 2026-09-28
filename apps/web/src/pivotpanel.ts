@@ -881,7 +881,7 @@ function renderPivot(p: SidePanelContext, d: PivotDeps, data: SheetColumns, shee
           td.tabIndex = -1;
           td.dataset.r = String(ri);
           td.dataset.j = String(j);
-          if (typeof v === "number" && v < 0) td.classList.add("is-negative");
+          if (typeof v === "number" && v < -1e-6) td.classList.add("is-negative");
         }
         tr.append(td);
       }

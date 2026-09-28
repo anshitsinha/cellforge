@@ -42,6 +42,8 @@ export interface SheetFacts {
   amount: number | null;
   category: number | null;
   date: number | null;
+  /** the amounts net to nothing (a balanced journal): summaries count lines instead */
+  balanced?: boolean;
 }
 
 /** What the starters need to know about a sheet. */
@@ -55,14 +57,15 @@ export function sheetFacts(sheetId: string, sheetName: string, data: SheetColumn
   let rows = data.rows;
   const filled = (c: (typeof data.columns)[number], i: number) => (c.kind === "number" ? c.values[i] === c.values[i] : c.codes[i] !== 0);
   while (rows > 0 && !data.columns.some((c) => filled(c, rows - 1))) rows--;
-  return { sheetId, sheetName, names: data.names, rows, headerRow: data.first === 1, amount, category, date };
+  const balanced = amount !== null && !!infos[amount]?.balanced;
+  return { sheetId, sheetName, names: data.names, rows, headerRow: data.first === 1, amount, category, date, ...(balanced ? { balanced } : {}) };
 }
 
 const id = () => newId("b");
 const heading = (text: string, level: 1 | 2 | 3 = 1): ReportBlock => ({ id: id(), kind: "heading", text, level });
 const para = (text: string): ReportBlock => ({ id: id(), kind: "paragraph", text });
 
-function pivotOf(f: SheetFacts, rows: number, group?: DateGroup, value = f.amount): SavedPivot {
+function pivotOf(f: SheetFacts, rows: number, group?: DateGroup, value = f.balanced ? null : f.amount): SavedPivot {
   return {
     rows: [{ field: rows, ...(group ? { group } : {}) }],
     cols: [],
@@ -107,7 +110,7 @@ function keyFigures(f: SheetFacts, where = ""): string {
 export function starterReport(kind: StarterKind, f: SheetFacts): Report {
   const r = newReport(f.sheetId, kind === "blank" ? "Report" : `${f.sheetName} ${kind === "close" ? "month-end pack" : kind === "entity" ? "by " + (f.category === null ? "item" : f.names[f.category]) : "summary"}`);
   if (kind === "blank" || !f.names.length) return r;
-  const amount = f.amount === null ? "Lines" : f.names[f.amount];
+  const amount = f.amount === null || f.balanced ? "Lines" : f.names[f.amount];
   const blocks: ReportBlock[] = [];
 
   if (kind === "summary") {

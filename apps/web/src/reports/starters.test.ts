@@ -85,3 +85,20 @@ describe("report starters", () => {
     expect(starterReport("summary", empty).blocks).toEqual([]);
   });
 });
+
+describe("report starters on a balanced journal", () => {
+  it("count lines by category instead of adding amounts that net to nothing", () => {
+    const n = 12;
+    const users = Array.from({ length: n * 2 }, (_, i) => ["akhan", "jlee", "bmorales"][Math.floor(i / 2) % 3]);
+    const amounts = Array.from({ length: n * 2 }, (_, i) => (i % 2 ? -1 : 1) * (100 + Math.floor(i / 2) * 7.25));
+    const src = new EditableSource(new Table([text("User", users), num("Amount", amounts)]), 2);
+    const wb = new Workbook({ name: "Journal", source: src });
+    const facts = sheetFacts(wb.sheets[0].id, "Journal", readSheetColumns(src));
+    expect(facts.balanced).toBe(true);
+    const r = runReport(starterReport("summary", facts), workbookEnv(wb));
+    const headings = r.blocks.filter((b) => b.kind === "heading").map((b) => ("text" in b ? b.text : ""));
+    expect(headings).toContain("Lines by User");
+    const table = r.blocks.find((b) => b.kind === "table");
+    expect(table && table.kind === "table" && table.rows.map((x) => x.cells[1])).toEqual(["8", "8", "8", "24"]);
+  });
+});
