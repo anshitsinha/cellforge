@@ -3,7 +3,8 @@ import { Grid, columnLetter } from "@cellforge/grid";
 import { parseTsv, rangeSize, rangeToTsv } from "./clipboard";
 import { computeStats } from "./stats";
 import { SyntheticSource } from "./demo";
-import { BlankSource, EditableSource, parseInput, type Stored } from "./editable";
+import { formatFormula } from "@cellforge/core";
+import { BlankSource, EditableSource, isFormula, parseInput, type Fill, type Stored } from "./editable";
 import { download, exportCsv } from "./exporter";
 import { History } from "./history";
 import { extractKeys, sortInWorker } from "./sort";
@@ -24,9 +25,12 @@ const rowFormat = new Intl.NumberFormat();
 // row dataset; otherwise start with an empty sheet like any spreadsheet app
 const startWithDemo = new URLSearchParams(location.search).has("demo");
 
-let source = new EditableSource(
-  startWithDemo ? new SyntheticSource(DEMO_ROWS) : new BlankSource(),
-);
+// imported/demo data gets a few empty columns after it, for calculated columns
+const SPARE_COLUMNS = 10;
+
+let source = startWithDemo
+  ? new EditableSource(new SyntheticSource(DEMO_ROWS), SPARE_COLUMNS)
+  : new EditableSource(new BlankSource());
 let currentName = startWithDemo ? "demo — synthetic sales" : "Untitled";
 const grid = new Grid(sheet, source);
 
@@ -223,6 +227,106 @@ document.getElementById("btn-sort-desc")!.addEventListener("click", () => {
   grid.focus();
 });
 
+// --- fill down (Ctrl+D) -------------------------------------------------------------
+// Copies the top row of the selection into every row below it. On an
+// unsorted sheet each column becomes a single Fill object - O(1) storage no
+// matter how many rows - whose formula gets compiled to a typed-array kernel.
+
+function fillDown() {
+  const range = grid.range;
+  if (range.bottom === range.top) {
+    statusLeft.textContent = "Select the cell to copy and the cells below it, then fill down (Ctrl+D).";
+    return;
+  }
+  const rows = range.bottom - range.top;
+  const target = source;
+
+  if (target.rowOrder) {
+    // sorted: rows below each other in the view are scattered in the data,
+    // so a fill can't be one contiguous block. Write cells individually.
+    if (rows * (range.right - range.left + 1) > MAX_BULK_CELLS) {
+      statusLeft.textContent = `Fill down on a sorted sheet is limited to ${rowFormat.format(MAX_BULK_CELLS)} cells.`;
+      return;
+    }
+    const changes: CellChange[] = [];
+    for (let col = range.left; col <= range.right; col++) {
+      const { template, origin } = target.getTemplate(range.top, col);
+      for (let row = range.top + 1; row <= range.bottom; row++) {
+        const value = isFormula(template)
+          ? { ...template, shift: row - origin, text: template.ast ? formatFormula(template.ast, row - origin) : template.text }
+          : template;
+        changes.push({ row, col, value });
+      }
+    }
+    writeCells(changes, "fill down");
+    return;
+  }
+
+  // unsorted: one Fill per column, plus whatever explicit edits it covered
+  // (kept so undo can put them back)
+  const fills: Fill[] = [];
+  const covered: { row: number; col: number; value: Stored }[] = [];
+  for (let col = range.left; col <= range.right; col++) {
+    const { template, origin } = target.getTemplate(range.top, col);
+    covered.push(...target.takeEdits(col, range.top + 1, range.bottom));
+    fills.push(target.addFill(col, range.top + 1, range.bottom, template, origin));
+  }
+  history.push({
+    label: "fill down",
+    undo: () => {
+      for (const f of fills) target.removeFill(f);
+      for (const c of covered) target.setCell(c.row, c.col, c.value);
+    },
+    redo: () => {
+      for (const c of covered) target.revertCell(c.row, c.col);
+      for (const f of fills) target.restoreFill(f);
+    },
+  });
+
+  const compiled = fills.filter((f) => target.isCompiled(f)).length;
+  const formulaFills = fills.filter((f) => isFormula(f.template)).length;
+  const how =
+    formulaFills === 0 ? "" : compiled === formulaFills ? " · compiled" : compiled === 0 ? " · interpreted" : ` · ${compiled}/${formulaFills} columns compiled`;
+  refresh();
+  statusLeft.textContent = `Filled ${rowFormat.format(rows)} rows${how}`;
+}
+
+document.getElementById("btn-fill")!.addEventListener("click", () => {
+  fillDown();
+  grid.focus();
+});
+
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "d") return;
+  if (document.activeElement instanceof HTMLInputElement) return;
+  e.preventDefault(); // otherwise the browser opens "bookmark this page"
+  fillDown();
+});
+
+function attachKernelReporting(s: EditableSource) {
+  // Kernels run per 64K-row chunk as rows are needed, so report throughput
+  // over the last second rather than one message per chunk.
+  let rows = 0;
+  let ms = 0;
+  let timer = 0;
+  s.onKernelRun = (run) => {
+    rows += run.rows;
+    ms += run.ms;
+    const name = s.getColumnName(run.col) ?? columnLetter(run.col);
+    clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      const perSec = ms > 0 ? (rows / ms) * 1000 : 0;
+      setInfo(
+        `${name}: compiled kernel computed ${rowFormat.format(rows)} rows in ${ms < 10 ? ms.toFixed(1) : Math.round(ms)} ms` +
+          (perSec ? ` (${rowFormat.format(Math.round(perSec / 1e6))}M rows/s)` : ""),
+      );
+      rows = 0;
+      ms = 0;
+    }, 150);
+  };
+}
+attachKernelReporting(source);
+
 grid.onCellEdit = ({ row, col }, text) => {
   writeCells([{ row, col, value: parseInput(text) }], `edit in ${columnLetter(col)}${row + 1}`);
 };
@@ -327,6 +431,7 @@ grid.focus();
 function loadSource(next: EditableSource, name: string) {
   source = next;
   currentName = name;
+  attachKernelReporting(source);
   history.clear();
   grid.setSource(source);
   fileName.textContent = name;
@@ -341,7 +446,7 @@ document.getElementById("btn-new")!.addEventListener("click", () => {
 
 document.getElementById("btn-demo")!.addEventListener("click", () => {
   if (source.editCount && !confirm("Discard your changes and load the demo?")) return;
-  loadSource(new EditableSource(new SyntheticSource(DEMO_ROWS)), "demo — synthetic sales");
+  loadSource(new EditableSource(new SyntheticSource(DEMO_ROWS), SPARE_COLUMNS), "demo — synthetic sales");
 });
 
 // --- CSV export ---------------------------------------------------------------
@@ -408,7 +513,7 @@ async function openFile(file: File) {
 
   try {
     const { table, ms } = await job.result;
-    loadSource(new EditableSource(table), file.name);
+    loadSource(new EditableSource(table, SPARE_COLUMNS), file.name);
     setInfo(`Imported ${formatBytes(file.size)} in ${(ms / 1000).toFixed(2)}s`);
   } catch (err) {
     // a newer import cancelling this one isn't an error worth showing
