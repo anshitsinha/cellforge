@@ -5,6 +5,11 @@ import { packWorkbook, toFile } from "./persist";
 import type { Workbook } from "./workbook";
 import { changedSince } from "./review";
 import { documentBytes, type DocBytes } from "./docstore";
+import "./evidence.css";
+import { count, el, headline, notice, plural, report, section } from "./toolkit";
+import { openDialog } from "./ui/dialog";
+import { renderTable } from "./ui/table";
+import { toast } from "./ui/toast";
 
 function download(blob: Blob, name: string): void {
   const a = document.createElement("a");
@@ -65,12 +70,69 @@ export async function evidenceFiles(wb: Workbook, active: string, name: string, 
   ];
 }
 
+/** What a pack will hold, for the summary before saving. Pure apart from the hash check. */
+export async function packSummary(wb: Workbook): Promise<{ entries: number; ok: boolean; head: string; reason?: string; inputs: number; recipes: number; documents: number; sheets: number; reviewed: number; openNotes: number }> {
+  const v = await verifyLog(wb.evidence.log);
+  const visible = wb.sheets;
+  return {
+    entries: wb.evidence.log.length,
+    ok: v.ok,
+    head: v.head,
+    reason: v.reason,
+    inputs: wb.evidence.inputs.length,
+    recipes: wb.recipes.length,
+    documents: wb.documents.length,
+    sheets: visible.length,
+    reviewed: visible.filter((s) => wb.review.sheets[s.id]?.reviewed).length,
+    openNotes: visible.reduce((t, s) => t + s.source.openReviewNotes().length, 0),
+  };
+}
+
+/** Show what goes in the pack, then save it (a .zip download) when asked. */
 export async function saveEvidencePack(wb: Workbook, name: string, status: (t: string) => void, docs: DocBytes | null = null): Promise<void> {
-  status("Making the evidence pack…");
-  const active = wb.sheets.find((s) => !s.hidden)?.id ?? wb.sheets[0].id;
-  const bytes = await zip(await evidenceFiles(wb, active, name, docs));
-  download(new Blob([bytes as BlobPart], { type: "application/zip" }), `${name} evidence ${new Date().toISOString().slice(0, 10)}.zip`);
-  status(`Saved the evidence pack: ${wb.evidence.log.length} log entries, ${wb.evidence.inputs.length} input file${wb.evidence.inputs.length === 1 ? "" : "s"}`);
+  const s = await packSummary(wb);
+  const fileName = `${name} evidence ${new Date().toISOString().slice(0, 10)}.zip`;
+  const lines = [
+    { label: "Change log", value: `${count(s.entries)} entries` },
+    { label: "Input files fingerprinted", value: count(s.inputs) },
+    { label: "Supporting documents", value: count(s.documents) },
+    { label: "Recipes (repeatable steps)", value: count(s.recipes) },
+    { label: "Sheets reviewed", value: `${s.reviewed} of ${s.sheets}`, tone: s.reviewed === s.sheets ? ("match" as const) : undefined },
+    { label: "Open review notes", value: s.openNotes ? count(s.openNotes) : "None", tone: s.openNotes ? ("mismatch" as const) : undefined },
+  ];
+  const body: Node[] = [
+    headline({
+      value: s.ok ? "Intact" : "Broken",
+      unit: s.ok ? "change log, hash-chained" : "change log",
+      tone: s.ok ? "match" : "mismatch",
+      caption: s.ok ? "Every change since the workbook was opened is in the log, each entry chained to the one before by SHA-256. Anyone can check the pack later with Verify an evidence pack." : `The log doesn't check out: ${s.reason}.`,
+      lines,
+    }),
+    el("div", { className: "ev-hash" }, el("span", { className: "tk-muted", textContent: "Last hash" }), el("code", { textContent: s.head })),
+    el("p", { className: "tk-muted", textContent: `The pack (${fileName}) holds the workbook, a readable SUMMARY.md with the sign-offs, log.json, inputs.json, recipes.json${s.documents ? " and the documents" : ""}. It's made on this computer; nothing is uploaded.` }),
+  ];
+  if (s.openNotes) body.splice(1, 0, notice(`${plural(s.openNotes, "review note")} still open. The pack lists them; you may want to clear them first.`, "warning"));
+  const dlg = openDialog({
+    title: "Save an evidence pack",
+    subtitle: name,
+    size: "md",
+    body,
+    actions: [
+      { label: "Cancel", dismiss: true },
+      {
+        label: "Save evidence pack",
+        kind: "primary",
+        icon: "download",
+        onClick: async () => {
+          const active = wb.sheets.find((x) => !x.hidden)?.id ?? wb.sheets[0].id;
+          const bytes = await zip(await evidenceFiles(wb, active, name, docs));
+          download(new Blob([bytes as BlobPart], { type: "application/zip" }), fileName);
+          report(status, `Saved the evidence pack: ${plural(s.entries, "log entry", "log entries")}, ${plural(s.inputs, "input file")}`);
+        },
+      },
+    ],
+  });
+  await dlg.closed;
 }
 
 /** Check a pack: the log's chain, and list what it says went in. */
@@ -100,29 +162,37 @@ export function openVerifyPack(_wb: Workbook, status: (t: string) => void): void
       result = await verifyPack(new Uint8Array(await f.arrayBuffer()));
     } catch (e) {
       status(`Couldn't read ${f.name}: ${(e as Error).message}`);
+      toast({ kind: "error", title: `Couldn't read ${f.name}`, text: (e as Error).message });
       return;
     }
-    const back = document.createElement("div");
-    back.className = "palette-backdrop";
-    back.innerHTML = `<div class="palette import-dialog" role="dialog"><div class="palette-form"><h3></h3><p></p><div class="import-preview"></div><div class="numfmt-actions"><button type="button">Close</button></div></div></div>`;
-    back.querySelector("h3")!.textContent = `Evidence pack: ${f.name}`;
-    const p = back.querySelector("p")!;
-    p.textContent = result.message;
-    if (!result.ok) p.className = "cleanup-warn";
-    const t = document.createElement("table");
-    t.className = "cleanup-cols";
-    t.innerHTML = "<tr><th>Input file</th><th>Size</th><th>SHA-256</th></tr>";
-    for (const i of result.evidence.inputs) {
-      const tr = document.createElement("tr");
-      for (const v of [i.name, i.size.toLocaleString(), i.sha256 + (i.sampled ? " (sampled)" : "")]) tr.append(Object.assign(document.createElement("td"), { textContent: v }));
-      t.append(tr);
-    }
-    if (!result.evidence.inputs.length) t.append(Object.assign(document.createElement("tr"), { innerHTML: "<td colspan=3>No input files were recorded.</td>" }));
-    back.querySelector(".import-preview")!.append(t);
-    back.querySelector("button")!.addEventListener("click", () => back.remove());
-    back.addEventListener("keydown", (e) => e.key === "Escape" && back.remove());
-    document.body.append(back);
-    back.querySelector("button")!.focus();
+    const inputs = result.evidence.inputs;
+    openDialog({
+      title: "Verify an evidence pack",
+      subtitle: f.name,
+      size: "lg",
+      body: [
+        headline({
+          value: result.ok ? "Intact" : "Tampered",
+          unit: result.ok ? `${plural(result.evidence.log.length, "log entry", "log entries")} check out` : "the log has been changed",
+          tone: result.ok ? "match" : "mismatch",
+          caption: result.message,
+        }),
+        section(
+          "Input files recorded",
+          renderTable<(typeof inputs)[number]>({
+            columns: [
+              { key: "name", label: "File" },
+              { key: "size", label: "Bytes", format: "integer" },
+              { key: "sha256", label: "SHA-256", format: (v, r) => `${String(v).slice(0, 16)}…${r.sampled ? " (sampled)" : ""}`, title: (r) => r.sha256 },
+            ],
+            rows: inputs,
+            empty: "No input files were recorded.",
+            maxHeight: "40vh",
+          }).element,
+        ),
+      ],
+      actions: [{ label: "Done", kind: "primary", dismiss: true }],
+    });
   });
   input.click();
 }
