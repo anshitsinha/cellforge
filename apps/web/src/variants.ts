@@ -159,7 +159,7 @@ export async function openVariants(d: VariantsDeps): Promise<void> {
             value: count(merges.length),
             unit: merges.length === 1 ? "name spelled several ways" : "names spelled several ways",
             tone: "unmatched",
-            caption: `${plural(cellsTotal, "cell")} would change to the commonest spelling. ${model ? "Names found by the local model are not ticked: check them first." : "Load a local AI model to also catch abbreviations and typos."}`,
+            caption: `${plural(cellsTotal, "cell")} would change to the commonest spelling. ${model ? "Names found by the local model are not ticked: check them first." : "Set up the local AI (command palette: AI: set up and manage the local model) to also catch abbreviations and typos."}`,
           }),
           ...extra,
           t.element,

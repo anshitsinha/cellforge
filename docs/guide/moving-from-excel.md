@@ -63,7 +63,7 @@ planned; see the [progress page](#/progress).
 Excel stops at 1,048,576 rows. cellforge opens CSV and Parquet files with
 tens of millions of rows, scrolls 100 million rows smoothly, fills a
 formula down millions of rows at once and sorts them in seconds. Try the
-**Load the 100M-row demo** command. See [big data](#/guide/04-big-data).
+**Try the sample: 100M-line ledger** command (Help > Sample data). See [big data](#/guide/04-big-data).
 
 `.xlsx` files still hold at most 1,048,576 rows a sheet, so save big
 workbooks as `.cellforge`.

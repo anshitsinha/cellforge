@@ -94,7 +94,7 @@ export function openLineage(d: LineageDeps): void {
         const said = el("div", { className: "ln-model" });
         said.setAttribute("aria-live", "polite");
         const ask = button(
-          model ? "Explain in plain English (local AI)" : "Explain with AI (load a local model first)",
+          model ? "Explain in plain English (local AI)" : "Explain with the local AI (set it up first: AI in the command palette)",
           async () => {
             ask.disabled = true;
             said.replaceChildren(el("p", { className: "tk-muted", textContent: "Asking the local model…" }));

@@ -121,15 +121,21 @@ sheet is already called Bank. Change what you typed and it updates as you go.
 When it used the selection or a close spelling, it says it isn't completely
 sure, so check the description before pressing Do it.
 
-## A local model
+## The local AI
 
-A small AI model that runs on your computer can take over requests the ask
-bar doesn't know. Get a model file in the .gguf format (for example a small
-Qwen or Llama instruct model, 0.5 to 3 GB) onto your disk yourself, then pick
-**Load a local AI model (.gguf file)…** in the command palette and choose it.
-cellforge keeps a copy in the browser's private storage, so next time it's
-already there; **Remove the local AI model** deletes it. Nothing is
-downloaded for you.
+Without an AI model, the ask bar understands the phrasings above. With the
+local AI loaded, it also takes requests in your own words ("make the header
+row stand out and keep it on screen"). The ask bar shows which of the two you
+have: under the examples it says whether the local AI is ready, loading or not
+set up, and offers **Set up the local AI…** when there isn't one. When it
+doesn't understand a request and no model is loaded, it says so and offers
+the same setup instead of leaving you stuck.
+
+To get a model, open the AI panel (**Ask AI** in the toolbar, or
+**AI: set up and manage the local model…** in the command palette). It
+recommends a model for your computer and downloads it when you press
+Download, or uses a .gguf file you already have. See
+[The local AI](46-local-ai.md) for which model to pick and what happens to it.
 
 With a model loaded, a request the ask bar doesn't recognise goes to the
 model. The model can only answer with one of the same actions (its output is

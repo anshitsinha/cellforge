@@ -21,7 +21,7 @@ headings where it can: `=SUMIF(A2:A9,"North",C2:C9)` reads *The total of
 Amount (C2:C9) where Region (A2:A9) is "North".* The same reading goes into
 the write-up.
 
-With a local AI model loaded ([the ask bar](34-ask-bar.md#a-local-model)),
+With the local AI loaded ([The local AI](46-local-ai.md)),
 **Explain with the local model** asks it for a short explanation of the
 formula and where its inputs came from. Its answer is only shown if every
 figure and every cell it mentions is in the formula or its inputs;

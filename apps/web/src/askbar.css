@@ -80,3 +80,65 @@
   color: var(--on-accent);
   border-color: var(--accent-solid);
 }
+
+/* the local AI line under the examples: what it adds, its state, set it up */
+.askbar-ai {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-2);
+  align-items: center;
+  margin: var(--space-3) 0 var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--accent-default) 25%, var(--border-default));
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, var(--accent-soft), transparent 80%), var(--surface-2);
+}
+
+.askbar-ai .askbar-ai-kicker {
+  color: var(--accent-default);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.02em;
+}
+
+.askbar-ai > p:not(.askbar-ai-kicker) {
+  grid-column: 2;
+  color: var(--text-muted);
+}
+
+.askbar-ai p {
+  margin: 0;
+  font-size: var(--text-md);
+  line-height: var(--leading);
+}
+
+.askbar-ai > button {
+  grid-column: 2;
+  justify-self: start;
+}
+
+.askbar-ai-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: var(--radius-full);
+  background: var(--text-subtle);
+}
+
+.askbar-ai-ready .askbar-ai-dot {
+  background: var(--success-solid);
+}
+
+.askbar-ai-loading .askbar-ai-dot,
+.askbar-ai-downloading .askbar-ai-dot,
+.askbar-ai-paused .askbar-ai-dot {
+  background: var(--warning-solid);
+}
+
+.askbar-ai-error .askbar-ai-dot {
+  background: var(--danger-solid);
+}
+
+.askbar-ai-setup {
+  margin-top: var(--space-1);
+}

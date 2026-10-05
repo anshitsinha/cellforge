@@ -107,7 +107,7 @@ card, ltd, ref…) and numbers are never proposed.
 
 ### Suggestions from a local model
 
-With a local AI model loaded ([the ask bar](34-ask-bar.md#a-local-model)),
+With a local AI model loaded ([The local AI](46-local-ai.md)),
 **Suggest the rest with the local model** looks at the rows that still have
 no category after your rules, up to 50 at a time. For each it is shown a few
 of your tagged rows per category and must pick one of the categories you

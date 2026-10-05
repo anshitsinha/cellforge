@@ -8,33 +8,53 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
     />
-    <meta name="description" content="A spreadsheet that stays fast at 100M rows, entirely in the browser." />
-    <title>cellforge — sheet</title>
+    <meta name="description" content="The spreadsheet for finance and audit work: bank recs, close, journal entry tests and evidence, on files of any size, entirely in the browser." />
+    <title>cellforge</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#1967d2" />
+    <meta name="theme-color" content="#111318" />
+    <script>
+      // the theme picked in View > Theme, before anything paints
+      try {
+        const t = localStorage.getItem("cellforge.theme");
+        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="app">
-      <header class="toolbar">
-        <a class="logo" href="/">cellforge</a>
-        <span class="file-name" id="file-name">Untitled</span>
-        <span class="save-state" id="save-state" title="Changes are saved on this computer as you work"></span>
-        <div class="toolbar-actions">
-          <button id="btn-undo" type="button" title="Undo (Ctrl+Z)" disabled>Undo</button>
-          <button id="btn-redo" type="button" title="Redo (Ctrl+Y)" disabled>Redo</button>
-          <button id="btn-history" type="button" title="Every change, named versions, compare — Ctrl+H">History</button>
-          <span class="toolbar-sep"></span>
-          <button id="btn-fill" type="button" title="Copy the top cell down through the selection (Ctrl+D)">Fill ↓</button>
-          <button id="btn-sort-asc" type="button" title="Sort rows by the selected column, A→Z / smallest first">Sort A→Z</button>
-          <button id="btn-sort-desc" type="button" title="Sort rows by the selected column, Z→A / largest first">Sort Z→A</button>
-          <span class="toolbar-sep"></span>
-          <button id="btn-new" type="button" title="Start a new, blank workbook">New</button>
-          <button id="btn-open" type="button" title="Open a .cellforge workbook or a CSV file (or drag one in) — Ctrl+O">Open</button>
-          <button id="btn-save" type="button" title="Save the workbook as a .cellforge file — Ctrl+S">Save</button>
-          <button id="btn-export" type="button" title="Download the sheet as CSV">Export CSV</button>
-          <button id="btn-export-xlsx" type="button" title="Download the workbook as an Excel file (.xlsx)">Export Excel</button>
-          <button id="btn-demo" type="button" title="Load 100M rows of generated data">100M demo</button>
+      <header class="topbar">
+        <a class="topbar__brand" href="/" aria-label="cellforge home">
+          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="8" class="bm-bg" />
+            <rect x="7" y="7" width="8" height="8" rx="1.5" class="bm-a" />
+            <rect x="17" y="7" width="8" height="8" rx="1.5" class="bm-b" />
+            <rect x="7" y="17" width="8" height="8" rx="1.5" class="bm-b" />
+            <rect x="17" y="17" width="8" height="8" rx="1.5" class="bm-c" />
+          </svg>
+        </a>
+        <div class="topbar__doc">
+          <div class="topbar__title">
+            <span class="file-name" id="file-name">Untitled</span>
+            <span class="save-state" id="save-state" role="status"></span>
+          </div>
+          <nav class="cf-menubar" id="menubar"></nav>
+        </div>
+        <div class="topbar__actions" id="topbar-actions">
+          <div class="topbar__group" role="group" aria-label="Undo and redo">
+            <button id="btn-undo" type="button" class="btn-ghost btn-icon" aria-label="Undo (Ctrl+Z)" title="Undo (Ctrl+Z)" disabled></button>
+            <button id="btn-redo" type="button" class="btn-ghost btn-icon" aria-label="Redo (Ctrl+Y)" title="Redo (Ctrl+Y)" disabled></button>
+          </div>
+          <button id="btn-search" type="button" class="topbar__search" aria-label="Search commands and tools (Ctrl+K)" title="Search commands and tools (Ctrl+K)">
+            <span class="topbar__search-text">Search commands</span><kbd>Ctrl K</kbd>
+          </button>
+          <div class="topbar__group" role="group" aria-label="File">
+            <button id="btn-open" type="button" class="btn-ghost topbar__btn" title="Open a workbook, Excel, CSV or PDF statement (Ctrl+O)"><span>Open</span></button>
+            <button id="btn-save" type="button" class="btn-ghost topbar__btn" title="Save and export"><span>Save</span></button>
+            <button id="btn-share" type="button" class="btn-ghost topbar__btn" title="Check, protect and send this workbook"><span>Share</span></button>
+          </div>
+          <button id="btn-ai" type="button" class="ai-button topbar__ai"><span class="topbar__ai-label">Ask AI</span><span class="ai-chip"></span><span class="ai-dot"></span></button>
+          <button id="btn-help" type="button" class="btn-ghost btn-icon" aria-label="Help" title="Help"></button>
         </div>
       </header>
 
@@ -43,24 +63,29 @@
       <div class="formula-bar">
         <span class="cell-ref" id="cell-ref">A1</span>
         <span class="fx">fx</span>
-        <input id="formula-input" type="text" spellcheck="false" autocomplete="off" />
+        <input id="formula-input" type="text" spellcheck="false" autocomplete="off" aria-label="Formula" />
       </div>
 
-      <main class="sheet" id="sheet"></main>
+      <div class="workspace" id="workspace">
+        <nav class="cf-rail" id="rail"></nav>
+        <main class="sheet" id="sheet"></main>
+      </div>
 
-      <nav class="sheet-tabs" id="sheet-tabs" aria-label="Sheets"></nav>
+      <footer class="bottombar">
+        <nav class="sheet-tabs" id="sheet-tabs" aria-label="Sheets"></nav>
+        <div class="status-bar" role="status">
+          <span id="status-hint"></span>
+          <span id="status-left"></span>
+          <span id="status-right"></span>
+        </div>
+      </footer>
 
       <aside class="history-panel" id="history-panel" aria-label="History" hidden></aside>
       <aside class="history-panel" id="inspect-panel" aria-label="Inspect cell" hidden></aside>
 
       <div class="drop-overlay" id="drop-overlay" hidden>
-        <p>Drop a CSV, Excel or .cellforge file to open it</p>
+        <p>Drop a CSV, Excel, PDF statement or .cellforge file to open it</p>
       </div>
-
-      <footer class="status-bar">
-        <span id="status-left">Ready</span>
-        <span id="status-right"></span>
-      </footer>
     </div>
     <script type="module" src="/src/app.ts"></script>
   </body>

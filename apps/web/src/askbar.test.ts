@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ActionHistory, BlobStore } from "@cellforge/actions";
 import { EXAMPLES, actionsOf, parse, runRequest, validateAction } from "@cellforge/ai";
 import { setCells, sheetActions, type SheetCtx } from "./actions";
-import { askContext, planFor, sheetInfo, suggestCommands } from "./askbar";
+import { askContext, planFor, sheetExamples, sheetInfo, suggestCommands } from "./askbar";
 import { BlankSource, EditableSource } from "./editable";
 import type { Command } from "./palette";
 import { Workbook } from "./workbook";
@@ -205,5 +205,35 @@ describe("ask bar end to end (parse → run through history)", () => {
     const t = await runRequest("hide rows 3 to 4", { catalog: s.deps.catalog, context: s.deps.context, run: s.deps.run });
     expect(t.status).toBe("done");
     expect(s.history.canUndo).toBe(true);
+  });
+});
+
+describe("examples from the sheet's own columns", () => {
+  it("uses the sheet's column names, and every example works as written", async () => {
+    const s = await setup();
+    const ctx = s.deps.context();
+    const ex = sheetExamples(ctx);
+    expect(ex).toEqual(expect.arrayContaining(["sort by amount descending", "sum of amount by region", "find duplicates in invoice number", "sort by date"]));
+    for (const text of ex) expect([text, planFor(text, s.deps).kind]).toEqual([text, expect.stringMatching(/^(ready|command)$/)]);
+  });
+
+  it("finance headers give finance examples", async () => {
+    const workbook = new Workbook({ name: "Ledger", source: new EditableSource(new BlankSource(20, 5)) });
+    const ctx: SheetCtx = { workbook, activeSheet: workbook.sheets[0].id, blobs: new BlobStore(), sortRows };
+    const registry = sheetActions();
+    const history = new ActionHistory(registry, () => ctx);
+    await history.run(setCells(["Posting Date", "Ref", "Vendor", "Description", "Amount"].map((v, col) => ({ row: 0, col, input: v }))));
+    await history.run(setCells([{ row: 1, col: 4, input: "12" }]));
+    const deps = { catalog: () => registry.catalog(), context: () => askContext(workbook, ctx.activeSheet, { top: 0, left: 0, bottom: 0, right: 0 }), commands: () => COMMANDS };
+    const ex = sheetExamples(deps.context());
+    expect(ex.slice(0, 2)).toEqual(["sort by amount descending", "sum of amount by vendor"]);
+    expect(ex).toContain("find duplicates in ref");
+    for (const text of ex) expect([text, planFor(text, deps).kind]).toEqual([text, expect.stringMatching(/^(ready|command)$/)]);
+  });
+
+  it("falls back to the general examples without a header row", () => {
+    const src = new EditableSource(new BlankSource(5, 3));
+    const ex = sheetExamples({ sheets: [sheetInfo("s", "Blank", src)], activeSheet: "s", selection: { top: 0, left: 0, bottom: 0, right: 0 } }, 4);
+    expect(ex).toEqual(EXAMPLES.slice(0, 4));
   });
 });

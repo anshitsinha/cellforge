@@ -285,7 +285,11 @@ export type FetchLike = (url: string, init?: { headers?: Record<string, string>;
 export interface EnsureOptions {
   onProgress?: (loaded: number, total: number | null) => void;
   signal?: AbortSignal;
-  /** commit the partial file every N bytes so a crash loses at most that much (default 8 MiB) */
+  /**
+   * commit the partial file after at least N new bytes (default 8 MiB), and
+   * at least as many as are already committed, so a crash loses at most
+   * about half of what arrived; pausing, an error or the end commits everything
+   */
   checkpointBytes?: number;
 }
 
@@ -398,7 +402,12 @@ export class ModelManager {
         loaded += value.length;
         sinceCheckpoint += value.length;
         opts.onProgress?.(loaded, total);
-        if (sinceCheckpoint >= checkpoint) {
+        // Reopening an OPFS writer with keepExistingData copies the whole file
+        // first, so fixed-size checkpoints cost O(n²) (measured in Chromium:
+        // 256 MB took 19 s with 8 MiB checkpoints, 0.9 s with none). Each
+        // checkpoint therefore at least doubles what's committed: the copying
+        // adds up to less than twice the file's size.
+        if (sinceCheckpoint >= Math.max(checkpoint, loaded - sinceCheckpoint)) {
           await w.close();
           w = await this.storage.openWriter(name);
           sinceCheckpoint = 0;

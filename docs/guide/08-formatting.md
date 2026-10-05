@@ -1,6 +1,6 @@
 # Formatting
 
-The bar under the toolbar formats whatever is selected. Every change can be
+The format bar under the menus formats whatever is selected. Every change can be
 undone with **Ctrl+Z**.
 
 ## Text

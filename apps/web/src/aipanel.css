@@ -1,0 +1,464 @@
+/*
+ * The AI panel's content, inside the shared side panel (ui/sidepanel.ts).
+ * Same language as the landing page's "Private AI" section: a kicker, a
+ * confident title, a lede, then three numbered step cards. Buttons are the
+ * kit's; everything else uses the design tokens.
+ */
+.ai-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding-bottom: var(--space-4);
+  font-size: var(--text-md);
+  line-height: var(--leading);
+  color: var(--text-default);
+}
+
+.ai-panel p {
+  margin: 0;
+}
+
+.ai-panel a {
+  color: var(--accent-default);
+  text-underline-offset: 3px;
+}
+
+.aip-icon {
+  flex: none;
+}
+
+.aip-muted {
+  color: var(--text-muted);
+}
+
+.aip-small {
+  font-size: var(--text-sm);
+}
+
+.aip-note {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.aip-why {
+  display: flex;
+  gap: var(--space-1-5);
+  align-items: flex-start;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.aip-why .aip-icon {
+  color: var(--success);
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+}
+
+.aip-warn {
+  color: var(--warning);
+  font-size: var(--text-sm);
+}
+
+/* ---- hero ---------------------------------------------------------------- */
+
+.aip-hero {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
+}
+
+.ai-panel .aip-title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  font-weight: var(--weight-bold);
+  color: var(--text-strong);
+  text-wrap: balance;
+}
+
+.aip-lede {
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* ---- steps --------------------------------------------------------------- */
+
+.aip-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1-5);
+}
+
+.aip-step {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-xl);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+}
+
+.aip-step--current {
+  border-color: color-mix(in srgb, var(--accent-default) 45%, var(--border-default));
+  box-shadow: var(--shadow-2);
+}
+
+.aip-step--todo {
+  background: transparent;
+}
+
+.aip-step--todo .aip-step-text {
+  color: var(--text-muted);
+}
+
+.aip-step-n {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-strong);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+
+.aip-step--current .aip-step-n {
+  background: var(--accent-solid);
+  border-color: var(--accent-solid);
+  color: var(--on-accent);
+}
+
+.aip-step--done .aip-step-n {
+  background: var(--success-soft);
+  border-color: transparent;
+  color: var(--success);
+}
+
+.aip-step-extra {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.aip-step > .aip-actions.aip-step-extra {
+  grid-column: 2;
+}
+
+.aip-step-text {
+  padding-top: 4px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.aip-step-text b {
+  color: var(--text-strong);
+  font-weight: var(--weight-semibold);
+}
+
+/* ---- model cards --------------------------------------------------------- */
+
+.aip-get {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.aip-model {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  background: var(--surface-0);
+}
+
+.aip-model--hero {
+  border-color: color-mix(in srgb, var(--accent-default) 40%, var(--border-default));
+  background: linear-gradient(180deg, var(--accent-soft), transparent 70%), var(--surface-0);
+}
+
+.aip-model-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.aip-size {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ai-panel .aip-model-name {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+}
+
+.aip-model-for {
+  color: var(--text-default);
+  line-height: 1.5;
+}
+
+.aip-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.aip-chips li {
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.aip-chips a {
+  color: inherit;
+}
+
+.aip-model .aip-actions {
+  margin-top: var(--space-1);
+}
+
+.aip-cta {
+  height: var(--control-h-lg);
+  padding-inline: var(--space-4);
+  font-size: var(--text-md);
+}
+
+.aip-get-more button,
+.aip-step > .aip-actions .btn-ghost {
+  color: var(--accent-default);
+}
+
+.aip-step > .aip-actions.aip-step-extra {
+  margin: calc(-1 * var(--space-2)) 0 0 calc(-1 * var(--space-2));
+}
+
+.aip-get-more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-left: calc(-1 * var(--space-2));
+}
+
+.aip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+/* ---- ready, loading, errors ----------------------------------------------- */
+
+.aip-ready {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--success-soft);
+  border: 1px solid color-mix(in srgb, var(--success-solid) 30%, transparent);
+}
+
+.aip-ready-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.aip-ready-head strong {
+  flex: 1;
+  color: var(--text-strong);
+}
+
+.aip-facts {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.aip-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-full);
+  flex: none;
+  background: var(--text-subtle);
+}
+
+.aip-dot--ready {
+  background: var(--success-solid);
+  box-shadow: 0 0 0 3px var(--success-soft);
+}
+
+.aip-load {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.aip-error {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--danger-solid) 40%, transparent);
+  background: var(--danger-soft);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.aip-progress {
+  height: 6px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--surface-3);
+}
+
+.aip-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent-solid);
+  border-radius: var(--radius-full);
+  transition: width 0.2s linear;
+}
+
+.aip-progress-indeterminate .aip-progress-fill {
+  width: 35%;
+  animation: aip-slide 1.3s ease-in-out infinite;
+}
+
+@keyframes aip-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+/* ---- kept models ----------------------------------------------------------- */
+
+.aip-kept {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.aip-kept-name {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+
+.aip-kept-name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-strong);
+  font-weight: var(--weight-semibold);
+}
+
+.aip-section {
+  gap: var(--space-3);
+}
+
+/* ---- what it does: the landing page's left-ruled points, clickable --------- */
+
+.aip-uses {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.aip-use {
+  width: 100%;
+  height: auto;
+  display: grid;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-left: 2px solid var(--border-strong);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  background: none;
+  box-shadow: none;
+  text-align: left;
+  font: inherit;
+  color: var(--text-muted);
+  white-space: normal;
+  cursor: pointer;
+}
+
+.aip-use:hover {
+  border-left-color: var(--accent-default);
+  background: var(--surface-3);
+}
+
+.aip-use b {
+  color: var(--text-strong);
+  font-weight: var(--weight-semibold);
+}
+
+.aip-use small {
+  font-size: var(--text-xs);
+  color: var(--text-subtle);
+}
+
+/* ---- fine print ------------------------------------------------------------ */
+
+.aip-fine {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.aip-fine .aip-icon {
+  color: var(--success);
+  margin-top: 2px;
+}
+
+.aip-link {
+  display: inline;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--accent-default);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aip-progress-indeterminate .aip-progress-fill,
+  .aip-progress-fill {
+    animation: none;
+    transition: none;
+  }
+}

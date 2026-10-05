@@ -1,81 +1,73 @@
 import "./style.css";
+import "./shell.css";
 import type { ChartSpec } from "./charts/model";
 import { type CellRange, Grid, columnLetter } from "@cellforge/grid";
 import { parseTsv, rangeSize, rangeToTsv } from "./clipboard";
 import { computeStats } from "./stats";
 import { SyntheticSource } from "./demo";
-import { sampleFromUrl, sampleWorkbook } from "./samples";
+import { sampleFromUrl, sampleWorkbook, type SampleKind } from "./samples";
 import { type Action, ActionHistory, type ActionRegistry, BlobStore } from "@cellforge/actions";
 import { setCells, sheetActions, type SheetCtx } from "./actions";
 import { BlankSource, EditableSource, isFormula, type Fill } from "./editable";
 import { download, exportCsv } from "./exporter";
 import { SheetTabs } from "./tabs";
-import { NUMBER_FORMATS, setupFormatBar } from "./formatbar";
+import { setupFormatBar } from "./formatbar";
 import { attachFormulaAssist } from "./formulaassist";
 import { setupNamesUi } from "./namesui";
 import { setupInspectPanel } from "./inspectpanel";
 import { openXlsx, saveXlsx } from "./xlsxio";
 import { askCsvOptions } from "./importdialog";
-import { openCleanup } from "./cleanupdialog";
-import { openCombine } from "./combinedialog";
 import { importStatement, pickStatement } from "./statement";
-import { openTbMapper } from "./tbdialog";
 import { closeFilterMenu, openFilterMenu } from "./filtermenu";
-import { openSortDialog } from "./sortdialog";
-import { editRule, openCfManager } from "./cfmanager";
 import { openFindReplace } from "./finddialog";
-import { openAuditTool } from "./audittools";
-import { openRecon } from "./recondialog";
-import { bindSqlStore, openSql, registerSqlActions } from "./sqlpanel";
-import { bindChecksStore, gateExport, openCategorise, openChecks, registerCheckActions } from "./checksui";
-import { openTimeTool } from "./timetools";
-import { openOpenItems } from "./openitemsdialog";
-import { openTransform } from "./transformtools";
-import { openJeTool } from "./jetools";
-import { openPivot } from "./pivotpanel";
+import { bindSqlStore, registerSqlActions } from "./sqlpanel";
+import { bindChecksStore, gateExport, registerCheckActions } from "./checksui";
 import { RecipeRecorder, unbindAction, usedMemory } from "./recipe";
-import { openRecipes } from "./recipepanel";
 import { openLineage } from "./lineagepanel";
-import { reviewCommands } from "./reviewui";
 import { askContext, setupAskBar } from "./askbar";
-import { openScenarios } from "./scenariosui";
 import { registerReportActions } from "./reports/actions";
-import { openReports } from "./reports/reportpanel";
-import { openDocuments } from "./docviewer";
 import { openAskGuide } from "./askguide";
-import { openVariants } from "./variants";
-import { hardwareSummary, installModel, loadedModel, pickModelFile, removeModel, restoreModel } from "./localmodel";
-import { buildTemplate, pickTemplate, TEMPLATES } from "./templates";
+import { aiStatus, currentModel, onAiStatus } from "./localmodel";
+import { aiBadge, AI_PANEL_ID, openAiPanel, toggleAiPanel, watchAiToasts, type AiPanelDeps } from "./aipanel";
+import { buildTemplate, pickTemplate, TEMPLATES, type TemplateKind } from "./templates";
 import { clearLocalData, decryptFile, encryptFile, isEncrypted } from "./sharing";
-import { askPassword, confirmClear, openShareCheck } from "./sharingui";
+import { askPassword, confirmClear } from "./sharingui";
 import { allMarks } from "./review";
 import { appendLog, fingerprint, onFileRead, type Fingerprint, type LogEntry } from "./evidence";
-import { openVerifyPack, saveEvidencePack } from "./evidencepack";
-import { openRunOnFiles } from "./recipefiles";
+import { saveEvidencePack } from "./evidencepack";
 import type { Workbook as WorkbookT } from "./workbook";
-import { openCompare, openGlTie, openJoin, openMapping, openTbCompare } from "./joindialog";
 import { cellLink, editExtra, extraAction, followLink, showNoteTip } from "./links";
-import { openProfiles } from "./profilepanel";
-import { askAboutInvalid, closeDropdown, dvContext, invalidCells, invalidInputs, openDropdown, openValidationDialog, showInputMessage } from "./dvui";
+import { askAboutInvalid, closeDropdown, dvContext, invalidInputs, openDropdown, showInputMessage } from "./dvui";
 import { chartSpecs, closeChart, openChart, refreshCharts } from "./charts/panel";
 import { registerFindActions } from "./findreplace";
-
-const statementDeps = () => ({
-  run: (a: Action) => run(a),
-  putBlob: (v: unknown) => blobs.put(v),
-  status: (t: string) => (statusLeft.textContent = t),
-  focusGrid: () => grid.focus(),
-});
 import { delocalizeFormula, jsonToColumns, localizeFormula, readParquet, Table } from "@cellforge/core";
 import { installA11y } from "./a11y";
-import { chooseLocale, LOCALE_CHOICES, startLocale } from "./locale";
-import { type Command, setupPalette } from "./palette";
+import { startLocale } from "./locale";
+import { setupPalette } from "./palette";
 import { setupHistoryPanel, type TrailEntry } from "./historypanel";
 import { AutoSaver, fromFile, OpfsStore, packWorkbook, toFile, unpackWorkbook, type JournalEntry } from "./persist";
 import { sheetNameProblem, Workbook } from "./workbook";
 import { extractKeys, sortInWorker } from "./sort";
 import { formatBytes, importCsv } from "./importer";
 import { confirmDialog } from "./ui/confirm";
+import { openDialog } from "./ui/dialog";
+import { icon } from "./ui/icons";
+import { mountSidePanelHost, onSidePanelChange } from "./ui/sidepanel";
+import { buildCommands, COMMAND_GROUPS, devMode, sheetContext, sheetIsBlank, suggestedCommandIds, type AppCommand, type CommandDeps, type ThemeChoice } from "./commands";
+import { buildMenuModel, menuButton, menuEntries, setupMenuBar } from "./menubar";
+import { setupRail } from "./rail";
+import { setupStartScreen } from "./startscreen";
+import { createNotifier } from "./messages";
+
+/** Results, warnings and errors for the user: toasts (messages.ts). */
+const notify = createNotifier();
+
+const statementDeps = () => ({
+  run: (a: Action) => run(a),
+  putBlob: (v: unknown) => blobs.put(v),
+  status: notify,
+  focusGrid: () => grid.focus(),
+});
 
 const DEMO_ROWS = 100_000_000;
 
@@ -130,10 +122,12 @@ const grid = new Grid(
 );
 // formulas are edited with the locale's argument separator (; in German and French)
 grid.editTextFilter = (t) => localizeFormula(t);
+// the one side panel sits beside the grid; the grid watches its own size
+mountSidePanelHost(sheet);
 
+/** The sheet's size, quietly, on the left of the status bar. */
 function updateStatus() {
-  const edits = source.editCount ? ` · ${source.editCount} edited` : "";
-  statusLeft.textContent = `${rowFormat.format(source.rowCount)} rows × ${source.colCount} columns${edits}`;
+  statusLeft.textContent = !sheetIsBlank(source) ? `${rowFormat.format(source.rowCount)} row${source.rowCount === 1 ? "" : "s"} · ${source.colCount} column${source.colCount === 1 ? "" : "s"}` : "";
 }
 
 function syncFormulaBar() {
@@ -144,11 +138,11 @@ function syncFormulaBar() {
 
 // --- status bar (right side) ----------------------------------------------------
 // Shows selection stats when more than one cell is selected, otherwise
-// whatever info message was set last (import time, WebGPU support...).
+// the last background job's note (a compiled column's speed).
 
-let infoText = "gpu" in navigator ? "WebGPU available" : "WebGPU not available (CPU fallback)";
+let infoText = "";
 let statsToken = 0;
-const numFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 });
+const numFormat = new Intl.NumberFormat(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
 function setInfo(text: string) {
   infoText = text;
@@ -171,11 +165,11 @@ async function updateSelectionStats() {
   if (!stats || token !== statsToken) return;
   const parts = [];
   if (stats.numbers) {
-    parts.push(`Sum ${numFormat.format(stats.sum)}`);
-    parts.push(`Average ${numFormat.format(stats.sum / stats.numbers)}`);
+    parts.push(`Sum <b>${numFormat.format(stats.sum)}</b>`);
+    parts.push(`Average <b>${numFormat.format(stats.sum / stats.numbers)}</b>`);
   }
-  parts.push(`Count ${rowFormat.format(stats.count)}`);
-  statusRight.textContent = parts.join(" · ");
+  parts.push(`Count <b>${rowFormat.format(stats.count)}</b>`);
+  statusRight.innerHTML = parts.join('<span class="status-sep"></span>');
 }
 
 // keep the name box, formula bar and stats in sync with the selection
@@ -196,9 +190,8 @@ grid.onSelectionChange = () => {
 };
 
 // a lookup that found nothing for a fixable reason explains itself here
-const hintBox = document.createElement("span");
+const hintBox = document.getElementById("status-hint")!;
 hintBox.className = "status-hint";
-statusLeft.after(hintBox);
 function showHint() {
   const { row, col } = grid.selection;
   const hint = source.hintAt(row, col);
@@ -278,7 +271,7 @@ const formatBar = setupFormatBar({
   grid,
   source: () => source,
   run: (a) => run(a),
-  status: (m) => (statusLeft.textContent = m),
+  status: notify,
   gridHasFocus: () => gridHasFocus(),
   sheetElement: sheet,
 });
@@ -314,13 +307,13 @@ async function sortRows(target: EditableSource, col: number, descending: boolean
   const name = target.getColumnName(col) ?? columnLetter(col);
   let cancelled = false;
   cancelSort = () => (cancelled = true);
-  statusLeft.textContent = `Sorting by ${name}: reading values…`;
+  notify(`Sorting by ${name}: reading values…`);
   const { keys, kinds } = await extractKeys(target, col, descending, (f) => {
-    statusLeft.textContent = `Sorting by ${name}: reading values… ${Math.round(f * 100)}%`;
+    notify(`Sorting by ${name}: reading values… ${Math.round(f * 100)}%`);
   });
   if (cancelled) return null;
   const job = sortInWorker({ keys, kinds, descending }, (f) => {
-    statusLeft.textContent = `Sorting by ${name}… ${Math.round(f * 100)}%`;
+    notify(`Sorting by ${name}… ${Math.round(f * 100)}%`);
   });
   cancelSort = job.cancel;
   try {
@@ -345,7 +338,7 @@ const history = new ActionHistory(registry, ctx);
 
 const lineageDeps = () => ({
   workbook: () => workbook,
-  model: () => loadedModel()?.kiln ?? null,
+  model: () => currentModel(),
   sheetId: () => activeId,
   cell: () => ({ ...grid.selection }),
   lastEdit: (sheetId: string, row: number, col: number) => {
@@ -358,7 +351,7 @@ const lineageDeps = () => ({
     grid.select(row, col);
     grid.focus();
   },
-  status: (t: string) => (statusLeft.textContent = t),
+  status: notify,
 });
 document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "e" && gridHasFocus()) {
@@ -396,7 +389,7 @@ const docDeps = () => ({
   store: docBytes,
   run: (a: Action) => run(a),
   goTo: findDeps().goTo,
-  status: (t: string) => (statusLeft.textContent = t),
+  status: notify,
 });
 
 const recipeFilesDeps = () => ({
@@ -404,7 +397,7 @@ const recipeFilesDeps = () => ({
   addSheets: async (wb: WorkbookT, prefix: string) => {
     for (const s of wb.sheets) await run({ type: "sheet.insert", params: { name: `${prefix} ${s.name}`.slice(0, 31), source: blobs.put(s.source) } });
   },
-  status: (t: string) => (statusLeft.textContent = t),
+  status: notify,
   focusGrid: () => grid.focus(),
 });
 
@@ -437,7 +430,7 @@ async function run(action: Action) {
     refresh();
     return applied;
   } catch (e) {
-    statusLeft.textContent = (e as Error).message;
+    notify.error((e as Error).message);
     return null;
   }
 }
@@ -565,6 +558,7 @@ function toggleFilterButtons() {
 /** Repaint and update everything that shows cell contents. */
 function refresh() {
   settleActiveSheet();
+  if (startScreen?.visible && !isEmptyWorkbook()) startScreen.hide();
   syncFilterButtons();
   source.invalidateCondFormats();
   // tick marks look the same on every sheet (custom ones come from the workbook)
@@ -610,9 +604,8 @@ async function undo() {
       logEvidence({ kind: "undo", label });
     }
     refresh();
-    if (label) statusLeft.textContent = `Undid ${label}`;
   } catch (e) {
-    statusLeft.textContent = `Couldn't undo: ${(e as Error).message}`;
+    notify(`Couldn't undo: ${(e as Error).message}`);
   }
 }
 
@@ -625,9 +618,8 @@ async function redo() {
       logEvidence({ kind: "redo", label });
     }
     refresh();
-    if (label) statusLeft.textContent = `Redid ${label}`;
   } catch (e) {
-    statusLeft.textContent = `Couldn't redo: ${(e as Error).message}`;
+    notify(`Couldn't redo: ${(e as Error).message}`);
   }
 }
 
@@ -664,19 +656,11 @@ async function sortBy(descending: boolean) {
   const started = performance.now();
   const applied = await run({ type: "rows.sort", params: { col, descending } });
   if (!applied) return; // cancelled by a newer sort, or failed
-  statusLeft.textContent = `Sorted ${rowFormat.format(source.rowCount)} rows by ${name} in ${(
+  notify(`Sorted ${rowFormat.format(source.rowCount)} rows by ${name} in ${(
     (performance.now() - started) / 1000
-  ).toFixed(2)}s`;
+  ).toFixed(2)}s`);
 }
 
-document.getElementById("btn-sort-asc")!.addEventListener("click", () => {
-  sortBy(false);
-  grid.focus();
-});
-document.getElementById("btn-sort-desc")!.addEventListener("click", () => {
-  sortBy(true);
-  grid.focus();
-});
 
 // --- fill down (Ctrl+D) -------------------------------------------------------------
 // Copies the top row of the selection into every row below it. On an
@@ -686,14 +670,14 @@ document.getElementById("btn-sort-desc")!.addEventListener("click", () => {
 async function fillDown() {
   const range = grid.range;
   if (range.bottom === range.top) {
-    statusLeft.textContent = "Select the cell to copy and the cells below it, then fill down (Ctrl+D).";
+    notify("Select the cell to copy and the cells below it, then fill down (Ctrl+D).");
     return;
   }
   const rows = range.bottom - range.top;
   // sorted sheets fill cell by cell (rows adjacent in the view are scattered
   // in the data), which goes through the sparse edit map
   if (source.rowOrder && rows * (range.right - range.left + 1) > MAX_BULK_CELLS) {
-    statusLeft.textContent = `Fill down on a sorted sheet is limited to ${rowFormat.format(MAX_BULK_CELLS)} cells.`;
+    notify(`Fill down on a sorted sheet is limited to ${rowFormat.format(MAX_BULK_CELLS)} cells.`);
     return;
   }
   const target = source;
@@ -710,13 +694,9 @@ async function fillDown() {
     how =
       formulaFills === 0 ? "" : compiled === formulaFills ? " · compiled" : compiled === 0 ? " · interpreted" : ` · ${compiled}/${formulaFills} columns compiled`;
   }
-  statusLeft.textContent = `Filled ${rowFormat.format(rows)} rows${how}`;
+  notify(`Filled ${rowFormat.format(rows)} rows${how}`);
 }
 
-document.getElementById("btn-fill")!.addEventListener("click", () => {
-  void fillDown();
-  grid.focus();
-});
 
 document.addEventListener("keydown", (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "d") return;
@@ -771,7 +751,7 @@ grid.onCellCtrlClick = (cell) => {
     showSheet(sheetId);
     grid.select(row, col);
     grid.focus();
-  }, (t) => (statusLeft.textContent = t));
+  }, notify);
   return true;
 };
 async function editCellExtra(kind: "note" | "link") {
@@ -824,7 +804,7 @@ const MAX_BULK_CELLS = 1_000_000;
 
 grid.onClearRange = (range) => {
   if (rangeSize(range) > MAX_BULK_CELLS) {
-    statusLeft.textContent = `Clearing more than ${rowFormat.format(MAX_BULK_CELLS)} cells at once isn't supported yet.`;
+    notify(`Clearing more than ${rowFormat.format(MAX_BULK_CELLS)} cells at once isn't supported yet.`);
     return;
   }
   const cells: CellInput[] = [];
@@ -848,7 +828,7 @@ function gridHasFocus() {
 function copySelection(e: ClipboardEvent): boolean {
   const range = grid.range;
   if (rangeSize(range) > MAX_BULK_CELLS) {
-    statusLeft.textContent = `Copying more than ${rowFormat.format(MAX_BULK_CELLS)} cells isn't supported yet.`;
+    notify(`Copying more than ${rowFormat.format(MAX_BULK_CELLS)} cells isn't supported yet.`);
     e.preventDefault();
     return false;
   }
@@ -1049,7 +1029,7 @@ async function deleteRows() {
 async function hideRows(hidden: boolean) {
   const { top, count } = selectedRows();
   if (hidden && count >= source.rowCount) {
-    statusLeft.textContent = "At least one row has to stay visible.";
+    notify("At least one row has to stay visible.");
     return;
   }
   await run({ type: "rows.hide", params: { at: top, count, hidden } });
@@ -1221,8 +1201,18 @@ let journalRuns = 0;
 let journalUndone = 0;
 let snapshotTimer = 0;
 
+/** The save state beside the file name: only claims "saved" once there is something saved. */
 function showSaved(text: string) {
-  saveState.textContent = text;
+  const state = text === "saved" ? "saved" : text === "saving…" ? "saving" : /not saved|off|unavailable/.test(text) ? "warn" : "info";
+  if (state === "saved" && currentName === "Untitled" && !workbookEdited()) {
+    saveState.replaceChildren();
+    delete saveState.dataset.state;
+    return;
+  }
+  saveState.dataset.state = state;
+  const label = state === "saved" ? "Saved on this computer" : state === "saving" ? "Saving…" : text.charAt(0).toUpperCase() + text.slice(1);
+  saveState.replaceChildren(icon(state === "saved" ? "check" : state === "warn" ? "warning" : "history", { size: 14 }), label);
+  saveState.title = state === "warn" ? "Changes in this tab aren't being kept in the browser" : "Every change is kept in this browser as you work. Save (Ctrl+S) writes a .cellforge file.";
 }
 
 async function snapshotNow() {
@@ -1236,7 +1226,7 @@ async function snapshotNow() {
     showSaved("saved");
   } catch (e) {
     showSaved("not saved");
-    statusLeft.textContent = `Autosave failed: ${(e as Error).message}`;
+    notify(`Autosave failed: ${(e as Error).message}`);
   }
 }
 
@@ -1259,7 +1249,7 @@ function journal(entry: JournalEntry) {
     () => showSaved("saved"),
     (e) => {
       showSaved("not saved");
-      statusLeft.textContent = `Autosave failed: ${(e as Error).message}`;
+      notify(`Autosave failed: ${(e as Error).message}`);
     },
   );
   // compact now and then: a snapshot after a quiet spell or many changes
@@ -1303,24 +1293,26 @@ async function startAutosave() {
     }
     replaying = false;
     refresh();
-    statusLeft.textContent = "Picked up where you left off.";
+    notify("Picked up where you left off.");
     void snapshotNow();
   } catch (e) {
     replaying = false;
     // don't overwrite what's there: it may be recoverable by a later version
     saver = null;
     showSaved("autosave off");
-    statusLeft.textContent = `Couldn't restore the last session (${(e as Error).message}); autosave is off for this tab.`;
+    notify(`Couldn't restore the last session (${(e as Error).message}); autosave is off for this tab.`);
   }
 }
 
-void startAutosave();
+void startAutosave().then(() => {
+  if (!startWithDemo && !startSample && isEmptyWorkbook()) startScreen.show();
+});
 // a sample from the landing page's links (the big one is the demo, above)
 if (startSample && startSample !== "big") {
   void sampleWorkbook(startSample).then((s) => {
     loadWorkbook(s.workbook, s.active, s.name);
     void snapshotNow();
-    statusLeft.textContent = "Sample data (fictional): read \"Start here\" first.";
+    notify("Sample data (fictional): read \"Start here\" first.");
   });
 }
 
@@ -1335,13 +1327,13 @@ async function saveFile(saveAs = false) {
   try {
     blob = toFile(packWorkbook(workbook, activeId, currentName));
   } catch (e) {
-    statusLeft.textContent = `Couldn't save: ${(e as Error).message}`;
+    notify(`Couldn't save: ${(e as Error).message}`);
     return;
   }
   const picker = (window as Window & { showSaveFilePicker?: SavePicker }).showSaveFilePicker;
   if (!picker) {
     download(blob, name);
-    statusLeft.textContent = `Downloaded ${name}`;
+    notify(`Downloaded ${name}`);
     return;
   }
   try {
@@ -1354,27 +1346,24 @@ async function saveFile(saveAs = false) {
     const w = await fileHandle.createWritable();
     await w.write(blob);
     await w.close();
-    statusLeft.textContent = `Saved ${fileHandle.name}`;
+    notify(`Saved ${fileHandle.name}`);
   } catch (e) {
-    if ((e as DOMException).name !== "AbortError") statusLeft.textContent = `Couldn't save: ${(e as Error).message}`;
+    if ((e as DOMException).name !== "AbortError") notify(`Couldn't save: ${(e as Error).message}`);
   }
 }
 
-document.getElementById("btn-save")!.addEventListener("click", () => void saveFile());
 
 async function exportExcel() {
   try {
-    statusLeft.textContent = "Writing the Excel file…";
+    notify("Writing the Excel file…");
     const blob = await saveXlsx(workbook);
     const name = `${currentName.replace(/\.(csv|tsv|txt|cellforge|xlsx|xlsm)$/i, "") || "workbook"}.xlsx`;
     download(blob, name);
-    statusLeft.textContent = `Downloaded ${name}`;
+    notify(`Downloaded ${name}`);
   } catch (e) {
-    statusLeft.textContent = `Couldn't export: ${(e as Error).message}`;
+    notify(`Couldn't export: ${(e as Error).message}`);
   }
 }
-// failing data checks ask before anything leaves the app
-document.getElementById("btn-export-xlsx")!.addEventListener("click", () => void gateExport(() => exportExcel()));
 document.addEventListener("keydown", (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
   const k = e.key.toLowerCase();
@@ -1383,7 +1372,7 @@ document.addEventListener("keydown", (e) => {
     void saveFile(e.shiftKey);
   } else if (k === "o" && !e.shiftKey) {
     e.preventDefault();
-    document.getElementById("btn-open")?.click();
+    openFilePicker();
   }
 });
 
@@ -1440,10 +1429,6 @@ const inspectPanel = setupInspectPanel({
   },
 });
 
-document.getElementById("btn-history")!.addEventListener("click", () => {
-  inspectPanel.close();
-  historyPanel.toggle();
-});
 // Ctrl+[ inspects the cell (Excel's "go to precedents" key)
 document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === "[") {
@@ -1499,437 +1484,301 @@ const namesUi = setupNamesUi({
 
 // --- command palette (Ctrl+K) -------------------------------------------------
 
-const click = (id: string) => () => document.getElementById(id)?.click();
-const fmt = (style: Record<string, unknown>) => () => run({ type: "format.set", params: { range: grid.range, style } });
-const toggle = (prop: "bold" | "italic" | "underline" | "strike" | "wrap") => () => {
-  const { row, col } = grid.selection;
-  return fmt({ [prop]: source.getStyle(row, col)?.[prop] ? null : true })();
-};
-const border = (which: string) => () => run({ type: "format.borders", params: { range: grid.range, which, line: { style: "thin", color: "auto" } } });
-
-function paletteCommands(): Command[] {
-  const { row, col } = grid.selection;
-  const list: Command[] = [
-    { id: "undo", title: "Undo", keys: "Ctrl Z", run: undo },
-    { id: "filter-toggle", title: source.filter || filterButtonsOn.has(activeId) ? "Turn off filter" : "Filter (show filter buttons)", keys: "Ctrl Shift L", hint: "autofilter filter buttons dropdown", run: toggleFilterButtons },
-    { id: "filter-column", title: "Filter this column…", hint: "autofilter values blanks condition", run: filterActiveColumn },
-    ...(source.filter
-      ? [
-          { id: "filter-reapply", title: "Reapply filter", keys: "Ctrl Alt L", hint: "refresh filter", run: () => run({ type: "filter.reapply", params: {} }) },
-          { id: "filter-clear", title: "Clear filter (show all rows)", hint: "remove filter show all", run: () => run({ type: "filter.clear", params: {} }) },
-        ]
-      : []),
-    ...(
-      [
-        ["duplicates", "Find duplicates…", "audit duplicate exact near fuzzy similar vendor invoice double payment"],
-        ["sequence", "Find gaps in a sequence…", "audit sequence gap missing invoice cheque number duplicate out of order"],
-        ["benford", "Benford's law test…", "audit benford first digit two digits chi-square mad fraud"],
-        ["stratify", "Stratify values into bands…", "audit stratify strata bands value ranges profile"],
-        ["topn", "Largest items (top N)…", "audit top n largest biggest items"],
-        ["pareto", "Pareto analysis…", "audit pareto 80/20 cumulative share vendor customer concentration"],
-        ["ageing", "Ageing buckets…", "audit ageing aging days overdue receivables payables 30 60 90"],
-        ["sample", "Pick a sample…", "audit sample sampling random systematic stratified monetary unit mus seed"],
-      ] as const
-    ).map(([kind, title, hint]) => ({ id: `audit-${kind}`, title, hint, run: () => openAuditTool(kind, { ...statementDeps(), source: () => source, sheetName: () => workbook.get(activeId).name }) })),
-    {
-      id: "reconcile",
-      title: "Reconcile two sheets…",
-      hint: "reconciliation bank rec match ledger statement unmatched mismatched tolerance fuzzy why don't these match",
-      run: () => openRecon({ workbook: () => workbook, activeSheet: () => activeId, run: (a) => run(a), putBlob: (v) => blobs.put(v), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }),
-    },
-    ...(
-      [
-        ["dedupe", "Remove duplicates…", "remove delete duplicates unique distinct dedupe"],
-        ["split", "Text to columns…", "text to columns split delimiter comma fixed width parse"],
-        ["unpivot", "Unpivot (columns to rows)…", "unpivot melt columns to rows long format months"],
-        ["pivot", "Pivot (rows to columns)…", "pivot wider rows to columns cross tab sum count"],
-        ["extract", "Extract by pattern…", "extract pattern regex email phone url amount date invoice code reference"],
-        ["goalseek", "Goal Seek…", "goal seek what-if solve target backsolve"],
-      ] as const
-    ).map(([kind, title, hint]) => ({
-      id: `transform-${kind}`,
-      title,
-      hint,
-      run: () => openTransform(kind, { ...statementDeps(), source: () => source, activeSheet: () => activeId, sheetName: () => workbook.get(activeId).name, range: () => grid.range, selection: () => grid.selection }),
-    })),
-    ...(
-      [
-        ["journal", "Journal entry tests…", "audit je journal entries testing manual weekend holiday after hours round amounts approval limit threshold backdated keywords unusual user seldom account period end duplicate score"],
-        ["overlaps", "Red-flag overlaps (vendor vs employee)…", "audit overlap vendor employee master same bank account address phone tax id similar names fraud"],
-        ["footing", "Foot and cross-foot this range…", "audit footing cross-footing cast add up totals check schedule"],
-        ["rollforward", "Roll-forward check…", "audit roll forward opening movements closing balance fixed assets provisions"],
-        ["pii", "PII scan and safe copy…", "privacy personal data pii gdpr mask hash pseudonymise anonymise redact share safely email phone iban card ssn"],
-      ] as const
-    ).map(([kind, title, hint]) => ({
-      id: `je-${kind}`,
-      title,
-      hint,
-      run: () => openJeTool(kind, { ...statementDeps(), workbook: () => workbook, source: () => source, activeSheet: () => activeId, range: () => grid.range, sheetName: () => workbook.get(activeId).name }),
-    })),
-    ...(() => {
-      const d = { workbook: () => workbook, activeSheet: () => activeId, run: (a: Action) => run(a), putBlob: (v: unknown) => blobs.put(v), status: (t: string) => (statusLeft.textContent = t), focusGrid: () => grid.focus() };
-      return [
-        { id: "join-sheets", title: "Join two sheets…", hint: "join merge lookup vlookup xlookup match keys doctor orphans duplicates fuzzy why don't these match", run: () => openJoin(d) },
-        { id: "compare-versions", title: "Compare two versions by key…", hint: "compare diff versions changed added removed old new key file compare", run: () => openCompare(d) },
-        { id: "tb-compare", title: "Compare trial balances…", hint: "trial balance tb compare prior period movement missing accounts", run: () => openTbCompare(d) },
-        { id: "gl-tb-tie", title: "Tie the GL out to the TB…", hint: "general ledger trial balance tie out reconcile account totals differences", run: () => openGlTie(d) },
-        { id: "mapping-table", title: "Apply a mapping table…", hint: "mapping table map values standardise names fuzzy names suggest pairs lookup replace", run: () => openMapping(d) },
-      ];
-    })(),
-    { id: "sql", title: "SQL query…", hint: "sql query select join group by where sum count left join unmatched duplicates running balance window", run: () => openSql({ workbook: () => workbook, activeSheet: () => activeId, run: (a) => run(a), putBlob: (v) => blobs.put(v), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }) },
-    { id: "pivot", title: "Pivot table…", hint: "pivot summarise group by subtotal crosstab drill down slicer sum count", run: () => openPivot({ ...statementDeps(), source: () => source, sheetName: () => workbook.get(activeId).name, sheetId: () => activeId, addChart: (spec) => void run({ type: "chart.set", params: { id: spec.id, spec } }) }) },
-    { id: "reports", title: "Reports…", hint: "report pdf print narrative book contents entity consolidation roll forward period pack board", run: () => openReports({ workbook: () => workbook, activeSheet: () => activeId, run: (a) => run(a), putBlob: (v) => blobs.put(v), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }) },
-    { id: "profiles", title: "Column profiles", hint: "profile columns distinct blanks min max median histogram patterns data quality", run: () => openProfiles({ source: () => source, sheetName: () => workbook.get(activeId).name, focusGrid: () => grid.focus() }) },
-    {
-      id: "recipes",
-      title: "Recipes: this session's steps and saved recipes…",
-      hint: "recipe macro record replay steps automate repeat monthly",
-      run: () =>
-        openRecipes({
-          sessionSteps: () => recorder.steps,
-          recipes: () => workbook.recipes,
-          registry: registry as unknown as ActionRegistry<unknown>,
-          run: (a) => run(a),
-          showAfter: async (count) => {
-            // step back or forward through this session's recorded steps
-            while (recorder.steps.length > count && history.canUndo) await undo();
-            while (recorder.steps.length < count && history.canRedo) await redo();
-          },
-          status: (t) => (statusLeft.textContent = t),
-          focusGrid: () => grid.focus(),
-          runOnFiles: (recipe) => openRunOnFiles(recipeFilesDeps(), recipe),
-        }),
-    },
-    ...workbook.recipes.map((r) => ({ id: `recipe-files:${r.name}`, title: `Run recipe on files: ${r.name}`, hint: "recipe run files folder batch", run: () => openRunOnFiles(recipeFilesDeps(), r) })),
-    ...workbook.recipes.map((r) => ({ id: `recipe:${r.name}`, title: `Run recipe: ${r.name}`, hint: "recipe run replay", run: () => run({ type: "recipe.run", params: { name: r.name, steps: r.steps } }) })),
-    ...(
-      [
-        ["bankstatement", "Bank rec statement…", "bank rec reconciliation statement deposits in transit outstanding cheques unpresented adjusting entries journal fees interest"],
-        ["rollforward", "Roll forward outstanding items…", "roll forward outstanding items cleared unpresented cheques deposits in transit stale ageing prior period"],
-        ["openitems", "Open-item matching (one account)…", "open item matching suspense clearing account ar ap control debits credits clear ageing"],
-        ["statementrec", "Supplier / customer statement rec…", "supplier customer statement reconciliation vendor creditor debtor invoice credit note payment in transit"],
-      ] as const
-    ).map(([kind, title, hint]) => ({
-      id: `openitems-${kind}`,
-      title,
-      hint,
-      run: () => openOpenItems(kind, { workbook: () => workbook, activeSheet: () => activeId, run: (a) => run(a), putBlob: (v) => blobs.put(v), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }),
-    })),
-    ...(
-      [
-        ["fiscal", "Fiscal periods…", "fiscal year quarter period 4-4-5 445 week calendar financial year column"],
-        ["periods", "Period comparison (MoM / YoY / rolling)…", "month on month year on year mom yoy qoq ytd qtd rolling average trend period summary"],
-        ["bva", "Budget vs actual…", "budget actual variance favourable unfavourable forecast plan cost centre"],
-        ["currency", "Convert currency…", "currency fx exchange rate convert revalue revaluation gain loss triangulate closing rate"],
-        ["schedule", "Accrual / prepayment schedule…", "accrual prepayment deferred income amortisation schedule straight line daily month end journal"],
-        ["journal", "Journal export template…", "journal export import template csv debit credit accounting system upload"],
-      ] as const
-    ).map(([kind, title, hint]) => ({
-      id: `time-${kind}`,
-      title,
-      hint,
-      run: () => openTimeTool(kind, { ...statementDeps(), workbook: () => workbook, source: () => source, activeSheet: () => activeId, range: () => grid.range, selection: () => grid.selection, sheetName: () => workbook.get(activeId).name }),
-    })),
-    {
-      id: "explain",
-      title: "Explain this number (where it came from)…",
-      keys: "Ctrl Shift E",
-      hint: "explain lineage trace source provenance where from audit trail write up working paper",
-      run: () => openLineage(lineageDeps()),
-    },
-    {
-      id: "evidence-pack",
-      title: "Save an evidence pack…",
-      hint: "evidence pack audit trail log hash fingerprint working papers review sign off",
-      run: () => void logQueue.then(() => saveEvidencePack(workbook, workbook.get(activeId).name, (t) => (statusLeft.textContent = t), docBytes())),
-    },
-    { id: "evidence-verify", title: "Verify an evidence pack…", hint: "verify evidence pack hash chain tamper check", run: () => openVerifyPack(workbook, (t) => (statusLeft.textContent = t)) },
-    {
-      id: "data-checks",
-      title: "Data checks…",
-      hint: "checks rules validate not blank unique master list lookup debits equal credits control total tolerance row count duplicate keys checklist gate export",
-      run: () => openChecks({ workbook: () => workbook, activeSheet: () => activeId, run: (a) => run(a), goTo: findDeps().goTo, status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }),
-    },
-    {
-      id: "variants",
-      title: "Fix spelling variants in this column…",
-      hint: "clean spelling variants duplicates names vendors customers case spaces typos abbreviations merge normalise standardise",
-      run: () => void openVariants({ source: () => source, activeSheet: () => activeId, col: () => grid.selection.col, run: (a) => run(a), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus(), model: () => loadedModel()?.kiln ?? null }),
-    },
-    {
-      id: "categorise",
-      title: "Categorise…",
-      hint: "categorise categorize category tag bulk tagging rules learn uncategorised queue coding expenses",
-      run: () => openCategorise({ workbook: () => workbook, activeSheet: () => activeId, source: () => source, range: () => grid.range, run: (a) => run(a), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus(), model: () => loadedModel()?.kiln ?? null }),
-    },
-    ...reviewCommands({
-      workbook: () => workbook,
-      activeSheet: () => activeId,
-      range: () => grid.range,
-      cell: () => ({ ...grid.selection }),
-      run: (a) => run(a),
-      putBlob: (v) => blobs.put(v),
-      goTo: findDeps().goTo,
-      status: (t) => (statusLeft.textContent = t),
-      focusGrid: () => grid.focus(),
-    }),
-    ...LOCALE_CHOICES.map((l) => ({
-      id: `locale-${l.id}`,
-      title: `Locale: ${l.name}`,
-      hint: `locale language region decimal separator comma ${l.sample}`,
-      run: () => {
-        chooseLocale(l.id);
-        grid.invalidate();
-        syncFormulaBar();
-      },
-    })),
-    { id: "ask-guide", title: "Ask the guide (how do I…)…", keys: "F1", hint: "help how do i question guide docs documentation search", run: () => openAskGuide(paletteCommands, () => grid.focus()) },
-    {
-      id: "model-load",
-      title: loadedModel() ? `Local AI model: ${loadedModel()!.name} (change…)` : "Load a local AI model (.gguf file)…",
-      hint: "ai model llm gguf local offline load qwen llama",
-      run: async () => {
-        const hw = await hardwareSummary();
-        if (hw) statusLeft.textContent = `This computer: ${hw}.`;
-        const file = await pickModelFile();
-        if (!file) return;
-        try {
-          const m = await installModel(file, (t) => (statusLeft.textContent = t));
-          statusLeft.textContent = `Loaded ${m.name} (${(m.size / 1024 ** 3).toFixed(2)} GB). The ask bar (Ctrl+/) now uses it for requests it doesn't know.`;
-        } catch (e) {
-          statusLeft.textContent = `Couldn't load the model: ${(e as Error).message}`;
-        }
-      },
-    },
-    ...(loadedModel()
-      ? [
-          {
-            id: "model-remove",
-            title: "Remove the local AI model",
-            hint: "ai model delete forget",
-            run: async () => {
-              await removeModel();
-              statusLeft.textContent = "Removed the local AI model.";
-            },
-          },
-        ]
-      : []),
-    { id: "ask", title: "Ask or do…", keys: "Ctrl /", hint: "ai natural language type what you want plain english", run: () => askBar.open() },
-    { id: "share-check", title: "Before you share: check for hidden content…", hint: "share safely hidden sheets rows notes personal data pii history versions privacy", run: () => openShareCheck(workbook, (id) => showSheet(id)) },
-    {
-      id: "save-protected",
-      title: "Save a password-protected copy…",
-      hint: "encrypt password protect secure share aes",
-      run: async () => {
-        const password = await askPassword("Password for the copy", true);
-        if (!password) return grid.focus();
-        statusLeft.textContent = "Encrypting…";
-        const book = toFile(packWorkbook(workbook, activeId, currentName));
-        const locked = await encryptFile(new Uint8Array(await book.arrayBuffer()), password);
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(new Blob([locked as BlobPart], { type: "application/octet-stream" }));
-        a.download = `${currentName} (protected).cellforge`;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-        statusLeft.textContent = "Saved a password-protected copy. Open it in cellforge with the password.";
-        grid.focus();
-      },
-    },
-    {
-      id: "clear-local",
-      title: "Clear all data cellforge keeps in this browser…",
-      hint: "privacy delete local storage autosave forget clear data",
-      run: async () => {
-        if (!(await confirmClear())) return grid.focus();
-        const n = (await clearLocalData(saver?.store ?? (await OpfsStore.open()))) + (await clearLocalData(docStore));
-        statusLeft.textContent = `Cleared ${n} stored item${n === 1 ? "" : "s"}. Reload the page to start fresh.`;
-      },
-    },
-    { id: "scenarios", title: "Scenarios (what-if: base, best, worst)…", hint: "scenario what if manager best worst case compare sensitivity", run: () => openScenarios({ workbook: () => workbook, activeSheet: () => activeId, range: () => grid.range, run: (a) => run(a), putBlob: (v) => blobs.put(v), status: (t) => (statusLeft.textContent = t), focusGrid: () => grid.focus() }) },
-    {
-      id: "template",
-      title: "New from a template (monthly close, bank rec, audit tests)…",
-      hint: "template starter new workbook monthly close bank reconciliation audit tests",
-      run: async () => {
-        const kind = await pickTemplate();
-        if (!kind) return grid.focus();
-        if (workbookEdited() && !(await confirmDialog({ title: "Start from the template?", text: "Your changes to this workbook will be discarded.", confirm: "Discard and start", danger: true }))) return;
-        statusLeft.textContent = "Building the template…";
-        const wb = await buildTemplate(kind);
-        loadWorkbook(wb, wb.sheets[0].id, TEMPLATES.find((t) => t.kind === kind)!.title);
-        void snapshotNow();
-        statusLeft.textContent = "Started from the template: read \"Start here\" first.";
-      },
-    },
-    { id: "documents", title: "Supporting documents (attach, link cells as evidence)…", hint: "evidence documents attach pdf invoice bank letter confirmation link support vouch", run: () => openDocuments(docDeps()) },
-    ...(source.extraAt(row, col)?.evidence
-      ? [{ id: "evidence-open", title: "Show this cell's evidence", hint: "evidence document link open", run: () => openDocuments(docDeps(), source.extraAt(row, col)!.evidence) }, { id: "evidence-unlink", title: "Remove this cell's evidence link", hint: "evidence unlink", run: () => run({ type: "evidence.link", params: { row, col, link: null } }) }]
-      : []),
-    { id: "chart", title: "Insert chart…", hint: "graph plot column bar line pie scatter histogram waterfall pareto benford ageing", run: () => void openChart(chartDeps) },
-    { id: "find", title: "Find…", keys: "Ctrl F", hint: "search look for regex", run: () => openFindReplace(findDeps(), "find") },
-    { id: "replace", title: "Find and replace…", keys: "Ctrl H", hint: "replace all substitute regex formulas", run: () => openFindReplace(findDeps(), "replace") },
-    { id: "note", title: source.extraAt(row, col)?.note ? "Edit note…" : "Add a note…", keys: "Shift F2", hint: "note comment annotation", run: () => editCellExtra("note") },
-    ...(source.extraAt(row, col)?.note ? [{ id: "note-delete", title: "Delete note", hint: "remove note comment", run: () => run(extraAction("note", { row, col }, "")) }] : []),
-    { id: "link", title: source.extraAt(row, col)?.link ? "Edit link…" : "Insert link…", hint: "hyperlink url web address go to sheet", run: () => editCellExtra("link") },
-    ...(source.extraAt(row, col)?.link ? [{ id: "link-remove", title: "Remove link", hint: "hyperlink", run: () => run(extraAction("link", { row, col }, "")) }] : []),
-    ...(cellLink(source, row, col) ? [{ id: "link-open", title: "Open link", keys: "Ctrl click", hint: "follow hyperlink go", run: () => grid.onCellCtrlClick?.({ row, col }) }] : []),
-    { id: "validation", title: "Data validation (dropdown list, allowed values)…", hint: "validation dropdown list choices allowed values restrict input checkbox tick box", run: () => openValidationDialog(dvDeps()) },
-    {
-      id: "validation-circle",
-      title: "Circle invalid data",
-      hint: "validation invalid circles check",
-      run: () => {
-        const bad = invalidCells(source, dvContext(workbook, source));
-        grid.setHighlights(bad.map((range) => ({ range, color: "#d93025" })));
-        statusLeft.textContent = bad.length ? `${bad.length.toLocaleString()} cell${bad.length === 1 ? " breaks" : "s break"} a validation rule (circled in red)` : "Every cell keeps its validation rule.";
-      },
-    },
-    { id: "validation-uncircle", title: "Clear validation circles", hint: "validation invalid circles remove", run: () => grid.setHighlights([]) },
-    {
-      id: "validation-tick",
-      title: "Tick boxes in the selection",
-      hint: "checkbox check box tick boxes true false column type",
-      run: () => run({ type: "validation.add", params: { rule: { kind: "checkbox", ranges: [grid.range] } } }),
-    },
-    { id: "cf-manager", title: "Conditional formatting: manage rules…", hint: "highlight rules colour scale data bars icons", run: () => openCfManager(cfDeps()) },
-    { id: "cf-new", title: "Conditional formatting: new rule for the selection…", hint: "highlight cells greater than duplicates top 10 colour scale data bar icon set", run: () => void editRule(cfDeps(), null).then((rule) => rule && run({ type: "format.conditionalAdd", params: { rule } })) },
-    { id: "sort-dialog", title: "Sort by several columns…", hint: "multi-level sort order custom sort", run: () => openSortDialog({ ...filterDeps(), activeCol: () => grid.selection.col }) },
-    ...source.filterViews.map((v) => ({ id: `view:${v.name}`, title: `Switch to view: ${v.name}`, hint: "filter view saved", run: () => run({ type: "filter.applyView", params: { name: v.name } }) })),
-    { id: "iterative", title: workbook.iterative ? "Turn off iterative calculation" : "Turn on iterative calculation (for circular references)", hint: "circular cycle", run: () => run({ type: "calc.iterative", params: { enabled: !workbook.iterative } }) },
-    ...[true, false].map((folder) => ({
-      id: folder ? "combine-folder" : "combine-files",
-      title: folder ? "Combine all files in a folder…" : "Combine several files…",
-      hint: "append stack merge union monthly exports csv excel folder import",
-      run: () =>
-        void openCombine(
-          {
-            run: (a) => run(a),
-            putBlob: (v) => blobs.put(v),
-            status: (t) => (statusLeft.textContent = t),
-            focusGrid: () => grid.focus(),
-          },
-          folder,
-        ),
-    })),
-    {
-      id: "tb-map",
-      title: "Map this sheet as a trial balance…",
-      hint: "trial balance tb debit credit account code prior year import mapper",
-      run: () =>
-        openTbMapper({
-          ...statementDeps(),
-          source: () => source,
-          sheetName: () => workbook.get(activeId).name,
-          goTo: (row, col) => {
-            grid.select(row, col);
-            grid.focus();
-          },
-        }),
-    },
-    {
-      id: "statement",
-      title: "Import a bank statement (PDF or CSV)…",
-      hint: "bank statement pdf transactions balance reconcile import",
-      run: () =>
-        void pickStatement().then((f) => {
-          if (f) void importStatement(f, statementDeps());
-        }),
-    },
-    {
-      id: "cleanup",
-      title: "Clean up this sheet (messy export)…",
-      hint: "unwrap report header totals footers dates numbers text to numbers type",
-      run: () =>
-        openCleanup({
-          source: () => source,
-          run: (a) => run(a),
-          goTo: (row, col) => {
-            grid.select(row, col);
-            grid.focus();
-          },
-          focusGrid: () => grid.focus(),
-        }),
-    },
-    { id: "inspect", title: "Inspect this cell", keys: "Ctrl [", hint: "trace precedents dependents evaluate formula audit", run: () => inspectPanel.toggle() },
-    { id: "history", title: "Show history and versions", keys: "Ctrl Shift H", hint: "timeline compare changes audit", run: () => historyPanel.toggle() },
-    { id: "version-save", title: "Save a version…", hint: "name snapshot checkpoint", run: () => { if (!historyPanel.open) historyPanel.toggle(); document.querySelector<HTMLInputElement>(".hp-version-form input")?.focus(); } },
-    { id: "redo", title: "Redo", keys: "Ctrl Y", run: redo },
-    { id: "bold", title: "Bold", keys: "Ctrl B", run: toggle("bold") },
-    { id: "italic", title: "Italic", keys: "Ctrl I", run: toggle("italic") },
-    { id: "underline", title: "Underline", keys: "Ctrl U", run: toggle("underline") },
-    { id: "strike", title: "Strikethrough", keys: "Ctrl 5", run: toggle("strike") },
-    { id: "wrap", title: "Wrap text", run: toggle("wrap") },
-    { id: "align-left", title: "Align left", run: fmt({ align: "left" }) },
-    { id: "align-center", title: "Align centre", hint: "center", run: fmt({ align: "center" }) },
-    { id: "align-right", title: "Align right", run: fmt({ align: "right" }) },
-    { id: "center-across", title: "Centre across selection", hint: "center across", run: fmt({ align: "centerAcross" }) },
-    { id: "clear-format", title: "Clear formatting", keys: "Ctrl \\", run: () => run({ type: "format.clear", params: { range: grid.range } }) },
-    { id: "borders-all", title: "Borders: all", run: border("all") },
-    { id: "borders-outline", title: "Borders: outline", run: border("outline") },
-    { id: "borders-none", title: "Borders: none", run: border("none") },
-    { id: "table", title: "Make a table from the selection", hint: "format as table structured", keys: "Ctrl T", run: () => namesUi.makeTable() },
-    { id: "define-name", title: "Define a name for the selection…", hint: "named range", run: () => namesUi.defineName() },
-    { id: "name-manager", title: "Names and tables…", hint: "name manager", keys: "Ctrl F3", run: () => namesUi.manager() },
-    { id: "merge", title: "Merge cells", run: () => run({ type: "cells.merge", params: { range: grid.range } }) },
-    { id: "merge-center", title: "Merge and centre", hint: "center", run: () => run({ type: "cells.merge", params: { range: grid.range, center: true } }) },
-    { id: "merge-across", title: "Merge across", run: () => run({ type: "cells.merge", params: { range: grid.range, across: true } }) },
-    { id: "unmerge", title: "Unmerge cells", run: () => run({ type: "cells.unmerge", params: { range: grid.range } }) },
-    { id: "insert-rows", title: "Insert rows above", keys: "Ctrl Alt =", run: () => insertRows(false) },
-    { id: "insert-rows-below", title: "Insert rows below", run: () => insertRows(true) },
-    { id: "delete-rows", title: "Delete rows", keys: "Ctrl Alt −", run: deleteRows },
-    { id: "insert-cols", title: "Insert columns left", run: () => insertCols(false) },
-    { id: "insert-cols-right", title: "Insert columns right", run: () => insertCols(true) },
-    { id: "delete-cols", title: "Delete columns", run: deleteCols },
-    { id: "hide-rows", title: "Hide rows", keys: "Ctrl 9", run: () => hideRows(true) },
-    { id: "unhide-rows", title: "Unhide rows", keys: "Ctrl Shift 9", run: () => hideRows(false) },
-    { id: "hide-cols", title: "Hide columns", keys: "Ctrl 0", run: () => hideCols(true) },
-    { id: "unhide-cols", title: "Unhide columns", keys: "Ctrl Shift 0", run: () => hideCols(false) },
-    { id: "fit-rows", title: "Fit row height", hint: "autofit", run: fitRows },
-    { id: "freeze-here", title: `Freeze panes above row ${row + 1}${col ? ` and left of ${columnLetter(col)}` : ""}`, run: () => run({ type: "view.freeze", params: { rows: row, cols: col } }) },
-    { id: "freeze-row", title: "Freeze top row", run: () => run({ type: "view.freeze", params: { rows: 1, cols: 0 } }) },
-    { id: "freeze-col", title: "Freeze first column", run: () => run({ type: "view.freeze", params: { rows: 0, cols: 1 } }) },
-    { id: "unfreeze", title: "Unfreeze panes", run: () => run({ type: "view.freeze", params: { rows: 0, cols: 0 } }) },
-    { id: "sort-asc", title: "Sort A→Z by this column", hint: "ascending smallest", run: () => sortBy(false) },
-    { id: "sort-desc", title: "Sort Z→A by this column", hint: "descending largest", run: () => sortBy(true) },
-    { id: "fill-down", title: "Fill down", keys: "Ctrl D", run: fillDown },
-    { id: "paste-values", title: "Paste values only", keys: "Ctrl Shift V", run: () => pasteCopied("values") },
-    { id: "paste-formats", title: "Paste formats only", run: () => pasteCopied("formats") },
-    { id: "paste-formulas", title: "Paste formulas only", run: () => pasteCopied("formulas") },
-    { id: "new", title: "New workbook", run: click("btn-new") },
-    { id: "open", title: "Open…", keys: "Ctrl O", hint: "import csv file cellforge", run: click("btn-open") },
-    { id: "save", title: "Save", keys: "Ctrl S", hint: "file cellforge", run: () => saveFile() },
-    { id: "save-as", title: "Save as…", keys: "Ctrl Shift S", run: () => saveFile(true) },
-    { id: "export-xlsx", title: "Export Excel (.xlsx)", hint: "download save excel xlsx", run: () => gateExport(() => exportExcel()) },
-    { id: "export", title: "Export CSV", hint: "download save", run: click("btn-export") },
-    { id: "demo", title: "Load the 100M-row demo", run: click("btn-demo") },
-  ];
-  for (const [name, code, example] of NUMBER_FORMATS) {
-    list.push({ id: `numfmt:${name}`, title: `Number format: ${name}`, hint: example, run: fmt({ numFmt: code || null }) });
-  }
-  return list;
-}
-
-setupPalette({
-  commands: paletteCommands,
+const palette = setupPalette({
+  commands: () => commands(),
   catalog: () => registry.catalog(),
   run: (a) => run(a),
   range: () => grid.range,
   focusGrid: () => grid.focus(),
+  suggested: () => suggestedCommandIds(sheetContext(workbook, source)),
+  askAi: (text) => askBar.open(text),
+  dev: () => devMode(),
+  groups: COMMAND_GROUPS,
 });
 
-// the ask bar (Ctrl+/): plain-English requests turned into actions; a local model can be plugged in later
+// the ask bar (Ctrl+/): plain-English requests turned into actions; requests it doesn't know go to the local AI when one is loaded
 const askBar = setupAskBar({
   catalog: () => registry.catalog(),
   context: () => askContext(workbook, activeId, grid.range),
   run: (a) => run(a),
-  commands: paletteCommands,
+  commands: () => commands(),
   focusGrid: () => grid.focus(),
-  // a local model, when one has been picked; one kept from last time loads in the background on first use
-  model: () => {
-    const m = loadedModel();
-    if (!m) void restoreModel();
-    return m?.kiln ?? null;
+  // the local model, when one is loaded; one kept from last time loads in the background on first use
+  model: () => currentModel(),
+  ai: { status: aiStatus, subscribe: (cb) => onAiStatus(() => cb()), setup: () => openAiPanel(aiPanelDeps()) },
+});
+
+/** What the AI panel needs from the app (also for the shell's "Ask AI" button). */
+function aiPanelDeps(): AiPanelDeps {
+  return {
+    askBar: (text) => askBar.open(text),
+    commands: () => commands(),
+    askGuide: (q) => openAskGuide(() => commands(), () => grid.focus(), q),
+    focusGrid: () => grid.focus(),
+  };
+}
+
+// --- the shell: commands, menus, top bar, rail, start screen -------------------
+
+async function saveProtected() {
+  const password = await askPassword("Password for the copy", true);
+  if (!password) return grid.focus();
+  notify("Encrypting…");
+  const book = toFile(packWorkbook(workbook, activeId, currentName));
+  const locked = await encryptFile(new Uint8Array(await book.arrayBuffer()), password);
+  download(new Blob([locked as BlobPart], { type: "application/octet-stream" }), `${currentName} (protected).cellforge`);
+  notify("Saved a password-protected copy. Open it in cellforge with the password.");
+  grid.focus();
+}
+
+async function clearLocal() {
+  if (!(await confirmClear())) return grid.focus();
+  const n = (await clearLocalData(saver?.store ?? (await OpfsStore.open()))) + (await clearLocalData(docStore));
+  notify(`Cleared ${n} stored item${n === 1 ? "" : "s"}. Reload the page to start fresh.`);
+}
+
+// --- theme: View > Theme (system, light, dark); the grid and charts repaint
+const THEME_KEY = "cellforge.theme";
+function currentTheme(): ThemeChoice {
+  const t = document.documentElement.dataset.theme;
+  return t === "light" || t === "dark" ? t : "system";
+}
+function setTheme(t: ThemeChoice) {
+  if (t === "system") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = t;
+  try {
+    if (t === "system") localStorage.removeItem(THEME_KEY);
+    else localStorage.setItem(THEME_KEY, t);
+  } catch {
+    // remembered for this tab only
+  }
+  // the canvas reads its colours once; charts redraw from the CSS variables
+  requestAnimationFrame(() => {
+    grid.refreshTheme();
+    refreshCharts();
+  });
+}
+
+/** Every shortcut, grouped, from the registry (Help > Keyboard shortcuts). */
+function showShortcuts() {
+  const extra: [string, string][] = [
+    ["Search commands and tools", "Ctrl K"],
+    ["Focus the menu bar", "Alt or F10"],
+    ["Next / previous sheet", "Ctrl PgDn / PgUp"],
+    ["Paste values only", "Ctrl Shift V"],
+    ["Open a list cell's dropdown", "Alt ↓"],
+    ["Edit the cell", "F2"],
+  ];
+  const body = document.createElement("div");
+  body.className = "cf-shortcuts";
+  const groups = new Map<string, [string, string][]>();
+  groups.set("General", extra);
+  for (const c of commands()) {
+    if (!c.keys) continue;
+    const list = groups.get(c.group) ?? [];
+    if (!list.some(([, k]) => k === c.keys)) list.push([c.title.replace(/…$/, ""), c.keys]);
+    groups.set(c.group, list);
+  }
+  for (const [g, list] of groups) {
+    const sec = document.createElement("section");
+    const h = document.createElement("h3");
+    h.textContent = g;
+    sec.append(h);
+    for (const [t, k] of list) {
+      const row = document.createElement("div");
+      row.className = "cf-shortcuts__row";
+      const span = document.createElement("span");
+      span.textContent = t;
+      const kbd = document.createElement("kbd");
+      kbd.textContent = k;
+      row.append(span, kbd);
+      sec.append(row);
+    }
+    body.append(sec);
+  }
+  openDialog({ title: "Keyboard shortcuts", subtitle: "The ones Excel users expect work here too", size: "lg", body, actions: [{ label: "Close", kind: "primary", dismiss: true }] });
+}
+
+const commandDeps: CommandDeps = {
+  workbook: () => workbook,
+  activeSheet: () => activeId,
+  source: () => source,
+  grid,
+  registry: registry as unknown as ActionRegistry<unknown>,
+  recorder,
+  run: (a) => run(a),
+  putBlob: (v) => blobs.put(v),
+  status: notify,
+  focusGrid: () => grid.focus(),
+  goTo: (sheetId, row, col) => {
+    showSheet(sheetId);
+    grid.select(row, col);
+    grid.focus();
   },
+  showSheet: (id) => showSheet(id),
+  undo,
+  redo,
+  canUndo: () => history.canUndo,
+  canRedo: () => history.canRedo,
+  newWorkbook: () => void newWorkbook(),
+  showStartScreen: () => startScreen.show(),
+  openFile: () => openFilePicker(),
+  saveFile: (saveAs) => saveFile(saveAs),
+  exportExcel: async () => void (await gateExport(() => exportExcel())),
+  exportCsv: async () => void (await gateExport(exportCsvFile)),
+  saveProtected,
+  clearLocal,
+  startTemplate: () => startTemplate(),
+  openSample: (kind) => void openSample(kind),
+  saveEvidencePack: () => void logQueue.then(() => saveEvidencePack(workbook, workbook.get(activeId).name, notify, docBytes())),
+  fillDown,
+  sortBy,
+  pasteCopied,
+  insertRows,
+  deleteRows,
+  insertCols,
+  deleteCols,
+  hideRows,
+  hideCols,
+  fitRows,
+  editCellExtra,
+  filterShowing: () => !!source.filter || filterButtonsOn.has(activeId),
+  toggleFilterButtons,
+  filterActiveColumn,
+  toggleHistory: () => historyPanel.toggle(),
+  historyOpen: () => historyPanel.open,
+  toggleInspect: () => inspectPanel.toggle(),
+  names: namesUi,
+  askBar: (text) => askBar.open(text),
+  openAi: () => openAiPanel(aiPanelDeps()),
+  aiModelKiln: () => currentModel(),
+  showShortcuts,
+  theme: currentTheme,
+  setTheme,
+  localeChanged: () => {
+    grid.invalidate();
+    syncFormulaBar();
+  },
+  railCollapsed: () => rail.collapsed(),
+  toggleRail: () => rail.toggle(),
+  statementDeps,
+  findDeps,
+  lineageDeps,
+  docDeps,
+  recipeFilesDeps,
+  dvDeps,
+  cfDeps,
+  filterDeps,
+  chartDeps,
+};
+
+/** The command registry for the state the app is in now (palette, menus, rail, ask bar). */
+function commands(): AppCommand[] {
+  return buildCommands(commandDeps);
+}
+
+// menu bar
+const menubar = setupMenuBar(document.getElementById("menubar")!, { commands, focusGrid: () => grid.focus() });
+void menubar;
+
+// top bar
+{
+  const btn = (id: string) => document.getElementById(id) as HTMLButtonElement;
+  undoButton.append(icon("undo"));
+  redoButton.append(icon("redo"));
+  const search = btn("btn-search");
+  search.prepend(icon("search"));
+  search.addEventListener("click", () => palette.open());
+  const open = btn("btn-open");
+  open.prepend(icon("open"));
+  open.addEventListener("click", () => openFilePicker());
+  // Save and Share are menus of registry commands
+  const pick = (ids: (string | null)[]) => () => {
+    const byId = new Map(commands().map((c) => [c.id, c]));
+    const list: AppCommand[] = [];
+    let section = 0;
+    for (const id of ids) {
+      if (id === null) section++;
+      else if (byId.has(id)) list.push({ ...byId.get(id)!, section: String(section), submenu: undefined });
+    }
+    return menuEntries(list);
+  };
+  const save = btn("btn-save");
+  save.prepend(icon("save"));
+  save.append(icon("chevron-down", { className: "topbar__caret" }));
+  menuButton(save, pick(["save", "save-as", null, "export-xlsx", "export", null, "save-protected"]));
+  const share = btn("btn-share");
+  share.prepend(icon("share"));
+  share.append(icon("chevron-down", { className: "topbar__caret" }));
+  menuButton(share, pick(["share-check", "je-pii", null, "save-protected", "evidence-pack", null, "export-xlsx"]));
+  const help = btn("btn-help");
+  help.append(icon("help"));
+  menuButton(help, () => buildMenuModel(commands()).find((m) => m.name === "Help")!.items);
+
+  // Ask AI, with the local model's status (aipanel.ts)
+  const ai = btn("btn-ai");
+  ai.prepend(icon("ai"));
+  const dot = ai.querySelector<HTMLElement>(".ai-dot")!;
+  const chip = ai.querySelector<HTMLElement>(".ai-chip")!;
+  ai.addEventListener("click", () => toggleAiPanel(aiPanelDeps()));
+  const paint = () => {
+    const b = aiBadge();
+    dot.dataset.state = b.dot;
+    chip.textContent = b.text;
+    chip.hidden = !b.text;
+    ai.title = `${b.title} (Ctrl+/ to ask)`;
+    ai.setAttribute("aria-label", `Ask AI. ${b.title}`);
+  };
+  onAiStatus(paint);
+  paint();
+  watchAiToasts();
+  onSidePanelChange((id) => ai.classList.toggle("is-active", id === AI_PANEL_ID));
+}
+
+// the rail: one button per job, each opening a hub in the side panel
+const rail = setupRail(document.getElementById("rail")!, {
+  commands,
+  context: () => sheetContext(workbook, source),
+  openAi: () => toggleAiPanel(aiPanelDeps()),
+  aiPanelId: AI_PANEL_ID,
+  decorateAi: (b) => {
+    const dot = b.querySelector<HTMLElement>(".ai-dot")!;
+    const paint = () => {
+      const s = aiBadge();
+      dot.dataset.state = s.dot;
+      b.title = `AI · ${s.title}`;
+    };
+    onAiStatus(paint);
+    paint();
+  },
+});
+
+/** Nothing in the workbook yet (one sheet, nothing typed or loaded). */
+function isEmptyWorkbook() {
+  return workbook.sheets.length === 1 && sheetIsBlank(workbook.sheets[0].source);
+}
+
+// the start screen: for a new or empty workbook, instead of a blank grid
+const startHost = document.createElement("section");
+sheet.append(startHost); // over the grid only: the rail and the side panel stay usable
+const startScreen = setupStartScreen(startHost, {
+  openFile: () => openFilePicker(),
+  importStatement: () => void pickStatement().then((f) => f && importStatement(f, statementDeps())),
+  openSample: (kind) => void openSample(kind),
+  startTemplate: (kind) => void startTemplate(kind),
+  blank: () => {
+    if (isEmptyWorkbook()) {
+      startScreen.hide();
+      grid.focus();
+    } else void newWorkbook().then((ok) => ok && startScreen.hide());
+  },
+  dismiss: () => {
+    startScreen.hide();
+    grid.focus();
+  },
+  openAi: () => openAiPanel(aiPanelDeps()),
+  aiBadge,
+  onAiStatus: (cb) => onAiStatus(() => cb()),
 });
 
 function loadSource(next: EditableSource, name: string) {
@@ -1961,19 +1810,43 @@ function loadWorkbook(next: Workbook, active: string, name: string) {
   blobs.clear();
   grid.setSource(source);
   fileName.textContent = name;
+  document.title = name === "Untitled" ? "cellforge" : `${name} · cellforge`;
+  startScreen.hide();
   refresh();
   grid.focus();
 }
 
-document.getElementById("btn-new")!.addEventListener("click", async () => {
-  if (workbookEdited() && !(await confirmDialog({ title: "Start a new workbook?", text: "Your changes to this workbook will be discarded.", confirm: "Discard and start new", danger: true }))) return;
+/** Start over: a blank workbook (asks first when there's work to lose). */
+async function newWorkbook(): Promise<boolean> {
+  if (workbookEdited() && !(await confirmDialog({ title: "Start a new workbook?", text: "Your changes to this workbook will be discarded.", confirm: "Discard and start new", danger: true }))) return false;
+  fileHandle = null;
   loadSource(new EditableSource(new BlankSource()), "Untitled");
-});
+  return true;
+}
 
-document.getElementById("btn-demo")!.addEventListener("click", async () => {
-  if (workbookEdited() && !(await confirmDialog({ title: "Load the demo?", text: "Your changes to this workbook will be discarded.", confirm: "Discard and load demo", danger: true }))) return;
-  loadSource(new EditableSource(new SyntheticSource(DEMO_ROWS), SPARE_COLUMNS), "demo — 100M-line general ledger");
-});
+/** Open one of the finance samples (samples.ts). */
+async function openSample(kind: SampleKind) {
+  if (workbookEdited() && !(await confirmDialog({ title: "Open the sample?", text: "Your changes to this workbook will be discarded.", confirm: "Discard and open sample", danger: true }))) return;
+  notify("Opening the sample…");
+  const s = await sampleWorkbook(kind);
+  fileHandle = null;
+  loadWorkbook(s.workbook, s.active, s.name);
+  void snapshotNow();
+  notify(kind === "big" ? "Opened 100 million lines of a fictional general ledger. Scroll, sort or pivot it." : 'Sample data (fictional) opened: read "Start here" first.');
+}
+
+/** Start from a template (empty workbook laid out for the job). */
+async function startTemplate(kind?: TemplateKind) {
+  const k = kind ?? (await pickTemplate());
+  if (!k) return grid.focus();
+  if (workbookEdited() && !(await confirmDialog({ title: "Start from the template?", text: "Your changes to this workbook will be discarded.", confirm: "Discard and start", danger: true }))) return;
+  notify("Building the template…");
+  const wb = await buildTemplate(k);
+  fileHandle = null;
+  loadWorkbook(wb, wb.sheets[0].id, TEMPLATES.find((t) => t.kind === k)!.title);
+  void snapshotNow();
+  notify('Started from the template: read "Start here" first.');
+}
 
 // --- CSV export ---------------------------------------------------------------
 
@@ -1981,12 +1854,11 @@ document.getElementById("btn-demo")!.addEventListener("click", async () => {
 const LARGE_EXPORT_ROWS = 5_000_000;
 let exporting = false;
 
-document.getElementById("btn-export")!.addEventListener("click", () => void gateExport(exportCsvFile));
 async function exportCsvFile() {
   if (exporting) return;
   const { rows, cols } = source.usedRange();
   if (rows === 0 || cols === 0) {
-    statusLeft.textContent = "Nothing to export yet — the sheet is empty.";
+    notify("Nothing to export yet — the sheet is empty.");
     return;
   }
   if (
@@ -2001,11 +1873,11 @@ async function exportCsvFile() {
   const includeHeader = source.getColumnName(0) !== undefined;
   try {
     const blob = await exportCsv(source, rows, cols, includeHeader, (done) => {
-      statusLeft.textContent = `Exporting… ${Math.round((done / rows) * 100)}%`;
+      notify(`Exporting… ${Math.round((done / rows) * 100)}%`);
     });
     const base = currentName.replace(/\.(csv|tsv|txt)$/i, "").replace(/[^\w.-]+/g, "_");
     download(blob, `${base || "sheet"}.csv`);
-    setInfo(`Exported ${formatBytes(blob.size)}`);
+    notify(`Exported ${formatBytes(blob.size)}`);
   } finally {
     exporting = false;
     updateStatus();
@@ -2022,7 +1894,9 @@ fileInput.addEventListener("change", () => {
   if (file) openFile(file);
   fileInput.value = ""; // so picking the same file again still fires change
 });
-document.getElementById("btn-open")!.addEventListener("click", () => fileInput.click());
+function openFilePicker() {
+  fileInput.click();
+}
 
 let cancelImport: (() => void) | null = null;
 
@@ -2045,26 +1919,26 @@ async function openFileInto(file: File) {
   }
   if (/\.xls[xm]$/i.test(file.name)) {
     try {
-      statusLeft.textContent = `Opening ${file.name}…`;
+      notify(`Opening ${file.name}…`);
       const wb = await openXlsx(await file.arrayBuffer());
       for (const s of wb.sheets) s.origin ??= `Imported from ${file.name}, sheet "${s.name}"`;
       fileHandle = null;
       loadWorkbook(wb, (wb.visible[0] ?? wb.sheets[0]).id, file.name.replace(/\.xls[xm]$/i, ""));
       void snapshotNow();
-      statusLeft.textContent = `Opened ${file.name}: ${wb.sheets.length} sheet${wb.sheets.length === 1 ? "" : "s"}`;
+      notify(`Opened ${file.name}: ${wb.sheets.length} sheet${wb.sheets.length === 1 ? "" : "s"}`);
     } catch (e) {
-      statusLeft.textContent = `Couldn't open ${file.name}: ${(e as Error).message}`;
+      notify(`Couldn't open ${file.name}: ${(e as Error).message}`);
     }
     return;
   }
   if (/\.cellforge$/i.test(file.name)) {
     try {
-      statusLeft.textContent = `Opening ${file.name}…`;
+      notify(`Opening ${file.name}…`);
       let raw: Uint8Array = new Uint8Array(await file.arrayBuffer());
       if (isEncrypted(raw)) {
         const password = await askPassword(`"${file.name}" is password-protected`, false);
         if (password === null) {
-          statusLeft.textContent = "Ready";
+          notify("Ready");
           return;
         }
         raw = await decryptFile(raw, password);
@@ -2078,24 +1952,24 @@ async function openFileInto(file: File) {
       fileHandle = null;
       loadWorkbook(opened.workbook, opened.active, file.name.replace(/\.cellforge$/i, ""));
       void snapshotNow();
-      statusLeft.textContent = `Opened ${file.name}`;
+      notify(`Opened ${file.name}`);
     } catch (e) {
-      statusLeft.textContent = `Couldn't open ${file.name}: ${(e as Error).message}`;
+      notify(`Couldn't open ${file.name}: ${(e as Error).message}`);
     }
     return;
   }
   if (/\.parquet$/i.test(file.name)) {
     try {
-      statusLeft.textContent = `Opening ${file.name}…`;
+      notify(`Opening ${file.name}…`);
       const { columns, dateColumns } = await readParquet(await file.arrayBuffer());
       const table = new Table(columns);
       const src = new EditableSource(table, SPARE_COLUMNS);
       // dates and timestamps arrive as serial numbers: show them as dates
       for (const d of dateColumns) src.styles.apply(d.col, "all", { numFmt: d.withTime ? "yyyy-mm-dd hh:mm:ss" : "yyyy-mm-dd" });
       loadSource(src, file.name);
-      setInfo(`Opened ${table.rowCount.toLocaleString()} rows from ${file.name}`);
+      notify(`Opened ${table.rowCount.toLocaleString()} rows from ${file.name}`);
     } catch (e) {
-      statusLeft.textContent = `Couldn't open ${file.name}: ${(e as Error).message}`;
+      notify(`Couldn't open ${file.name}: ${(e as Error).message}`);
     }
     return;
   }
@@ -2103,36 +1977,35 @@ async function openFileInto(file: File) {
     try {
       const table = new Table(jsonToColumns(await file.text()));
       loadSource(new EditableSource(table, SPARE_COLUMNS), file.name);
-      setInfo(`Opened ${table.rowCount.toLocaleString()} records from ${file.name}`);
+      notify(`Opened ${table.rowCount.toLocaleString()} records from ${file.name}`);
     } catch (e) {
-      statusLeft.textContent = `Couldn't open ${file.name}: ${(e as Error).message}`;
+      notify(`Couldn't open ${file.name}: ${(e as Error).message}`);
     }
     return;
   }
   // a text file: show what was detected and let the user adjust it first
   const options = await askCsvOptions(file);
   if (!options) {
-    statusLeft.textContent = "Ready";
+    notify("Ready");
     return;
   }
-  statusLeft.textContent = `Opening ${file.name}…`;
+  notify(`Opening ${file.name}…`);
 
   const job = importCsv(file, ({ bytes, total, rows }) => {
     const pct = total ? Math.round((bytes / total) * 100) : 0;
-    statusLeft.textContent =
-      `Importing ${file.name} — ${pct}% (${formatBytes(bytes)} of ${formatBytes(total)}, ` +
-      `${rowFormat.format(rows)} rows)`;
+    notify(`Importing ${file.name} — ${pct}% (${formatBytes(bytes)} of ${formatBytes(total)}, ` +
+      `${rowFormat.format(rows)} rows)`);
   }, options);
   cancelImport = job.cancel;
 
   try {
     const { table, ms } = await job.result;
     loadSource(new EditableSource(table, SPARE_COLUMNS), file.name);
-    setInfo(`Imported ${formatBytes(file.size)} in ${(ms / 1000).toFixed(2)}s`);
+    notify(`Imported ${formatBytes(file.size)} in ${(ms / 1000).toFixed(2)}s`);
   } catch (err) {
     // a newer import cancelling this one isn't an error worth showing
     if ((err as Error).message !== "Import cancelled") {
-      statusLeft.textContent = `Couldn't open ${file.name}: ${(err as Error).message}`;
+      notify(`Couldn't open ${file.name}: ${(err as Error).message}`);
     }
   } finally {
     if (cancelImport === job.cancel) cancelImport = null;
@@ -2180,6 +2053,6 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
 document.addEventListener("keydown", (e) => {
   if (e.key === "F1" && !e.ctrlKey && !e.altKey && !e.metaKey) {
     e.preventDefault();
-    openAskGuide(paletteCommands, () => grid.focus());
+    openAskGuide(() => commands(), () => grid.focus());
   }
 });

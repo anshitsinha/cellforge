@@ -108,7 +108,7 @@ export function reviewCommands(d: ReviewDeps): { id: string; title: string; hint
       ? [{ id: "review-clear", title: "Clear review note (dealt with)", hint: "review note clear resolve", run: async () => { const by = await whoAmI(); if (by) await d.run({ type: "review.note", params: { row, col, by, clear: true } }); } }]
       : []),
     ...(here?.review?.cleared ? [{ id: "review-reopen", title: "Reopen review note", hint: "review note reopen", run: async () => { const by = await whoAmI(); if (by) await d.run({ type: "review.note", params: { row, col, by, reopen: true } }); } }] : []),
-    { id: "review-status", title: "Review and sign-off (status of every sheet)…", hint: "review status sign off prepared reviewed open notes workpapers", run: () => openReviewStatus(d) },
+    { id: "review-status", title: "Review status (sign-offs, open notes)…", hint: "review status sign off prepared reviewed open notes workpapers", run: () => openReviewStatus(d) },
     sr.prepared ? { id: "unsign-prepared", title: "Remove prepared-by sign-off", hint: "review sign off remove", run: () => signed("prepared", true) } : { id: "sign-prepared", title: "Sign off this sheet as prepared", hint: "review sign off prepared by preparer", run: () => signed("prepared") },
     sr.reviewed ? { id: "unsign-reviewed", title: "Remove reviewed-by sign-off", hint: "review sign off remove", run: () => signed("reviewed", true) } : { id: "sign-reviewed", title: "Sign off this sheet as reviewed", hint: "review sign off reviewed by reviewer", run: () => signed("reviewed") },
     {
