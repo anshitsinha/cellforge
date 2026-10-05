@@ -42,11 +42,13 @@ import {
   type ProtectMethod,
   type RollResult,
 } from "@cellforge/core";
-import { readSheet, type SheetData } from "./audittools";
+import { readSheet, stringGrid, type SheetData } from "./audittools";
 import { EditableSource } from "./editable";
 import type { Workbook } from "./workbook";
 import "./jetools.css";
-import { modal } from "./a11y";
+import { button, el, emptyState, field as tkField, headline, navigator, notice, report, section as tkSection, type HeadlineOptions } from "./toolkit";
+import { openSidePanel } from "./ui/sidepanel";
+import { renderTable, type TableColumn } from "./ui/table";
 
 type Cell = number | string | null;
 
@@ -64,6 +66,8 @@ export interface JeToolDeps {
   putBlob: (value: unknown) => string;
   status: (text: string) => void;
   focusGrid: () => void;
+  /** show a sheet row (makes result rows links); optional */
+  goTo?: (sheetId: string, row: number, col: number) => void;
 }
 
 const MONEY = "#,##0.00;(#,##0.00)";
@@ -527,15 +531,20 @@ export async function buildSafeCopy(data: SheetData, choices: readonly SafeChoic
 
 // ------------------------------------------------------------- controls --
 
-function field(text: string, control: HTMLElement, hint?: string): HTMLLabelElement {
-  const l = document.createElement("label");
-  l.append(text, control);
-  if (hint) {
-    const s = document.createElement("small");
-    s.textContent = hint;
-    l.append(s);
-  }
-  return l;
+const field = (text: string, control: HTMLElement, hint?: string): HTMLLabelElement => tkField(text, control, hint);
+
+const LIMIT_LADDER = [1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 5000000];
+
+/**
+ * Approval limits to start "just below an approval limit" with when none are
+ * typed: the three round limits nearest the top of the amounts (10,000 when
+ * there are no amounts). Pure.
+ */
+export function defaultLimits(amounts: Iterable<number | null | undefined>): number[] {
+  let max = 0;
+  for (const a of amounts) if (typeof a === "number" && Number.isFinite(a)) max = Math.max(max, Math.abs(a));
+  const fit = LIMIT_LADDER.filter((L) => L <= max);
+  return fit.length ? fit.slice(-3) : [10000];
 }
 
 function columnSelect(names: readonly string[], value: number, none?: string): HTMLSelectElement {
@@ -606,6 +615,9 @@ const val = (i: HTMLInputElement | HTMLSelectElement, fallback: number) => {
 
 interface Preview {
   lines: { text: string; warn?: boolean }[];
+  headline?: HeadlineOptions;
+  /** a formatted table whose rows link to a sheet row (1-based) */
+  grid?: { title?: string; columns: TableColumn<Record<string, unknown>>[]; rows: Record<string, unknown>[]; sheetRow?: (r: Record<string, unknown>) => number };
   table?: string[][];
   /** Builds the sheets to add, or null when there's nothing to add. */
   make: (() => Promise<ResultSheet[]> | ResultSheet[]) | null;
@@ -640,7 +652,9 @@ function journalTool(data: SheetData, sheet: string): Tool {
   const hEnd = numberInput(18, 0);
   const roundMul = numberInput(1000, 0);
   const roundZeros = numberInput(0, 0, "1");
-  const limits = textInput("", "e.g. 5000, 10000, 50000");
+  const amountCol = guess.amount >= 0 ? guess.amount : guess.debit;
+  const startLimits = defaultLimits(amountCol >= 0 ? (data.col(amountCol).map((v) => (typeof v === "number" ? v : null))) : []);
+  const limits = textInput(startLimits.join(", "), "e.g. 5000, 10000, 50000");
   const margin = numberInput(5, 0);
   const backDays = numberInput(30, 0, "1");
   const seldom = numberInput(3, 1, "1");
@@ -660,7 +674,7 @@ function journalTool(data: SheetData, sheet: string): Tool {
   const dupDays = numberInput(0, -1, "1");
   const summarySheet = checkbox("Also add a summary sheet per test", true);
   const params = section(
-    "Settings for the tests",
+    "Test settings (holidays, hours, limits, keywords…)",
     false,
     grid(
       "je-params",
@@ -669,7 +683,7 @@ function journalTool(data: SheetData, sheet: string): Tool {
       field("Working hours to", hEnd),
       field("Round: multiple of", roundMul),
       field("Round: trailing zeros at least", roundZeros, "0 = off."),
-      field("Approval limits", limits),
+      field("Approval limits", limits, `Started at ${startLimits.map((x) => x.toLocaleString("en-US")).join(", ")} from the size of the amounts. Type your own.`),
       field("Just below: within %", margin),
       field("Backdated: posted more than (days)", backDays),
       field("Seldom-used: account in at most (entries)", seldom),
@@ -684,8 +698,8 @@ function journalTool(data: SheetData, sheet: string): Tool {
   );
   return {
     title: "Journal entry tests",
-    intro: "Map the columns of the journal (one row per line), pick the tests, and read the summary. Each flagged entry gets a score: the sum of the weights of the tests it fails. The result sheet lists every line of every flagged entry, highest score first.",
-    fields: [section("Columns", true, mapBox), section("Tests", true, testBox), params, summarySheet.el],
+    intro: "The standard journal entry tests on a journal (one row per line), run as soon as it opens: columns are guessed from the headers and every test is on. Adjust either under Settings. The results sheet lists every line of every flagged entry, highest score first.",
+    fields: [section("Columns (guessed from the headers)", false, mapBox), section("Tests to run", false, testBox), params, summarySheet.el],
     compute() {
       const map = {} as JeMap;
       for (const r of JE_ROLES) map[r] = Number(sel[r].value);
@@ -714,12 +728,31 @@ function journalTool(data: SheetData, sheet: string): Tool {
       if (hol.bad.length) out.push({ text: `Couldn't read these holidays as dates: ${hol.bad.join(", ")}.`, warn: true });
       if (r.periodEnd) out.push({ text: `${pct(r.periodEnd.share)} of dated entries fall in the last ${plural(opts.periodEnd!.days!, "day")} of the ${opts.periodEnd!.period}; about ${pct(r.periodEnd.expected)} would if dates were spread evenly.`, warn: r.periodEnd.share > 2 * r.periodEnd.expected });
       const table = [["Test", "Entries", "Lines", "Note"], ...r.summary.map((s) => [s.label, s.skipped ? "" : count(s.entries), s.skipped ? "" : count(s.lines), s.skipped ? `not run: ${s.skipped}` : ""])];
-      if (r.ranked.length) {
-        table.push(["", "", "", ""], ["Highest scores", "Entry", "Score", "Tests"]);
-        for (const e of r.ranked.slice(0, 8)) table.push(["", e.id || `row ${data.sheetRow(e.lines[0])}`, String(e.score), [...new Set(e.flags.map((f) => JE_TEST_LABEL[f.test]))].join(", ")]);
-      }
+      const ranked = r.ranked.slice(0, 200).map((e) => ({ entry: e.id || `Row ${data.sheetRow(e.lines[0])}`, score: e.score, date: e.date, amount: e.debits, tests: [...new Set(e.flags.map((f) => JE_TEST_LABEL[f.test]))].join(", "), first: data.sheetRow(e.lines[0]) }));
+      out.shift();
       return {
         lines: out,
+        headline: {
+          value: count(r.ranked.length),
+          unit: r.ranked.length === 1 ? "entry flagged" : "entries flagged",
+          tone: r.ranked.length ? "mismatch" : "match",
+          progress: r.entries.length ? r.ranked.length / r.entries.length : 0,
+          caption: `Out of ${plural(r.entries.length, "entry", "entries")} (${plural(r.lines, "line")}). Each flagged entry scores the weights of the tests it fails; the riskiest come first.`,
+        },
+        grid: r.ranked.length
+          ? {
+              title: "Highest scores",
+              columns: [
+                { key: "entry", label: "Entry" },
+                { key: "score", label: "Score", format: "integer" },
+                { key: "date", label: "Date", format: "date" },
+                { key: "amount", label: "Debits", format: "amount" },
+                { key: "tests", label: "Tests failed" },
+              ],
+              rows: ranked,
+              sheetRow: (x) => x.first as number,
+            }
+          : undefined,
         table,
         make: r.ranked.length ? () => journalSheets(data, lines, r, sheet, summarySheet.input.checked) : null,
         done: `Journal entry tests: ${plural(r.ranked.length, "entry", "entries")} flagged`,
@@ -931,140 +964,99 @@ function piiTool(data: SheetData, sheet: string): Tool {
   };
 }
 
-// --------------------------------------------------------------- dialog --
+// ---------------------------------------------------------------- panel --
+
+const JE_TITLE: Record<JeToolKind, string> = { journal: "Journal entry tests", overlaps: "Red-flag overlaps", footing: "Foot and cross-foot", rollforward: "Roll-forward check", pii: "PII scan and safe copy" };
 
 export function openJeTool(kind: JeToolKind, d: JeToolDeps): void {
-  const sheet = d.sheetName().slice(0, 16);
-  const back = document.createElement("div");
-  back.className = "palette-backdrop";
-  modal(back);
-  back.innerHTML = `<div class="palette import-dialog je-dialog" role="dialog"><div class="palette-form audit-form"></div></div>`;
-  const body = back.querySelector<HTMLElement>(".palette-form")!;
-  const close = () => {
-    back.remove();
-    d.focusGrid();
-  };
-  const h = document.createElement("h3");
-  const message = (title: string, text: string) => {
-    h.textContent = title;
-    const p = document.createElement("p");
-    p.textContent = text;
-    const ok = document.createElement("button");
-    ok.type = "button";
-    ok.textContent = "Close";
-    ok.addEventListener("click", close);
-    body.append(h, p, grid("numfmt-actions", ok));
-    back.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") close();
-    });
-    document.body.append(back);
-    ok.focus();
-  };
+  const sheetName = d.sheetName();
+  const sheet = sheetName.slice(0, 16);
+  const goTo = navigator(d.goTo);
+  const sheetId = d.activeSheet();
+  const goRow = goTo ? (row: number, col = 0) => goTo(sheetId, row - 1, col) : null;
+  const empty = (title: string, text: string): void =>
+    void
+    openSidePanel({ id: `je-${kind}`, title: JE_TITLE[kind], subtitle: sheetName, onClose: () => d.focusGrid(), render: (p) => void p.body.append(emptyState({ icon: "audit", title, text })) });
   let tool: Tool;
   if (kind === "overlaps") {
     const wb = d.workbook();
-    if (wb.sheets.filter((s) => !s.hidden).length < 2) return message("Red-flag overlaps", "Open the two lists (for example the vendor master and the employee master) as two sheets first.");
+    if (wb.sheets.filter((s) => !s.hidden).length < 2) return empty("Two lists are needed", "Open the two lists (for example the vendor master and the employee master) as two sheets, then run this again. It finds shared bank accounts, addresses, phone numbers, tax ids and similar names.");
     tool = overlapsTool(wb, d.activeSheet());
   } else if (kind === "footing") {
     tool = footingTool(d.source(), d.range(), sheet);
   } else {
     const data = readSheet(d.source());
-    if (!data.names.length || !data.rows) return message("Nothing to test", "This sheet has no data. Open or paste the data first; the first row (or the column names) should name the columns.");
+    if (!data.names.length || !data.rows)
+      return empty("This sheet has no data", kind === "journal" ? "Open or paste the journal first: one row per line, with columns such as Entry, Date, Account, Debit, Credit, User and Description." : "Open or paste the data first, with the column names in the first row.");
     tool = kind === "journal" ? journalTool(data, sheet) : kind === "rollforward" ? rollTool(data, sheet) : piiTool(data, sheet);
   }
-  back.querySelector(".palette")!.setAttribute("aria-label", tool.title);
-  h.textContent = tool.title;
-  const intro = document.createElement("p");
-  intro.className = "hp-muted";
-  intro.textContent = tool.intro;
-  const fields = document.createElement("div");
-  fields.className = "fields";
-  fields.append(...tool.fields);
-  const result = document.createElement("div");
-  result.className = "audit-result";
-  result.setAttribute("aria-live", "polite");
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.textContent = "Cancel";
-  const okBtn = document.createElement("button");
-  okBtn.type = "button";
-  okBtn.textContent = "Add the result sheet";
-  body.append(h, intro, fields, result, grid("numfmt-actions", cancel, okBtn));
 
   let preview: Preview | null = null;
-  const update = () => {
-    result.replaceChildren();
-    try {
-      preview = tool.compute();
-    } catch (e) {
-      preview = null;
-      const p = document.createElement("p");
-      p.className = "cleanup-warn";
-      p.textContent = (e as Error).message;
-      result.append(p);
-      okBtn.disabled = true;
-      return;
-    }
-    for (const l of preview.lines) {
-      const p = document.createElement("p");
-      p.textContent = l.text;
-      if (l.warn) p.className = "cleanup-warn";
-      result.append(p);
-    }
-    if (preview.table) {
-      const table = document.createElement("table");
-      preview.table.forEach((row, i) => {
-        const tr = document.createElement("tr");
-        for (const v of row) {
-          const cell = document.createElement(i ? "td" : "th");
-          cell.textContent = v;
-          tr.append(cell);
-        }
-        table.append(tr);
-      });
-      const wrap = document.createElement("div");
-      wrap.className = "import-preview";
-      wrap.append(table);
-      result.append(wrap);
-    }
-    okBtn.disabled = !preview.make;
-    okBtn.textContent = preview.ok ?? "Add the result sheet";
-  };
-  let timer = 0;
-  const later = () => {
-    clearTimeout(timer);
-    timer = window.setTimeout(update, 250);
-  };
-  fields.addEventListener("input", later);
-  fields.addEventListener("change", later);
-  update();
+  openSidePanel({
+    id: `je-${kind}`,
+    title: tool.title,
+    subtitle: kind === "overlaps" ? "Two lists side by side" : `On ${sheetName}`,
+    onClose: () => d.focusGrid(),
+    render: (p) => {
+      const fields = el("div", { className: "audit-fields je-fields" }, ...tool.fields);
+      const result = el("div", { className: "audit-result" });
+      result.setAttribute("aria-live", "polite");
+      p.body.append(el("p", { className: "tk-muted audit-intro", textContent: tool.intro }), ...(kind === "journal" ? [tkSection("Result", result), tkSection("Settings", fields)] : [tkSection("Settings", fields), tkSection("Result", result)]));
+      const ok = button("Create results sheet", () => {
+        clearTimeout(timer);
+        update();
+        const pv = preview;
+        if (!pv?.make) return;
+        ok.disabled = true;
+        void (async () => {
+          try {
+            const sheets = await pv.make!();
+            for (const s of sheets) await d.run({ type: "sheet.insert", params: { name: s.name.slice(0, 31), source: d.putBlob(sheetSource(s.out)), numFmts: s.out.numFmts } });
+            report(d.status, pv.done);
+          } catch (e) {
+            result.prepend(notice((e as Error).message, "danger"));
+          } finally {
+            ok.disabled = false;
+          }
+        })();
+      }, "primary");
+      p.footer.append(ok);
 
-  cancel.addEventListener("click", close);
-  okBtn.addEventListener("click", () => {
-    clearTimeout(timer);
-    update();
-    const p = preview;
-    if (!p?.make) return;
-    okBtn.disabled = true;
-    void (async () => {
-      try {
-        const sheets = await p.make!();
-        back.remove();
-        for (const s of sheets) await d.run({ type: "sheet.insert", params: { name: s.name.slice(0, 31), source: d.putBlob(sheetSource(s.out)), numFmts: s.out.numFmts } });
-        d.status(p.done);
-        d.focusGrid();
-      } catch (e) {
-        okBtn.disabled = false;
-        const w = document.createElement("p");
-        w.className = "cleanup-warn";
-        w.textContent = (e as Error).message;
-        result.append(w);
-      }
-    })();
+      const update = () => {
+        result.replaceChildren();
+        try {
+          preview = tool.compute();
+        } catch (e) {
+          preview = null;
+          result.append(notice((e as Error).message, "danger"));
+          ok.disabled = true;
+          return;
+        }
+        const pv = preview;
+        const lines = [...pv.lines];
+        if (pv.headline) result.append(headline(pv.headline));
+        else if (lines.length && !lines[0].warn) result.append(el("p", { className: "tk-lead", textContent: lines.shift()!.text }));
+        for (const l of lines) result.append(l.warn ? notice(l.text, "warning") : el("p", { className: "tk-muted", textContent: l.text }));
+        if (pv.grid) {
+          const g = pv.grid;
+          if (g.title) result.append(el("h4", { className: "je-subtitle", textContent: g.title }));
+          result.append(renderTable<Record<string, unknown>>({ columns: g.columns, rows: g.rows, onRowClick: goRow && g.sheetRow ? (r) => goRow(g.sheetRow!(r)) : undefined, maxHeight: "40vh" }).element);
+        }
+        if (pv.table) result.append(stringGrid(pv.table, goRow));
+        ok.disabled = !pv.make;
+        ok.textContent = pv.ok ?? "Create results sheet";
+        ok.title = pv.make ? "" : "Nothing to put on a sheet yet";
+      };
+      let timer = 0;
+      const later = () => {
+        clearTimeout(timer);
+        timer = window.setTimeout(update, 250);
+      };
+      fields.addEventListener("input", later);
+      fields.addEventListener("change", later);
+      update();
+      (fields.querySelector("select, input") as HTMLElement | null)?.focus();
+      return () => clearTimeout(timer);
+    },
   });
-  back.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") close();
-  });
-  document.body.append(back);
-  (fields.querySelector("select, input") as HTMLElement | null)?.focus();
 }

@@ -862,7 +862,7 @@ const TOOLS: Record<AuditToolKind, (data: SheetData, sheet: string) => Tool> = {
 // --------------------------------------------------------------- dialog --
 
 /** A plain string table as a data table: numeric-looking columns right-aligned; a "Sheet row" column makes rows links. */
-function stringGrid(table: string[][], goRow: ((row: number) => void) | null): HTMLElement {
+export function stringGrid(table: string[][], goRow: ((row: number) => void) | null): HTMLElement {
   const [head, ...body] = table;
   const numeric = head.map((_, c) => body.length > 0 && body.every((r) => !r[c] || /^[-+(]?[\d,.]+%?\)?$/.test(r[c].trim())));
   const rowCol = head.findIndex((h) => /^(sheet )?row$/i.test(h));
