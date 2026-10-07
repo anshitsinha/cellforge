@@ -7,7 +7,6 @@ import { alignColumns, columnKey, combineParts, Table, type AlignedColumn, type 
 import { COMBINABLE, readPart } from "./combine";
 import { EditableSource } from "./editable";
 import { report, toolDialog } from "./toolkit";
-import { toast } from "./ui/toast";
 
 export interface CombineDeps {
   run: (a: Action) => Promise<unknown>;
@@ -74,7 +73,6 @@ export async function openCombine(d: CombineDeps, folder: boolean): Promise<void
   d.status("Ready");
   if (!parts.length) {
     d.status(`Couldn't read any of the files. ${failed[0] ?? ""}`);
-    toast({ kind: "error", title: "Couldn't read any of the files", text: failed[0] ?? "" });
     return;
   }
   showAlignment(d, parts, failed, picked.label);

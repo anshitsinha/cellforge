@@ -7,7 +7,6 @@ import { formatValue, pageLines, parseStatement, previewCsv, readPdfText, rowsTo
 import { EditableSource } from "./editable";
 import { noteFileRead } from "./evidence";
 import { headline, report, toolDialog } from "./toolkit";
-import { toast } from "./ui/toast";
 
 export async function statementLines(file: File): Promise<StatementLine[]> {
   noteFileRead(file, "statement");
@@ -80,7 +79,6 @@ export async function importStatement(file: File, d: StatementDeps): Promise<voi
     s = parseStatement(await statementLines(file));
   } catch (e) {
     d.status(`Couldn't read ${file.name}: ${(e as Error).message}`);
-    toast({ kind: "error", title: `Couldn't read ${file.name}`, text: (e as Error).message });
     return;
   }
   d.status("Ready");

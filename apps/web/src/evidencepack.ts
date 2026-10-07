@@ -9,7 +9,7 @@ import "./evidence.css";
 import { count, el, headline, notice, plural, report, section } from "./toolkit";
 import { openDialog } from "./ui/dialog";
 import { renderTable } from "./ui/table";
-import { toast } from "./ui/toast";
+
 
 function download(blob: Blob, name: string): void {
   const a = document.createElement("a");
@@ -162,7 +162,6 @@ export function openVerifyPack(_wb: Workbook, status: (t: string) => void): void
       result = await verifyPack(new Uint8Array(await f.arrayBuffer()));
     } catch (e) {
       status(`Couldn't read ${f.name}: ${(e as Error).message}`);
-      toast({ kind: "error", title: `Couldn't read ${f.name}`, text: (e as Error).message });
       return;
     }
     const inputs = result.evidence.inputs;

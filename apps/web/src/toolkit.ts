@@ -202,10 +202,14 @@ export function toolDialog(opts: { title: string; subtitle?: string; size?: Dial
 
 // --------------------------------------------------------------- report --
 
-/** Tell the user: a toast (and the status bar, for the record). */
+/**
+ * Tell the user. The shell's status callback already turns messages into
+ * toasts (messages.ts), so it is used when given; a toast is shown directly
+ * only without one, or when the message has an action.
+ */
 export function report(status: ((t: string) => void) | undefined, text: string, kind: ToastKind = "success", action?: { label: string; run: () => void }): void {
-  status?.(text);
-  toast({ kind, text, ...(action ? { action } : {}) });
+  if (status && !action) status(text);
+  else toast({ kind, text, ...(action ? { action } : {}) });
 }
 
 // ------------------------------------------------------------ the sheet --
