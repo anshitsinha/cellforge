@@ -447,7 +447,7 @@ function freshState(wb: Workbook, active: string): ReconState {
   };
 }
 
-function needTwoSheets(title: string, what: string): void {
+export function needTwoSheets(title: string, what: string): void {
   openDialog({
     title,
     size: "sm",
