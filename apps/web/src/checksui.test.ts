@@ -194,3 +194,25 @@ describe("categorisation helpers", () => {
     expect(workbook.get(je.id).source.filter?.conditions).toEqual([{ col: 5, cond: { kind: "blanks", blank: true } }]);
   });
 });
+
+describe("starter checks", () => {
+  it("offers checks that fit the sheet's columns", async () => {
+    const { starterChecks } = await import("./checksui");
+    const n = 20;
+    const samples = [
+      { name: "Entry", values: Array.from({ length: n }, (_, i) => 100 + Math.floor(i / 2)) },
+      { name: "Date", values: Array.from({ length: n }, (_, i) => 46000 + i), numFmt: "yyyy-mm-dd" },
+      { name: "Account", values: Array.from({ length: n }, (_, i) => 1000 + (i % 3) * 100) },
+      { name: "Reference", values: Array.from({ length: n }, (_, i) => `INV-${i}`) },
+      { name: "Amount", values: Array.from({ length: n }, (_, i) => (i % 2 ? -1 : 1) * (10.5 + i)) },
+    ];
+    const labels = starterChecks("s1", samples).map((s) => s.label);
+    expect(labels).toEqual(["Amount nets to zero", "No blank Reference", "Reference is unique", "No blank Account", "Amount holds numbers", "Date holds dates"]);
+    const dc = starterChecks("s1", [
+      { name: "Account", values: [1000, 2000] },
+      { name: "Debit", values: [5.5, null] },
+      { name: "Credit", values: [null, 5.5] },
+    ]);
+    expect(dc[0]).toMatchObject({ label: "Debits equal credits", def: { kind: "totalsEqual", col: 1, otherCol: 2 } });
+  });
+});

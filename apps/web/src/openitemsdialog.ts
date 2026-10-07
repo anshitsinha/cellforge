@@ -23,9 +23,9 @@ import {
   type StatementRecResult,
 } from "@cellforge/core";
 import { EditableSource } from "./editable";
-import { guessMap, readSide, reconSheets, RECON_ROLES, RULE_LABEL, sheetHeader, type ReconMap, type ReconRole, type ReconSheet } from "./recondialog";
+import { guessMap, needTwoSheets, pickSides, readSide, reconSheets, RECON_ROLES, RULE_LABEL, sheetHeader, type ReconMap, type ReconRole, type ReconSheet } from "./recondialog";
 import type { Workbook } from "./workbook";
-import { modal } from "./a11y";
+import { headline, notice, report, toolDialog } from "./toolkit";
 
 export interface OpenItemsDeps {
   workbook: () => Workbook;
@@ -357,7 +357,7 @@ const KINDS: Record<OpenItemsKind, KindInfo> = {
   },
 };
 
-const ROLE_LABEL: Record<ReconRole, string> = { key: "Reference", amount: "Amount", minus: "Minus column (credits)", date: "Date", text: "Description" };
+const ROLE_LABEL: Record<ReconRole, string> = { key: "Reference", amount: "Amount", minus: "Credit column", date: "Date", text: "Description" };
 const money = (n: number) => formatValue(n, MONEY).text;
 
 export function openOpenItems(kind: OpenItemsKind, d: OpenItemsDeps): void {
@@ -366,21 +366,17 @@ export function openOpenItems(kind: OpenItemsKind, d: OpenItemsDeps): void {
   const visible = wb.sheets.filter((s) => !s.hidden);
   const two = info.sides.length === 2;
   if (two && visible.length < 2) {
-    d.status(`${info.title} needs two sheets: put the other side in a second sheet first.`);
+    needTwoSheets(info.title, info.title);
     return;
   }
   const active = d.activeSheet();
-  const ids: string[] = [visible.some((s) => s.id === active) ? active : visible[0].id];
-  if (two) ids.push(visible.find((s) => s.id !== ids[0])!.id);
+  const withAmounts = visible.map((s) => ({ id: s.id, name: s.name, amounts: guessMap(s.source).amount >= 0 && s.source.usedRange().rows > 1 }));
+  const ids: string[] = two ? pickSides(withAmounts, active) : [withAmounts.find((s) => s.id === active && s.amounts)?.id ?? withAmounts.find((s) => s.amounts)?.id ?? active];
   const maps: ReconMap[] = ids.map((id) => guessMap(wb.get(id).source));
   const extraCol: number[] = ids.map((id, k) => (info.extra ? guessExtra(sheetHeader(wb.get(id).source).names, info.extra.re, maps[k]) : -1));
 
-  const back = document.createElement("div");
-  back.className = "palette-backdrop";
-  modal(back);
-  back.innerHTML = `<div class="palette import-dialog recon-dialog openitems-dialog" role="dialog"><div class="palette-form"></div></div>`;
-  back.querySelector(".palette")!.setAttribute("aria-label", info.title);
-  const body = back.querySelector<HTMLElement>(".palette-form")!;
+  const dlg = toolDialog({ title: info.title, size: "lg", className: "openitems-dialog tk-legacy", onClose: () => d.focusGrid() });
+  const body = dlg.body;
   type Props = { textContent?: string; className?: string; type?: string; value?: string; checked?: boolean; inputMode?: string; placeholder?: string };
   const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Props = {}, ...kids: Array<Node | string>): HTMLElementTagNameMap[K] => {
     const e: HTMLElementTagNameMap[K] = document.createElement(tag);
@@ -465,8 +461,8 @@ export function openOpenItems(kind: OpenItemsKind, d: OpenItemsDeps): void {
     return dateText(latestDate(...recs));
   };
   if (kind === "bankstatement") {
-    bankBal = field("Bank statement closing balance", "", "overdrawn: negative");
-    ledgerBal = field("Ledger closing balance", "", "the bank account in the ledger");
+    bankBal = field("Bank statement closing balance", "", "From the last page of the statement; overdrawn is negative");
+    ledgerBal = field("Ledger closing balance", "", "The bank account's balance in the GL");
     bankAcct = field("Bank account name", "Bank", "for the entries", "text");
     errorsOn = el("select");
     errorsOn.append(new Option("Errors are the ledger's", "ledger", true, true), new Option("Errors are the bank's", "bank"));
@@ -497,10 +493,14 @@ export function openOpenItems(kind: OpenItemsKind, d: OpenItemsDeps): void {
   }
 
   const result = el("div", { className: "recon-result" });
-  const actions = el("div", { className: "numfmt-actions" });
-  actions.innerHTML = `<button type="button" data-act="cancel">Close</button><button type="button" data-act="run">Run</button><button type="button" data-act="add" disabled>Add result sheets</button>`;
-  const addBtn = actions.querySelector<HTMLButtonElement>("[data-act=add]")!;
-  body.append(el("h3", { textContent: info.title }), el("p", { className: "hp-muted", textContent: info.intro }), mapTable, opts, extraOpts, signs, result, actions);
+  const runBtn = dlg.button(kind === "bankstatement" ? "Prepare the statement" : "Run", () => runIt(), { kind: "primary" });
+  const addBtn = dlg.button("Create results sheets", () => addSheets(), { kind: "secondary", disabled: true });
+  dlg.handle.footer.append(addBtn);
+  const lead = (results: boolean) => {
+    runBtn.className = results ? "btn-secondary" : "btn-primary";
+    addBtn.className = results ? "btn-primary" : "btn-secondary";
+  };
+  body.append(el("p", { className: "tk-muted", textContent: info.intro }), mapTable, opts, extraOpts, signs, result);
 
   let sheets: ReconSheet[] | null = null;
   let doneText = "";
@@ -508,9 +508,10 @@ export function openOpenItems(kind: OpenItemsKind, d: OpenItemsDeps): void {
     if (!sheets) return;
     sheets = null;
     addBtn.disabled = true;
-    result.replaceChildren(el("p", { className: "hp-muted", textContent: "Settings changed: press Run again." }));
+    lead(false);
+    result.replaceChildren(notice(`Settings changed: press ${runBtn.textContent} again.`, "info"));
   }
-  const warn = (t: string) => result.replaceChildren(el("p", { className: "cleanup-warn", textContent: t }));
+  const warn = (t: string) => result.replaceChildren(notice(t, "warning"));
   const p = (t: string, cls = "") => el("p", { textContent: t, className: cls });
   const table = (rows: Array<[string, string]>, warnLast = false) => {
     const t = el("table", { className: "cleanup-cols openitems-summary" });
@@ -544,6 +545,7 @@ export function openOpenItems(kind: OpenItemsKind, d: OpenItemsDeps): void {
       rows.push(["Adjusted bank balance", money(st.adjustedBank)]);
       for (const l of st.ledgerLines) rows.push([`${l.label}${l.items.length ? ` (${l.items.length})` : ""}`, money(l.total)]);
       rows.push(["Adjusted ledger balance", money(st.adjustedLedger)], ["Difference", money(st.difference)]);
+      kids.push(headline({ value: money(st.difference), unit: "unexplained difference", tone: st.difference ? "mismatch" : "match", caption: st.difference ? "Bank and ledger don't agree yet after the reconciling items below." : `Bank and ledger agree at ${money(st.adjustedBank)} after the reconciling items below.` }));
       kids.push(table(rows, !!st.difference), p(`${entries.length} adjusting entr${entries.length === 1 ? "y" : "ies"} proposed.`));
       if (st.difference) kids.push(p("The statement doesn't balance: check the closing balances, and that both sheets cover the same period (last period's outstanding items roll forward separately).", "cleanup-warn"));
       doneText = `Bank rec: difference ${money(st.difference)}, ${entries.length} adjusting entries`;
@@ -554,6 +556,7 @@ export function openOpenItems(kind: OpenItemsKind, d: OpenItemsDeps): void {
       const roll = rollOutstanding(a, b, { asOf: at, settings, limits: parseLimits(limits!.input.value), staleDays: Math.max(0, Number(staleDays!.input.value) || 180) });
       sheets = [rollSheet(roll, a, b)];
       const s = roll.summary;
+      kids.push(headline({ value: String(s.open), unit: s.open === 1 ? "item still open" : "items still open", tone: s.open ? "unmatched" : "match", caption: `${s.cleared} of ${s.broughtForward} brought forward cleared this period; still open: ${money(s.openTotal)}${s.stale ? `, of which ${s.stale} stale` : ""}.` }));
       kids.push(
         table([
           [`Brought forward (${s.broughtForward})`, money(s.broughtForwardTotal)],
@@ -572,6 +575,7 @@ export function openOpenItems(kind: OpenItemsKind, d: OpenItemsDeps): void {
       const res = matchOpenItems(recs, { asOf: at, limits: parseLimits(limits!.input.value), settings: { amountTolerance: tolV, dateWindow: winV } });
       sheets = openItemSheets(res, recs);
       const s = res.summary;
+      kids.push(headline({ value: money(s.openTotal), unit: "open", tone: s.openCount ? "unmatched" : "match", caption: `${s.openCount} open item${s.openCount === 1 ? "" : "s"} across ${s.openParties} part${s.openParties === 1 ? "y" : "ies"}; ${s.clearedCount} cleared in ${res.groups.length} groups.` }));
       kids.push(
         table([
           [`Account balance (${s.count} items)`, money(s.balance)],
@@ -596,39 +600,26 @@ export function openOpenItems(kind: OpenItemsKind, d: OpenItemsDeps): void {
       const rows: Array<[string, string]> = [["Balance per their statement", money(res.theirBalance)]];
       for (const l of res.lines) if (l.items.length) rows.push([`${l.label} (${l.items.length})`, money(l.total)]);
       rows.push(["Balance per our ledger (calculated)", money(res.computedOurs)], ["Balance per our ledger (stated)", money(res.ourBalance)], ["Unexplained difference", money(res.difference)]);
+      kids.push(headline({ value: money(res.difference), unit: "unexplained difference", tone: res.difference ? "mismatch" : "match", caption: res.difference ? "Their statement and our ledger don't agree after the explained items below." : "Their statement agrees with our ledger once the items below are explained." }));
       kids.push(table(rows, !!res.difference), p(`${res.rec.matches.length} matched group${res.rec.matches.length === 1 ? "" : "s"}. Amounts are shown with invoices positive.`, "hp-muted"));
       doneText = `Statement rec: unexplained difference ${money(res.difference)}`;
     }
-    if (bad) kids.push(p(`${bad.toLocaleString()} value${bad === 1 ? "" : "s"} couldn't be read as an amount or a date and were left blank.`, "cleanup-warn"));
+    if (bad) kids.push(notice(`${bad.toLocaleString()} value${bad === 1 ? "" : "s"} couldn't be read as an amount or a date and were left blank.`, "warning"));
     result.replaceChildren(...kids);
     addBtn.disabled = false;
+    lead(true);
   };
 
   const addSheets = async () => {
     if (!sheets) return;
     const out = sheets;
-    back.remove();
+    dlg.close();
     for (const s of out) {
       const source = new EditableSource(new Table(s.columns), 10);
       await d.run({ type: "sheet.insert", params: { name: s.name, source: d.putBlob(source), numFmts: s.numFmts } });
     }
-    d.status(doneText);
-    d.focusGrid();
+    report(d.status, doneText);
   };
-  const close = () => {
-    back.remove();
-    d.focusGrid();
-  };
-  actions.addEventListener("click", (e) => {
-    const act = (e.target as HTMLElement).closest("button")?.dataset.act;
-    if (act === "cancel") close();
-    else if (act === "run") runIt();
-    else if (act === "add") void addSheets();
-  });
-  back.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") close();
-  });
   renderMap();
-  document.body.append(back);
-  actions.querySelector<HTMLButtonElement>("[data-act=run]")!.focus();
+  runBtn.focus();
 }

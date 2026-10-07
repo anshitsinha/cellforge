@@ -36,9 +36,9 @@ import {
 import { setCells } from "./actions";
 import { sheetText } from "./cleanup";
 import { EditableSource } from "./editable";
-import { sheetHeader } from "./recondialog";
+import { needTwoSheets, pickSides, sheetHeader } from "./recondialog";
+import { toolDialog } from "./toolkit";
 import type { Workbook } from "./workbook";
-import { modal } from "./a11y";
 
 export interface JoinDeps {
   workbook: () => Workbook;
@@ -106,6 +106,9 @@ const KEYISH = /\b(id|code|key|ref|reference|no|number|num|account|acct|invoice|
  * overlap most (on a sample, ignoring case, spaces and numbers stored as
  * text), with a nudge for the same header name or an ID-like one.
  */
+// dates and amounts overlap between any two ledgers but are not keys
+const DATEY = /date|posted|period|\bday\b|amount|\bamt\b|debit|credit|balance|\btotal\b|\bvalue\b/i;
+
 export function guessKeyPair(a: EditableSource, b: EditableSource): [number, number] {
   const ha = sheetHeader(a);
   const hb = sheetHeader(b);
@@ -136,7 +139,9 @@ export function guessKeyPair(a: EditableSource, b: EditableSource): [number, num
       const uniq = Math.min(sa.set.size / sa.filled, sb.set.size / sb.filled);
       const sameName = ha.names[i].trim().toLowerCase() === hb.names[j].trim().toLowerCase() ? 0.3 : 0;
       const keyish = KEYISH.test(ha.names[i]) && KEYISH.test(hb.names[j]) ? 0.1 : 0;
-      const score = overlap * (0.5 + 0.5 * uniq) + sameName + keyish;
+      // dates overlap between any two ledgers but are not keys
+      const datey = DATEY.test(ha.names[i]) || DATEY.test(hb.names[j]) ? 0.5 : 0;
+      const score = overlap * (0.5 + 0.5 * uniq) + sameName + keyish - datey;
       if (score > bestScore) {
         bestScore = score;
         best = [i, j];
@@ -481,55 +486,55 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Props = {}, ..
 };
 
 interface Shell {
-  back: HTMLDivElement;
+  back: { remove(): void };
   body: HTMLElement;
-  actions: HTMLDivElement;
   button: (label: string, act: () => void, disabled?: boolean) => HTMLButtonElement;
   close: () => void;
   show: (focus?: HTMLElement) => void;
 }
 
+/**
+ * A tool dialog on the shared dialog: fixed header and footer, the body
+ * scrolls. The last enabled button in the footer is the primary one (so
+ * "Compare" leads until there's a result, then "Add result sheets").
+ */
 function shell(d: JoinDeps, title: string, intro: string): Shell {
-  const back = document.createElement("div");
-  back.className = "palette-backdrop";
-  modal(back);
-  back.innerHTML = `<div class="palette import-dialog join-dialog" role="dialog"><div class="palette-form"></div></div>`;
-  back.querySelector(".palette")!.setAttribute("aria-label", title);
-  const body = back.querySelector<HTMLElement>(".palette-form")!;
-  body.append(el("h3", { textContent: title }), el("p", { className: "hp-muted", textContent: intro }));
-  const actions = el("div", { className: "numfmt-actions" });
-  const close = () => {
-    back.remove();
-    d.focusGrid();
+  const dlg = toolDialog({ title, size: "lg", onClose: () => d.focusGrid(), className: "join-dialog tk-legacy" });
+  dlg.body.append(el("p", { className: "tk-muted", textContent: intro }));
+  const mine: HTMLButtonElement[] = [];
+  const restyle = () => {
+    const lead = [...mine].reverse().find((b) => !b.disabled) ?? mine[mine.length - 1];
+    for (const b of mine) b.className = b === lead ? "btn-primary" : "btn-secondary";
   };
+  const watch = new MutationObserver(restyle);
   const button = (label: string, act: () => void, disabled = false) => {
-    const b = el("button", { type: "button", textContent: label, disabled });
-    b.addEventListener("click", act);
-    actions.append(b);
+    const b = dlg.button(label, act, { kind: "secondary", disabled });
+    dlg.handle.footer.append(b);
+    mine.push(b);
+    watch.observe(b, { attributes: true, attributeFilter: ["disabled"] });
+    restyle();
     return b;
   };
-  button("Close", close);
-  back.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") close();
-  });
-  const show = (focus?: HTMLElement) => {
-    body.append(actions);
-    document.body.append(back);
-    (focus ?? actions.querySelector("button"))?.focus();
+  const close = () => {
+    watch.disconnect();
+    dlg.close();
   };
-  return { back, body, actions, button, close, show };
+  return { back: { remove: close }, body: dlg.body, button, close, show: (focus) => (focus ?? mine[0])?.focus() };
 }
 
 function visibleSheets(d: JoinDeps, need: number, what: string): { wb: Workbook; ids: string[]; first: string; second: string } | null {
   const wb = d.workbook();
   const visible = wb.sheets.filter((s) => !s.hidden);
   if (visible.length < need) {
-    d.status(`${what} needs ${need === 2 ? "two sheets" : "a sheet"}: open or paste the other one into a second sheet first.`);
+    needTwoSheets(need === 2 ? "Two sheets needed" : "A sheet is needed", what);
     return null;
   }
   const active = d.activeSheet();
-  const first = visible.some((s) => s.id === active) ? active : visible[0].id;
-  const second = (visible.find((s) => s.id !== first) ?? visible[0]).id;
+  // sheets with a table on them (not a notes or "start here" sheet)
+  const [first, second] =
+    visible.length >= 2
+      ? pickSides(visible.map((s) => ({ id: s.id, name: s.name, amounts: s.source.usedRange().rows > 2 && sheetHeader(s.source).names.length > 1 })), active)
+      : [visible[0].id, visible[0].id];
   return { wb, ids: visible.map((s) => s.id), first, second };
 }
 

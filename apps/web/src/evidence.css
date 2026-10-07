@@ -1,0 +1,210 @@
+/* Evidence: explain this number (lineagepanel.ts), supporting documents (docviewer.ts), evidence packs (evidencepack.ts) */
+
+/* ---- explain ---------------------------------------------------------- */
+
+.ln-tree {
+  list-style: none;
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--border-default);
+  display: grid;
+  gap: var(--space-1);
+}
+
+.ln-root {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.ln-node > .ln-tree {
+  margin-top: var(--space-1);
+  margin-left: var(--space-1);
+}
+
+.ln-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.ln-cell {
+  height: auto;
+  padding: 1px var(--space-1-5);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  box-shadow: none;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--accent-default);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ln-cell:disabled {
+  opacity: 1;
+  color: var(--text-default);
+  cursor: default;
+}
+
+.ln-kind {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.ln-value {
+  margin-left: auto;
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+  text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ln-words {
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-default);
+  line-height: var(--leading);
+}
+
+.ln-formula {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.ln-meta {
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.ln-model {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.ln-writeup {
+  white-space: pre-wrap;
+  font-size: var(--text-sm);
+  line-height: var(--leading);
+  background: var(--surface-sunken);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  user-select: text;
+}
+
+/* ---- documents -------------------------------------------------------- */
+
+.dc-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dc-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: auto;
+  padding: var(--space-1-5) var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  box-shadow: none;
+  text-align: left;
+  font-weight: var(--weight-regular);
+}
+
+.dc-item:hover {
+  background: var(--surface-3);
+}
+
+.dc-item.is-open {
+  border-color: var(--accent-soft-strong);
+  background: var(--accent-soft);
+}
+
+.dc-item__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-strong);
+}
+
+.dc-viewer {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.dc-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.dc-check {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* ---- evidence pack ------------------------------------------------------ */
+
+.ev-hash {
+  display: grid;
+  gap: 2px;
+  font-size: var(--text-xs);
+}
+
+.ev-hash code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-default);
+  overflow-wrap: anywhere;
+}
+
+/* ---- before you share (sharingui.ts) ------------------------------------ */
+
+.sh-table td {
+  vertical-align: top;
+}
+
+.sh-text {
+  margin-top: 2px;
+  white-space: normal;
+  max-width: 46ch;
+  line-height: var(--leading);
+}
+
+.sh-c {
+  text-align: center;
+  width: 72px;
+  color: var(--text-muted);
+}
+
+.sh-c .cf-icon {
+  color: var(--success);
+}
+
+.sh-act {
+  text-align: right;
+  width: 1%;
+  white-space: nowrap;
+}

@@ -6,7 +6,7 @@ import type { Action } from "@cellforge/actions";
 import { alignColumns, columnKey, combineParts, Table, type AlignedColumn, type FilePart } from "@cellforge/core";
 import { COMBINABLE, readPart } from "./combine";
 import { EditableSource } from "./editable";
-import { modal } from "./a11y";
+import { report, toolDialog } from "./toolkit";
 
 export interface CombineDeps {
   run: (a: Action) => Promise<unknown>;
@@ -57,7 +57,7 @@ export async function openCombine(d: CombineDeps, folder: boolean): Promise<void
   const picked = await pickFiles(folder);
   if (!picked) return;
   if (!picked.files.length) {
-    d.status("No CSV, Excel, JSON or Parquet files in that folder.");
+    report(d.status, "No CSV, Excel, JSON or Parquet files in that folder.", "warning");
     return;
   }
   const parts: FilePart[] = [];
@@ -84,18 +84,14 @@ export function showAlignment(d: CombineDeps, parts: FilePart[], failed: string[
   const headers = parts.map((p) => p.columns.map((c) => c.name));
   let aligned: AlignedColumn[] = alignColumns(headers, renames);
 
-  const back = document.createElement("div");
-  back.className = "palette-backdrop";
-  modal(back);
-  back.innerHTML = `<div class="palette import-dialog" role="dialog" aria-label="Combine files"><div class="palette-form"></div></div>`;
-  const body = back.querySelector<HTMLElement>(".palette-form")!;
-  const h = document.createElement("h3");
-  h.textContent = `Combine ${parts.length} file${parts.length === 1 ? "" : "s"}`;
+  const dlg = toolDialog({ title: `Combine ${parts.length} file${parts.length === 1 ? "" : "s"}`, subtitle: "Stack them into one sheet, column by column", size: "lg", closeLabel: "Cancel", className: "tk-legacy", onClose: () => d.focusGrid() });
+  const body = dlg.body;
+  const h = document.createElement("span");
   const summary = document.createElement("p");
   const wrap = document.createElement("div");
   wrap.className = "import-preview";
   const note = document.createElement("p");
-  note.className = "hp-muted";
+  note.className = "tk-muted";
   note.textContent =
     "Columns are matched by name, ignoring case, spaces and punctuation. Give two columns the same name to merge them. A \"source file\" column says where each row came from.";
   body.append(h, summary, wrap, note);
@@ -159,37 +155,17 @@ export function showAlignment(d: CombineDeps, parts: FilePart[], failed: string[
   };
   render();
 
-  const actions = document.createElement("div");
-  actions.className = "numfmt-actions";
-  actions.innerHTML = `<button type="button" data-act="cancel">Cancel</button><button type="button" data-act="ok">Combine</button>`;
-  body.append(actions);
-  const close = () => {
-    back.remove();
-    d.focusGrid();
-  };
-  actions.addEventListener("click", (e) => {
-    const act = (e.target as HTMLElement).closest("button")?.dataset.act;
-    if (act === "cancel") close();
-    else if (act === "ok") {
-      back.remove();
-      const final = aligned.map((a) => ({ ...a, name: names.get(a.key) ?? a.name }));
-      const { columns, numFmts } = combineParts(parts, final);
-      const table = new Table(columns);
-      const source = new EditableSource(table, 10);
-      void d
-        .run({
-          type: "sheet.insert",
-          params: { name: label, source: d.putBlob(source), numFmts: numFmts.map((f) => f ?? ""), origin: `Combined ${parts.length} files: ${parts.map((p) => p.name).join(", ").slice(0, 300)} (the source file column says which)` },
-        })
-        .then(() => {
-          d.status(`Combined ${parts.length} files: ${table.rowCount.toLocaleString()} rows`);
-          d.focusGrid();
-        });
-    }
-  });
-  back.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") close();
-  });
-  document.body.append(back);
-  actions.querySelector<HTMLButtonElement>("[data-act=ok]")!.focus();
+  dlg.button("Combine", () => {
+    dlg.close();
+    const final = aligned.map((a) => ({ ...a, name: names.get(a.key) ?? a.name }));
+    const { columns, numFmts } = combineParts(parts, final);
+    const table = new Table(columns);
+    const source = new EditableSource(table, 10);
+    void d
+      .run({
+        type: "sheet.insert",
+        params: { name: label, source: d.putBlob(source), numFmts: numFmts.map((f) => f ?? ""), origin: `Combined ${parts.length} files: ${parts.map((p) => p.name).join(", ").slice(0, 300)} (the source file column says which)` },
+      })
+      .then(() => report(d.status, `Combined ${parts.length} files: ${table.rowCount.toLocaleString()} rows`));
+  }, { kind: "primary" }).focus();
 }
