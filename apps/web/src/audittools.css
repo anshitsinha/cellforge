@@ -1,4 +1,13 @@
-/* Audit test dialogs (audittools.ts). Builds on the palette-form and import-dialog styles. */
+/* Audit tests (audittools.ts): a side panel with settings, then the result. */
+
+.audit-intro {
+  line-height: var(--leading);
+}
+
+.audit-fields {
+  display: grid;
+  gap: var(--space-3);
+}
 
 .audit-keys {
   display: grid;
@@ -7,27 +16,24 @@
 
 .audit-key {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 90px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 64px;
   gap: var(--space-1-5);
+}
+
+.audit-key select,
+.audit-key input {
+  width: 100%;
+  min-width: 0;
 }
 
 .audit-key [hidden] {
   display: none;
 }
 
-.palette-form .audit-check {
-  display: flex;
-  gap: var(--space-1-5);
-  align-items: center;
-}
-
-.palette-form label[hidden] {
-  display: none;
-}
-
 .audit-result {
   display: grid;
-  gap: var(--space-1-5);
+  gap: var(--space-2);
+  min-width: 0;
 }
 
 .audit-chart {
@@ -57,8 +63,13 @@
   text-anchor: middle;
 }
 
-@media (max-width: 520px) {
-  .audit-key {
-    grid-template-columns: 1fr;
-  }
+/* still used by the checks and journal tools */
+.audit-check {
+  display: flex;
+  gap: var(--space-1-5);
+  align-items: center;
+}
+
+.palette-form label[hidden] {
+  display: none;
 }

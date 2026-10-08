@@ -228,3 +228,36 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* the side panel: starter checks, one per line */
+.ck-starter-list {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: stretch;
+  width: 100%;
+}
+
+.ck-starter-list button {
+  justify-content: flex-start;
+}
+
+.cf-sidepanel .ck-list {
+  margin: 0;
+  padding: 0;
+}
+
+/* in the side panel the buttons go under the text, small and quiet */
+.cf-sidepanel .ck-head {
+  grid-template-columns: 22px minmax(0, 1fr);
+}
+
+.cf-sidepanel .ck-buttons {
+  grid-column: 2;
+  justify-content: flex-start;
+}
+
+.cf-sidepanel .ck-buttons button {
+  height: var(--control-h-sm);
+  padding: 0 var(--space-2);
+  font-size: var(--text-sm);
+}

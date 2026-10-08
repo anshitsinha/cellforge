@@ -50,6 +50,8 @@ export interface SidePanelOptions {
   tools?: readonly HTMLElement[] | (() => readonly HTMLElement[]);
   /** called when the panel is closed (not when replaced) */
   onClose?: () => void;
+  /** at least this wide while this panel shows (for wide result tables); the user's own width is kept for other panels */
+  minWidth?: number;
 }
 
 // ------------------------------------------------------------- pure parts --
@@ -292,8 +294,9 @@ function show(opts: SidePanelOptions): SidePanelContext {
 
   const wasHidden = h.aside.hidden;
   h.aside.hidden = false;
-  if (wasHidden) {
-    applyWidth(width);
+  const wanted = Math.max(readWidth(), opts.minWidth ?? 0);
+  if (wasHidden || wanted !== width) {
+    applyWidth(wanted);
     resized();
   }
 

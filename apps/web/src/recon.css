@@ -1,4 +1,244 @@
-/* Reconcile two sheets (recondialog.ts) */
+/* Reconcile two sheets (recondialog.ts): setup dialog, steps 1-2; results panel, step 3. Also the open-items tools. */
+
+.rc-dialog .cf-dialog__body {
+  gap: var(--space-4);
+}
+
+/* ---- step 1: the two sides ------------------------------------------- */
+
+.rc-sides {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.rc-vs {
+  align-self: center;
+  color: var(--text-subtle);
+  font-size: var(--text-xl);
+}
+
+.rc-side {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+}
+
+.rc-side__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.rc-side__head select {
+  margin-left: auto;
+  max-width: 50%;
+  font-weight: var(--weight-medium);
+}
+
+.rc-side__titles {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.rc-side__titles strong {
+  color: var(--text-strong);
+  font-size: var(--text-md);
+}
+
+.rc-side__badge {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  font-weight: var(--weight-bold);
+  font-size: var(--text-sm);
+  background: var(--accent-soft);
+  color: var(--accent-default);
+}
+
+.rc-side__badge--b {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.rc-roles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: var(--space-2) var(--space-3);
+}
+
+.rc-roles select {
+  width: 100%;
+}
+
+.rc-side__preview-label {
+  font-size: var(--text-xs);
+  margin-bottom: calc(-1 * var(--space-2));
+}
+
+.rc-preview-wrap {
+  max-height: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+
+.rc-preview th {
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.rc-preview td {
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rc-colname {
+  display: block;
+}
+
+.rc-role {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 0 var(--space-1-5);
+  border-radius: var(--radius-full);
+  background: var(--accent-solid);
+  color: var(--on-accent);
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.02em;
+  line-height: 16px;
+}
+
+.rc-preview .rc-mapped {
+  background: var(--accent-soft);
+}
+
+.rc-preview thead th.rc-mapped {
+  background: var(--accent-soft-strong);
+}
+
+/* ---- step 2: rules ---------------------------------------------------- */
+
+.rc-rules {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 760px;
+}
+
+.rc-tols {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.rc-passes {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.rc-pass-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.rc-pass__n {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.rc-pass {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  flex: 1;
+  cursor: pointer;
+}
+
+.rc-pass > input {
+  margin-top: 3px;
+}
+
+.rc-pass > span {
+  display: grid;
+  gap: 1px;
+}
+
+.rc-pass__name {
+  font-size: var(--text-md);
+  color: var(--text-default);
+  font-weight: var(--weight-medium);
+}
+
+/* ---- step 3: results panel ---------------------------------------------- */
+
+.rc-tab {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.rc-why {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: end;
+}
+
+.rc-why-out {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.rc-reasons {
+  margin: 0;
+  padding-left: var(--space-5);
+  font-size: var(--text-sm);
+  line-height: var(--leading);
+}
+
+.rc-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 760px) {
+  .rc-sides {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rc-vs {
+    justify-self: center;
+    transform: rotate(90deg);
+  }
+}
+
+/* legacy: open-items dialogs until they move to the new layout */
 .palette.recon-dialog {
   width: min(var(--dialog-lg), 100%);
 }

@@ -10,7 +10,10 @@ import { dateParts, formatValue, isDateFormat, parseDateLoose, parseNumberLoose,
 import { DEFAULT_REC_SETTINGS, explain, KEYING_LABEL, reconcile, type RecRecord, type RecResult, type RecRule, type RecSettings } from "@cellforge/core";
 import { EditableSource } from "./editable";
 import type { Workbook } from "./workbook";
-import { modal } from "./a11y";
+import { openDialog } from "./ui/dialog";
+import { openSidePanel } from "./ui/sidepanel";
+import { formatCell, renderTable } from "./ui/table";
+import { button, count, el, emptyState, field, headline, navigator, notice, plural, report, section, steps, tabs, toolDialog } from "./toolkit";
 
 export interface ReconDeps {
   workbook: () => Workbook;
@@ -20,6 +23,8 @@ export interface ReconDeps {
   putBlob: (value: unknown) => string;
   status: (text: string) => void;
   focusGrid: () => void;
+  /** show a sheet row (makes result lines links); optional */
+  goTo?: (sheetId: string, row: number, col: number) => void;
 }
 
 /** What a mapped column is used for. */
@@ -28,7 +33,7 @@ export const RECON_ROLES: readonly ReconRole[] = ["key", "amount", "minus", "dat
 const ROLE_LABEL: Record<ReconRole, string> = {
   key: "Reference",
   amount: "Amount",
-  minus: "Minus column (credits)",
+  minus: "Credit column",
   date: "Date",
   text: "Description",
 };
@@ -330,283 +335,580 @@ export function reconSheets(r: RecResult, a: RecRecord[], b: RecRecord[]): Recon
   return [matched, unmatched("Rec unmatched A", r.unmatchedA, a, note.A), unmatched("Rec unmatched B", r.unmatchedB, b, note.B), mismatched];
 }
 
-const money = (n: number) => formatValue(n, "#,##0.00;-#,##0.00").text;
-const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+
+// ------------------------------------------------------------------ UI --
+//
+// 1. Choose the two sides (a dialog: sheet, which column is which, a
+//    preview of the first rows with the compared columns highlighted).
+// 2. Matching rules (same dialog: tolerances, the passes; the finer
+//    settings under Advanced).
+// 3. Results (the side panel, beside the grid: the headline figure, what's
+//    left on each side with totals, differences, duplicates, matched pairs;
+//    rows link back to the sheet; "Why don't these match?"; create the
+//    results sheets).
+
+const money = (n: number) => formatCell(n, "amount");
+
+const ROLE_HINT: Record<ReconRole, string> = {
+  key: "Invoice, cheque or transaction number",
+  amount: "Signed amount, or debits when credits are separate",
+  minus: "Only when debits and credits are in two columns",
+  date: "Used by the date window",
+  text: "Payee or narrative, for the similar-description pass",
+};
+
+/** The first rows of a sheet as shown, with the columns in use highlighted and labelled. */
+export function sidePreview(src: EditableSource, roles: ReadonlyMap<number, string>, rows = 5): HTMLElement {
+  const { names, first } = sheetHeader(src);
+  const total = src.usedRange().rows;
+  const table = el("table", { className: "data-table data-table--dense rc-preview" });
+  const head = table.createTHead().insertRow();
+  names.forEach((n, c) => {
+    const th = el("th", { scope: "col" }, el("span", { className: "rc-colname", textContent: n }));
+    const role = roles.get(c);
+    if (role) {
+      th.classList.add("rc-mapped");
+      th.append(el("span", { className: "rc-role", textContent: role }));
+    }
+    head.append(th);
+  });
+  const body = table.createTBody();
+  for (let r = first; r < Math.min(total, first + rows); r++) {
+    const tr = body.insertRow();
+    names.forEach((_, c) => {
+      const v = src.getCell(r, c);
+      const td = tr.insertCell();
+      if (typeof v === "number") {
+        const f = src.getStyle(r, c)?.numFmt;
+        td.textContent = f && f !== "General" ? formatValue(v, f).text : formatCell(v, "number");
+        td.className = "num";
+      } else td.textContent = v === null || v === undefined ? "" : String(v);
+      if (roles.has(c)) td.classList.add("rc-mapped");
+    });
+  }
+  if (total <= first) {
+    const td = body.insertRow().insertCell();
+    td.colSpan = Math.max(1, names.length);
+    td.className = "data-table__empty";
+    td.textContent = "This sheet is empty.";
+  }
+  const wrap = el("div", { className: "table-wrap rc-preview-wrap" });
+  wrap.append(table);
+  return wrap;
+}
+
+interface ReconState {
+  idA: string;
+  idB: string;
+  mapA: ReconMap;
+  mapB: ReconMap;
+  settings: RecSettings;
+  last: { r: RecResult; a: RecRecord[]; b: RecRecord[]; bad: number; ms: number } | null;
+  why: { a: string; b: string };
+  added: boolean;
+}
+
+// the setup is remembered per workbook, so "Edit setup" and reopening keep the choices
+const states = new WeakMap<Workbook, ReconState>();
+
+const OTHER_SIDE = /bank|statement|stmt|supplier|customer|vendor|creditor|debtor|counterparty/i;
+const OUR_SIDE = /cash ?book|ledger|\bgl\b|books|nominal|\bap\b|\bar\b|payables|receivables|ours/i;
+
+/**
+ * Which two sheets to reconcile: sheets with an amount column only; side B
+ * looks like the other party (bank, statement), side A like our books (or
+ * is the sheet on screen). Pure; ids in the order given.
+ */
+export function pickSides(sheets: readonly { id: string; name: string; amounts: boolean }[], active: string): [string, string] {
+  const usable = sheets.filter((s) => s.amounts);
+  const pool = usable.length >= 2 ? usable : sheets;
+  const b = pool.find((s) => OTHER_SIDE.test(s.name) && s.id !== active) ?? pool.find((s) => OTHER_SIDE.test(s.name));
+  const notB = pool.filter((s) => s.id !== b?.id);
+  const a = notB.find((s) => s.id === active && (s.amounts || !usable.length)) ?? notB.find((s) => OUR_SIDE.test(s.name)) ?? notB[0];
+  const second = b ?? pool.find((s) => s.id !== a.id)!;
+  return [a.id, second.id];
+}
+
+function freshState(wb: Workbook, active: string): ReconState {
+  const visible = wb.sheets.filter((s) => !s.hidden);
+  const [idA, idB] = pickSides(
+    visible.map((s) => ({ id: s.id, name: s.name, amounts: guessMap(s.source).amount >= 0 && s.source.usedRange().rows > 1 })),
+    active,
+  );
+  return {
+    idA,
+    idB,
+    mapA: guessMap(wb.get(idA).source),
+    mapB: guessMap(wb.get(idB).source),
+    settings: { ...DEFAULT_REC_SETTINGS, passes: { ...DEFAULT_REC_SETTINGS.passes } },
+    last: null,
+    why: { a: "", b: "" },
+    added: false,
+  };
+}
+
+export function needTwoSheets(title: string, what: string): void {
+  openDialog({
+    title,
+    size: "sm",
+    body: emptyState({
+      icon: "reconcile",
+      title: "Two sheets are needed",
+      text: `${what} compares two sheets, for example your cash book and the bank statement. Paste or open the other side into a second sheet (the + next to the sheet tabs), then try again.`,
+    }),
+    actions: [{ label: "Got it", kind: "primary", dismiss: true }],
+  });
+}
 
 export function openRecon(d: ReconDeps): void {
   const wb = d.workbook();
   const visible = wb.sheets.filter((s) => !s.hidden);
   if (visible.length < 2) {
-    d.status("Reconciling needs two sheets: open or paste the other side into a second sheet first.");
+    needTwoSheets("Reconcile two sheets", "Reconciling");
     return;
   }
-  const active = d.activeSheet();
-  let idA = visible.some((s) => s.id === active) ? active : visible[0].id;
-  let idB = visible.find((s) => s.id !== idA)!.id;
-  let mapA = guessMap(wb.get(idA).source);
-  let mapB = guessMap(wb.get(idB).source);
-  const settings: RecSettings = { ...DEFAULT_REC_SETTINGS, passes: { ...DEFAULT_REC_SETTINGS.passes } };
-  let last: { r: RecResult; a: RecRecord[]; b: RecRecord[] } | null = null;
-  const whyRows = { a: "", b: "" };
+  let st = states.get(wb);
+  const ok = (id: string) => wb.has(id) && !wb.get(id).hidden;
+  if (!st || !ok(st.idA) || !ok(st.idB)) {
+    st = freshState(wb, d.activeSheet());
+    states.set(wb, st);
+  }
+  openSetup(d, st, 0);
+}
 
-  const back = document.createElement("div");
-  back.className = "palette-backdrop";
-  modal(back);
-  back.innerHTML = `<div class="palette import-dialog recon-dialog" role="dialog" aria-label="Reconcile two sheets"><div class="palette-form"></div></div>`;
-  const body = back.querySelector<HTMLElement>(".palette-form")!;
-  type Props = { textContent?: string; className?: string; type?: string; value?: string; checked?: boolean; inputMode?: string; placeholder?: string };
-  const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Props = {}, ...kids: Array<Node | string>): HTMLElementTagNameMap[K] => {
-    const e: HTMLElementTagNameMap[K] = document.createElement(tag);
-    Object.assign(e, props);
-    e.append(...kids);
-    return e;
-  };
-  const h = el("h3", { textContent: "Reconcile two sheets" });
-  const intro = el("p", {
-    className: "hp-muted",
-    textContent: "Pick the two sides and say which column is which (guesses are filled in). Matching runs in passes, strictest first; each pass only sees what the earlier ones left.",
-  });
+function openSetup(d: ReconDeps, st: ReconState, startStep: number): void {
+  const wb = d.workbook();
+  const visible = wb.sheets.filter((s) => !s.hidden);
+  const settings = st.settings;
+  let step = startStep;
+  const dlg = toolDialog({ title: "Reconcile two sheets", subtitle: "Match your records against the bank or the other party, line by line", size: "xl", closeLabel: "Cancel", className: "rc-dialog" });
+  const backBtn = dlg.button("Back", () => go(0), { start: true });
+  const nextBtn = dlg.button("Next: matching rules", () => go(1), { kind: "primary" });
+  const matchBtn = dlg.button("Match", () => runMatch(), { kind: "primary" });
 
-  // sheets and column mapping
-  const mapTable = el("table", { className: "cleanup-cols recon-map" });
-  const sheetSelect = (side: "A" | "B") => {
-    const sel = el("select");
-    sel.setAttribute("aria-label", `Sheet for side ${side}`);
-    for (const s of visible) sel.append(new Option(s.name, s.id, false, s.id === (side === "A" ? idA : idB)));
-    sel.addEventListener("change", () => {
-      if (side === "A") {
-        idA = sel.value;
-        mapA = guessMap(wb.get(idA).source);
-      } else {
-        idB = sel.value;
-        mapB = guessMap(wb.get(idB).source);
-      }
-      stale();
-      renderMap();
-    });
-    return sel;
+  const sideProblem = (): string | null => {
+    if (st.idA === st.idB) return "Pick two different sheets.";
+    for (const [map, side] of [
+      [st.mapA, wb.get(st.idA).name],
+      [st.mapB, wb.get(st.idB).name],
+    ] as const) {
+      if (map.key < 0 && map.amount < 0 && map.text < 0) return `Pick at least a reference, an amount or a description column for ${side}.`;
+    }
+    return null;
   };
-  const renderMap = () => {
-    mapTable.replaceChildren();
-    const head = el("tr", {}, el("th"), el("th", {}, "Side A ", sheetSelect("A")), el("th", {}, "Side B ", sheetSelect("B")));
-    mapTable.append(head);
-    const namesA = sheetHeader(wb.get(idA).source).names;
-    const namesB = sheetHeader(wb.get(idB).source).names;
-    for (const role of RECON_ROLES) {
-      const tr = el("tr", {}, el("td", { textContent: ROLE_LABEL[role] }));
-      for (const [map, names, side] of [
-        [mapA, namesA, "A"],
-        [mapB, namesB, "B"],
-      ] as const) {
+
+  const go = (to: number) => {
+    if (to === 1) {
+      const p = sideProblem();
+      if (p) throw new Error(p);
+    }
+    step = to;
+    render();
+  };
+
+  // ---- step 1: the two sides
+  const sideCard = (side: "A" | "B") => {
+    const card = el("section", { className: "rc-side" });
+    const draw = () => {
+      const id = side === "A" ? st.idA : st.idB;
+      const map = side === "A" ? st.mapA : st.mapB;
+      const src = wb.get(id).source;
+      const { names, first } = sheetHeader(src);
+      const rows = Math.max(0, src.usedRange().rows - first);
+      const sheetSel = el("select");
+      sheetSel.setAttribute("aria-label", `Sheet for side ${side}`);
+      for (const s of visible) sheetSel.append(new Option(s.name, s.id, false, s.id === id));
+      sheetSel.addEventListener("change", () => {
+        if (side === "A") {
+          st.idA = sheetSel.value;
+          st.mapA = guessMap(wb.get(st.idA).source);
+        } else {
+          st.idB = sheetSel.value;
+          st.mapB = guessMap(wb.get(st.idB).source);
+        }
+        st.last = null;
+        draw();
+        dlg.handle.setError(null);
+      });
+      const roles = el("div", { className: "rc-roles" });
+      for (const role of RECON_ROLES) {
         const sel = el("select");
-        sel.setAttribute("aria-label", `${ROLE_LABEL[role]} column for side ${side}`);
-        sel.append(new Option("(none)", "-1", false, map[role] < 0));
+        sel.setAttribute("aria-label", `${ROLE_LABEL[role]} column in ${wb.get(id).name}`);
+        sel.append(new Option(role === "minus" ? "(not separate)" : "(none)", "-1", false, map[role] < 0));
         names.forEach((n, c) => sel.append(new Option(n, String(c), false, map[role] === c)));
         sel.addEventListener("change", () => {
           map[role] = Number(sel.value);
-          stale();
+          st.last = null;
+          preview.replaceWith((preview = makePreview()));
         });
-        tr.append(el("td", {}, sel));
+        const f = field(ROLE_LABEL[role], sel);
+        f.title = ROLE_HINT[role];
+        roles.append(f);
       }
-      mapTable.append(tr);
-    }
+      const makePreview = () => {
+        const m = new Map<number, string>();
+        for (const role of RECON_ROLES) if (map[role] >= 0) m.set(map[role], m.has(map[role]) ? `${m.get(map[role])} · ${ROLE_SHORT[role]}` : ROLE_SHORT[role]);
+        return sidePreview(src, m);
+      };
+      let preview = makePreview();
+      card.replaceChildren(
+        el(
+          "header",
+          { className: "rc-side__head" },
+          el("span", { className: `rc-side__badge rc-side__badge--${side.toLowerCase()}`, textContent: side }),
+          el("div", { className: "rc-side__titles" }, el("strong", { textContent: side === "A" ? "Your records" : "The other side" }), el("span", { className: "tk-muted", textContent: `${count(rows)} row${rows === 1 ? "" : "s"}` })),
+          sheetSel,
+        ),
+        roles,
+        el("div", { className: "rc-side__preview-label tk-muted", textContent: "First rows: the highlighted columns are compared" }),
+        preview,
+      );
+    };
+    draw();
+    return card;
   };
 
-  // tolerances and passes
-  const numInput = (label: string, value: string, hint: string, onChange: (v: string) => void) => {
+  // ---- step 2: matching rules
+  const numInput = (value: string, onChange: (v: string) => void, label: string) => {
     const input = el("input", { type: "text", value, inputMode: "decimal" });
+    input.setAttribute("aria-label", label);
     input.addEventListener("change", () => {
       onChange(input.value.trim());
-      stale();
+      st.last = null;
     });
-    return { label: el("label", {}, label, input, el("small", { textContent: hint })), input };
+    return input;
   };
-  const tolAbs = numInput("Amount tolerance", String(settings.amountTolerance), "e.g. 0.01", (v) => (settings.amountTolerance = Math.max(0, Number(v) || 0)));
-  const tolPct = numInput("Or percent", String(settings.amountTolerancePct), "the larger applies", (v) => (settings.amountTolerancePct = Math.max(0, Number(v) || 0)));
-  const win = numInput("Date window ± days", String(settings.dateWindow ?? ""), "blank ignores dates", (v) => (settings.dateWindow = v === "" || Number.isNaN(Number(v)) ? null : Math.max(0, Math.floor(Number(v)))));
-  const fuzzy = numInput("Description match %", String(Math.round(settings.fuzzyThreshold * 100)), "for the fuzzy pass", (v) => (settings.fuzzyThreshold = Math.min(100, Math.max(1, Number(v) || 85)) / 100));
-  const sumMax = numInput("Sum up to items", String(settings.sumMaxItems), "2 to 6", (v) => (settings.sumMaxItems = Math.min(6, Math.max(2, Math.floor(Number(v)) || 3))));
-  const opts = el("div", { className: "import-options" }, tolAbs.label, tolPct.label, win.label, fuzzy.label, sumMax.label);
-
-  const check = (label: string, get: () => boolean, set: (v: boolean) => void) => {
+  const check = (label: string, get: () => boolean, set: (v: boolean) => void, hint?: string) => {
     const box = el("input", { type: "checkbox", checked: get() });
     box.addEventListener("change", () => {
       set(box.checked);
-      stale();
+      st.last = null;
     });
-    return { label: el("label", { className: "opt-check" }, box, label), box };
+    const l = el("label", { className: "rc-pass" }, box, el("span", {}, el("span", { className: "rc-pass__name", textContent: label }), hint ? el("small", { className: "tk-field__hint", textContent: hint }) : null));
+    return l;
   };
-  const flip = check("B amounts have the opposite sign", () => settings.flipB, (v) => (settings.flipB = v));
-  const passBoxes: Array<[keyof RecSettings["passes"], string]> = [
-    ["exact", "Same reference and amount"],
-    ["tolerance", "Same reference, within tolerance"],
-    ["reference", "Normalised reference (case, spaces, punctuation, leading zeros, INV/REF)"],
-    ["fuzzy", "Similar description"],
-    ["amountDate", "Amount and date only"],
-    ["sum", "Sums (one to many, many to one)"],
-  ];
-  const passChecks = passBoxes.map(([k, label]) => ({ k, ...check(label, () => settings.passes[k], (v) => (settings.passes[k] = v)) }));
-  const passes = el("fieldset", { className: "recon-passes" }, el("legend", { textContent: "Passes, in order" }), ...passChecks.map((p) => p.label));
-  const signRow = el("div", { className: "import-options" }, flip.label);
-
-  // results and explain
-  const result = el("div", { className: "recon-result" });
-  const why = el("div", { className: "recon-why" });
-  body.append(h, intro, mapTable, opts, signRow, passes, result, why);
-
-  const syncInputs = () => {
-    tolAbs.input.value = String(settings.amountTolerance);
-    tolPct.input.value = String(settings.amountTolerancePct);
-    win.input.value = settings.dateWindow === null ? "" : String(settings.dateWindow);
-    flip.box.checked = settings.flipB;
-    for (const p of passChecks) p.box.checked = settings.passes[p.k];
+  const rulesStep = () => {
+    const tol = field("Amount tolerance", numInput(String(settings.amountTolerance), (v) => (settings.amountTolerance = Math.max(0, Number(v) || 0)), "Amount tolerance"), "Amounts this close still match, e.g. 0.01 for rounding");
+    const win = field(
+      "Date window (± days)",
+      numInput(settings.dateWindow === null ? "" : String(settings.dateWindow), (v) => (settings.dateWindow = v === "" || Number.isNaN(Number(v)) ? null : Math.max(0, Math.floor(Number(v)))), "Date window in days"),
+      "Bank dates usually lag by a few days. Leave blank to ignore dates",
+    );
+    const flip = check(`${wb.get(st.idB).name} shows amounts with the opposite sign`, () => settings.flipB, (v) => (settings.flipB = v), "Tick when the bank shows your payments as positive and receipts as negative");
+    const passes = el("div", { className: "rc-passes" });
+    const PASSES: Array<[keyof RecSettings["passes"], string, string]> = [
+      ["exact", "Same reference and amount", "The strictest test, run first"],
+      ["tolerance", "Same reference, amount within tolerance", "Catches rounding and small fees"],
+      ["reference", "Same reference after tidying it", "Ignores case, spaces, punctuation, leading zeros and prefixes like INV or REF"],
+      ["fuzzy", "Similar description", `Descriptions at least ${Math.round(settings.fuzzyThreshold * 100)}% alike`],
+      ["amountDate", "Same amount and date", "For lines without a usable reference"],
+      ["sum", "Split payments", `One line equals the sum of up to ${settings.sumMaxItems} lines on the other side`],
+    ];
+    PASSES.forEach(([k, label, hint], i) => passes.append(el("div", { className: "rc-pass-row" }, el("span", { className: "rc-pass__n", textContent: String(i + 1) }), check(label, () => settings.passes[k], (v) => (settings.passes[k] = v), hint))));
+    const adv = el(
+      "details",
+      { className: "tk-details" },
+      el("summary", { textContent: "Advanced" }),
+      el(
+        "div",
+        { className: "tk-grid" },
+        field("Or a percentage of the amount", numInput(String(settings.amountTolerancePct), (v) => (settings.amountTolerancePct = Math.max(0, Number(v) || 0)), "Percent tolerance"), "The larger tolerance applies"),
+        field("Description match (%)", numInput(String(Math.round(settings.fuzzyThreshold * 100)), (v) => (settings.fuzzyThreshold = Math.min(100, Math.max(1, Number(v) || 85)) / 100), "Description match percent"), "For the similar-description pass"),
+        field("Split payment: up to N lines", numInput(String(settings.sumMaxItems), (v) => (settings.sumMaxItems = Math.min(6, Math.max(2, Math.floor(Number(v)) || 3))), "Most lines in a split payment"), "2 to 6; more is slower"),
+      ),
+    );
+    return el(
+      "div",
+      { className: "rc-rules" },
+      el("p", { className: "tk-lead", textContent: `Matching runs in passes, strictest first. Each pass only looks at the lines the earlier passes left, so a strict match always wins over a loose one.` }),
+      el("div", { className: "tk-grid rc-tols" }, tol, win),
+      flip,
+      section("Passes, in order", passes),
+      adv,
+    );
   };
 
-  const actions = el("div", { className: "numfmt-actions" });
-  actions.innerHTML = `<button type="button" data-act="cancel">Close</button><button type="button" data-act="match">Match</button><button type="button" data-act="add" disabled>Add result sheets</button>`;
-  body.append(actions);
-  const addBtn = actions.querySelector<HTMLButtonElement>("[data-act=add]")!;
-
-  function stale() {
-    if (!last) return;
-    last = null;
-    addBtn.disabled = true;
-    result.replaceChildren(el("p", { className: "hp-muted", textContent: "Settings changed: press Match again." }));
-    why.replaceChildren();
-  }
+  const render = () => {
+    const stepper = steps(["Choose the two sides", "Matching rules", "Results"], step, (i) => go(i));
+    const content = step === 0 ? el("div", { className: "rc-sides" }, sideCard("A"), el("div", { className: "rc-vs", textContent: "⇄" }), sideCard("B")) : rulesStep();
+    dlg.body.replaceChildren(stepper, content);
+    backBtn.style.display = step === 0 ? "none" : "";
+    nextBtn.style.display = step !== 0 ? "none" : "";
+    matchBtn.style.display = step !== 1 ? "none" : "";
+    (step === 0 ? nextBtn : matchBtn).focus({ preventScroll: true });
+  };
 
   const runMatch = () => {
-    if (idA === idB) {
-      result.replaceChildren(el("p", { className: "cleanup-warn", textContent: "Pick two different sheets." }));
-      return;
-    }
-    for (const [map, side] of [
-      [mapA, "A"],
-      [mapB, "B"],
-    ] as const) {
-      if (map.key < 0 && map.amount < 0 && map.text < 0) {
-        result.replaceChildren(el("p", { className: "cleanup-warn", textContent: `Side ${side} needs at least a reference, an amount or a description column.` }));
-        return;
-      }
-    }
-    d.status("Reconciling…");
+    const p = sideProblem();
+    if (p) throw new Error(p);
     const t0 = performance.now();
-    const sa = readSide(wb.get(idA).source, mapA);
-    const sb = readSide(wb.get(idB).source, mapB);
+    const sa = readSide(wb.get(st.idA).source, st.mapA);
+    const sb = readSide(wb.get(st.idB).source, st.mapB);
+    if (!sa.records.length || !sb.records.length) throw new Error(`${!sa.records.length ? wb.get(st.idA).name : wb.get(st.idB).name} has no rows to match in the chosen columns.`);
     const r = reconcile(sa.records, sb.records, settings);
-    const ms = performance.now() - t0;
-    last = { r, a: sa.records, b: sb.records };
-    d.status("Ready");
-    renderSummary(r, sa.bad + sb.bad, ms);
-    renderWhy();
-    addBtn.disabled = false;
+    st.last = { r, a: sa.records, b: sb.records, bad: sa.bad + sb.bad, ms: performance.now() - t0 };
+    st.added = false;
+    dlg.close();
+    showResults(d, st);
   };
 
-  const renderSummary = (r: RecResult, bad: number, ms: number) => {
-    const s = r.summary;
-    const nameA = wb.get(idA).name;
-    const nameB = wb.get(idB).name;
-    const p = (t: string, cls?: string) => el("p", { textContent: t, className: cls ?? "" });
-    const table = el("table", { className: "cleanup-cols" });
-    table.append(el("tr", {}, el("th", { textContent: "Result" }), el("th", { textContent: `A (${nameA})` }), el("th", { textContent: `B (${nameB})` }), el("th", { textContent: "Groups" })));
-    const row = (label: string, a: string, b: string, n: string, cls = "") => {
-      const tr = el("tr", { className: cls }, el("td", { textContent: label }), el("td", { textContent: a }), el("td", { textContent: b }), el("td", { textContent: n }));
-      table.append(tr);
-    };
-    for (const rule of Object.keys(RULE_LABEL) as RecRule[]) {
-      const groups = r.matches.filter((m) => m.rule === rule);
-      if (!groups.length) continue;
-      row(RULE_LABEL[rule], groups.reduce((t, g) => t + g.a.length, 0).toLocaleString(), groups.reduce((t, g) => t + g.b.length, 0).toLocaleString(), groups.length.toLocaleString());
-    }
-    row("Mismatched (same reference, amount or date off)", s.mismatched.toLocaleString(), s.mismatched.toLocaleString(), "", s.mismatched ? "recon-warn-row" : "");
-    row("Unmatched", s.unmatchedA.toLocaleString(), s.unmatchedB.toLocaleString(), "", s.unmatchedA || s.unmatchedB ? "recon-warn-row" : "");
-    row("Unmatched total", money(s.unmatchedTotalA), money(s.unmatchedTotalB), "");
-    row("Duplicates within the side (groups)", s.duplicatesA.toLocaleString(), s.duplicatesB.toLocaleString(), "");
-    const wrap = el("div", { className: "import-preview" }, table);
-    const kids: Node[] = [
-      p(`${pct(s.matchRate)} matched: ${s.matchedA.toLocaleString()} of ${s.countA.toLocaleString()} in A, ${s.matchedB.toLocaleString()} of ${s.countB.toLocaleString()} in B (${Math.round(ms).toLocaleString()} ms).`),
-      wrap,
-    ];
-    if (r.flags.length) kids.push(p(`${r.flags.length.toLocaleString()} possible keying error${r.flags.length === 1 ? "" : "s"} (swapped digits, a slipped digit, a misplaced decimal point, a flipped sign); see the Note columns.`, "cleanup-warn"));
-    if (r.sumCapped.length || r.sumBudgetExhausted)
-      kids.push(p(`The sum search stopped early${r.sumCapped.length ? ` for ${r.sumCapped.length.toLocaleString()} item${r.sumCapped.length === 1 ? "" : "s"}` : ""}${r.sumBudgetExhausted ? " and ran out of time for the rest" : ""}: a sum match may still exist. Fewer items per sum or a narrower date window helps.`, "cleanup-warn"));
-    if (bad) kids.push(p(`${bad.toLocaleString()} value${bad === 1 ? "" : "s"} couldn't be read as an amount or a date and were left blank.`, "cleanup-warn"));
-    result.replaceChildren(...kids);
-  };
+  render();
+}
 
-  // "Why don't these match?"
-  const renderWhy = () => {
-    const rowA = el("input", { type: "text", inputMode: "numeric", placeholder: "row" });
-    const rowB = el("input", { type: "text", inputMode: "numeric", placeholder: "row" });
-    rowA.setAttribute("aria-label", "Row in side A");
-    rowB.setAttribute("aria-label", "Row in side B");
-    rowA.value = whyRows.a;
-    rowB.value = whyRows.b;
-    rowA.addEventListener("input", () => (whyRows.a = rowA.value.trim()));
-    rowB.addEventListener("input", () => (whyRows.b = rowB.value.trim()));
-    const go = el("button", { type: "button", textContent: "Explain" });
-    const out = el("div", { className: "recon-why-out" });
-    const find = (recs: RecRecord[], v: string) => recs.find((x) => x.row === Number(v));
-    go.addEventListener("click", () => {
-      if (!last) return;
-      const a = find(last.a, rowA.value);
-      const b = find(last.b, rowB.value);
-      if (!a || !b) {
-        out.replaceChildren(el("p", { className: "cleanup-warn", textContent: `There's no data in ${!a ? `A row ${rowA.value || "?"}` : `B row ${rowB.value || "?"}`}.` }));
-        return;
-      }
-      const e = explain(a, b, settings);
-      const kids: Node[] = [];
-      kids.push(el("p", { textContent: e.rule ? `These match by: ${RULE_LABEL[e.rule]}.` : "These don't match with the current settings." }));
-      if (e.reasons.length) kids.push(el("ul", {}, ...e.reasons.map((r) => el("li", { textContent: r.text }))));
-      if (e.normalised && e.normalised[0] !== e.normalised[1]) kids.push(el("p", { className: "hp-muted", textContent: `Normalised references: ${e.normalised[0] || "(empty)"} / ${e.normalised[1] || "(empty)"}` }));
-      if (e.suggestion) {
-        const apply = el("button", { type: "button", textContent: "Apply and match again" });
-        apply.addEventListener("click", () => {
-          const sg = e.suggestion!.settings;
-          Object.assign(settings, { ...sg, passes: { ...settings.passes, ...sg.passes } });
-          syncInputs();
-          runMatch();
+const ROLE_SHORT: Record<ReconRole, string> = { key: "Reference", amount: "Amount", minus: "Credit", date: "Date", text: "Description" };
+
+const TABLE_CAP = 1000;
+
+interface ItemRow {
+  i: number;
+  row: number;
+  date?: number;
+  key: string;
+  text: string;
+  amount?: number;
+  note: string;
+}
+
+function showResults(d: ReconDeps, st: ReconState): void {
+  const wb = d.workbook();
+  if (!st.last || !wb.has(st.idA) || !wb.has(st.idB)) return;
+  const { r, a, b } = st.last;
+  const nameA = wb.get(st.idA).name;
+  const nameB = wb.get(st.idB).name;
+  const goTo = navigator(d.goTo);
+  const notesOf = notes(r, a, b);
+  const s = r.summary;
+
+  openSidePanel({ minWidth: 560,
+    id: "recon",
+    title: "Reconciliation",
+    subtitle: `${nameA} ⇄ ${nameB}`,
+    render: (p) => {
+      const whyA = el("input", { type: "text", inputMode: "numeric", placeholder: "Row", value: st.why.a });
+      const whyB = el("input", { type: "text", inputMode: "numeric", placeholder: "Row", value: st.why.b });
+      const show = (sheetId: string, map: ReconMap, row: number) => goTo?.(sheetId, row - 1, Math.max(0, map.amount >= 0 ? map.amount : map.key));
+
+      const itemRows = (ids: number[], recs: RecRecord[], n: Map<number, string[]>): ItemRow[] =>
+        ids.slice(0, TABLE_CAP).map((i) => ({ i, row: recs[i].row, date: recs[i].date, key: recs[i].key ?? "", text: recs[i].text ?? "", amount: recs[i].amount, note: (n.get(i) ?? []).join("; ") }));
+      const capNote = (n: number) => (n > TABLE_CAP ? el("p", { className: "tk-muted", textContent: `Showing the first ${count(TABLE_CAP)} of ${count(n)}. Create the results sheets to see them all.` }) : null);
+      const itemTable = (side: "A" | "B", ids: number[]) => {
+        const recs = side === "A" ? a : b;
+        const sheetId = side === "A" ? st.idA : st.idB;
+        const map = side === "A" ? st.mapA : st.mapB;
+        const rows = itemRows(ids, recs, side === "A" ? notesOf.A : notesOf.B);
+        const total = ids.reduce((t, i) => t + (recs[i].amount ?? 0), 0);
+        const t = renderTable<ItemRow>({
+          columns: [
+            { key: "row", label: "Row", format: "integer", width: "4em" },
+            { key: "date", label: "Date", format: "date" },
+            { key: "amount", label: "Amount", format: "amount" },
+            { key: "key", label: "Reference" },
+            { key: "text", label: "Description" },
+            { key: "note", label: "Note" },
+          ],
+          rows,
+          onRowClick: (x) => {
+            (side === "A" ? whyA : whyB).value = String(x.row);
+            st.why[side === "A" ? "a" : "b"] = String(x.row);
+            show(sheetId, map, x.row);
+          },
+          empty: `Every line on ${side === "A" ? nameA : nameB} found a partner.`,
+          maxHeight: "46vh",
+          caption: `Unmatched on ${side === "A" ? nameA : nameB}`,
         });
-        kids.push(el("p", { className: "recon-suggest" }, `Suggestion: ${e.suggestion.text} `, apply));
-      }
-      out.replaceChildren(...kids);
-    });
-    why.replaceChildren(
-      el("h3", { textContent: "Why don't these match?" }),
-      el("div", { className: "import-options" }, el("label", {}, "A row", rowA), el("label", {}, "B row", rowB), go),
-      out,
-    );
-    if (whyRows.a && whyRows.b) go.click();
-  };
+        return el(
+          "div",
+          { className: "rc-tab" },
+          ids.length ? el("p", { className: "tk-muted", textContent: `${plural(ids.length, "line")} totalling ${money(total)} with no partner on ${side === "A" ? nameB : nameA}. Click a line to see it in the sheet.` }) : null,
+          t.element,
+          capNote(ids.length),
+        );
+      };
 
-  const addSheets = async () => {
-    if (!last) return;
-    const sheets = reconSheets(last.r, last.a, last.b);
-    back.remove();
-    for (const s of sheets) {
-      const source = new EditableSource(new Table(s.columns), 10);
-      await d.run({ type: "sheet.insert", params: { name: s.name, source: d.putBlob(source), numFmts: s.numFmts } });
-    }
-    const sm = last.r.summary;
-    d.status(`Reconciled: ${pct(sm.matchRate)} matched, ${sm.mismatched} mismatched, ${sm.unmatchedA} unmatched in A, ${sm.unmatchedB} in B`);
-    d.focusGrid();
-  };
+      const diffTable = () => {
+        type Row = { aRow: number; bRow: number; key: string; aAmt?: number; bAmt?: number; diff: number | null; days: number | null; note: string };
+        const rows: Row[] = r.mismatched.slice(0, TABLE_CAP).map((m) => {
+          const f = r.flags.find((x) => x.mismatched && x.a === m.a && x.b === m.b);
+          return { aRow: a[m.a].row, bRow: b[m.b].row, key: a[m.a].key ?? b[m.b].key ?? "", aAmt: a[m.a].amount, bAmt: b[m.b].amount, diff: Number.isFinite(m.amountDiff) ? m.amountDiff : null, days: m.days ?? null, note: f ? `possible keying error: amount ${KEYING_LABEL[f.kind]}` : "" };
+        });
+        const t = renderTable<Row>({
+          columns: [
+            { key: "key", label: "Reference" },
+            { key: "aRow", label: `${nameA} row`, format: "integer" },
+            { key: "aAmt", label: nameA, format: "amount" },
+            { key: "bRow", label: `${nameB} row`, format: "integer" },
+            { key: "bAmt", label: nameB, format: "amount" },
+            { key: "diff", label: "Difference", format: "amount" },
+            { key: "days", label: "Days apart", format: "integer" },
+            { key: "note", label: "Note" },
+          ],
+          rows,
+          onRowClick: (x) => {
+            whyA.value = st.why.a = String(x.aRow);
+            whyB.value = st.why.b = String(x.bRow);
+            show(st.idA, st.mapA, x.aRow);
+          },
+          empty: "No pairs with the same reference and a different amount or date.",
+          maxHeight: "46vh",
+        });
+        return el("div", { className: "rc-tab" }, r.mismatched.length ? el("p", { className: "tk-muted", textContent: "Same reference on both sides, but the amount or the date is off. Usually a keying error, a fee or a part payment." }) : null, t.element, capNote(r.mismatched.length));
+      };
 
-  const close = () => {
-    back.remove();
-    d.focusGrid();
-  };
-  actions.addEventListener("click", (e) => {
-    const act = (e.target as HTMLElement).closest("button")?.dataset.act;
-    if (act === "cancel") close();
-    else if (act === "match") runMatch();
-    else if (act === "add") void addSheets();
+      const dupTable = () => {
+        type Row = { side: string; rows: string; key: string; amount?: number; date?: number; first: number; sideId: "A" | "B" };
+        const rows: Row[] = r.duplicates.slice(0, TABLE_CAP).map((g) => {
+          const recs = g.side === "A" ? a : b;
+          const one = recs[g.items[0]];
+          return { side: g.side === "A" ? nameA : nameB, rows: g.items.map((i) => recs[i].row).join(", "), key: one.key ?? one.text ?? "", amount: one.amount, date: one.date, first: one.row, sideId: g.side };
+        });
+        const t = renderTable<Row>({
+          columns: [
+            { key: "side", label: "Sheet" },
+            { key: "rows", label: "Rows" },
+            { key: "date", label: "Date", format: "date" },
+            { key: "key", label: "Reference" },
+            { key: "amount", label: "Amount", format: "amount" },
+          ],
+          rows,
+          onRowClick: (x) => show(x.sideId === "A" ? st.idA : st.idB, x.sideId === "A" ? st.mapA : st.mapB, x.first),
+          empty: "No line appears twice on either side.",
+          maxHeight: "46vh",
+        });
+        return el("div", { className: "rc-tab" }, r.duplicates.length ? el("p", { className: "tk-muted", textContent: "Lines that appear more than once on the same side: a double posting or a payment made twice. Check them before clearing anything." }) : null, t.element);
+      };
+
+      const matchedTable = () => {
+        type Row = { group: number; rule: string; aRows: string; bRows: string; amount?: number; diff: number; first: number };
+        const rows: Row[] = r.matches.slice(0, TABLE_CAP).map((g, n) => ({
+          group: n + 1,
+          rule: RULE_LABEL[g.rule] + (g.score !== undefined ? ` (${Math.round(g.score * 100)}%)` : ""),
+          aRows: g.a.map((i) => a[i].row).join(", "),
+          bRows: g.b.map((j) => b[j].row).join(", "),
+          amount: g.a.reduce((t, i) => t + (a[i].amount ?? 0), 0),
+          diff: g.amountDiff,
+          first: a[g.a[0]]?.row ?? 1,
+        }));
+        const t = renderTable<Row>({
+          columns: [
+            { key: "aRows", label: `${nameA} rows` },
+            { key: "bRows", label: `${nameB} rows` },
+            { key: "amount", label: "Amount", format: "amount" },
+            { key: "diff", label: "Difference", format: (v) => (v ? money(v as number) : "") , align: "right" },
+            { key: "rule", label: "Matched by" },
+          ],
+          rows,
+          onRowClick: (x) => show(st.idA, st.mapA, x.first),
+          empty: "Nothing matched. Check the columns in step 1, or loosen the rules in step 2.",
+          maxHeight: "46vh",
+        });
+        const byRule = (Object.keys(RULE_LABEL) as RecRule[]).filter((k) => s.byRule[k]).map((k) => `${RULE_LABEL[k]}: ${count(s.byRule[k])}`);
+        return el("div", { className: "rc-tab" }, byRule.length ? el("p", { className: "tk-muted", textContent: byRule.join(" · ") }) : null, t.element, capNote(r.matches.length));
+      };
+
+      const dupCount = s.duplicatesA + s.duplicatesB;
+      const tabList = [
+        { id: "a", label: `Only in ${nameA}`, count: s.unmatchedA, tone: "unmatched" as const, render: () => itemTable("A", r.unmatchedA) },
+        { id: "b", label: `Only in ${nameB}`, count: s.unmatchedB, tone: "unmatched" as const, render: () => itemTable("B", r.unmatchedB) },
+        { id: "diff", label: "Differences", count: s.mismatched, tone: "mismatch" as const, render: diffTable },
+        { id: "dup", label: "Duplicates", count: dupCount, tone: "mismatch" as const, render: dupTable },
+        { id: "matched", label: "Matched", count: r.matches.length, tone: "match" as const, render: matchedTable },
+      ];
+      const firstIssue = tabList.find((t) => t.id !== "matched" && t.count)?.id ?? "matched";
+      const tb = tabs(tabList, firstIssue);
+
+      // the headline: share matched, then what's left on each side
+      const matchedLines = s.matchedA + s.matchedB;
+      const allLines = s.countA + s.countB;
+      const exceptions = s.unmatchedA + s.unmatchedB + s.mismatched;
+      const caption = !exceptions
+        ? `Everything matched. ${nameA} and ${nameB} agree line for line.`
+        : `${plural(s.unmatchedA, "line")} left in ${nameA} and ${plural(s.unmatchedB, "line")} in ${nameB}${s.mismatched ? `; ${plural(s.mismatched, "pair")} with the same reference but a different amount or date` : ""}.`;
+      const head = headline({
+        value: (Math.floor(s.matchRate * 1000) / 10).toFixed(1),
+        unit: "% matched",
+        progress: s.matchRate,
+        tone: exceptions ? "accent" : "match",
+        caption,
+        lines: [
+          { label: "Matched lines", value: `${count(matchedLines)} of ${count(allLines)}`, tone: "match", onClick: () => tb.select("matched") },
+          { label: `Only in ${nameA}`, value: s.unmatchedA ? `${count(s.unmatchedA)} · ${money(s.unmatchedTotalA)}` : "None", tone: s.unmatchedA ? "unmatched" : undefined, onClick: () => tb.select("a") },
+          { label: `Only in ${nameB}`, value: s.unmatchedB ? `${count(s.unmatchedB)} · ${money(s.unmatchedTotalB)}` : "None", tone: s.unmatchedB ? "unmatched" : undefined, onClick: () => tb.select("b") },
+          { label: "Amount or date differs", value: s.mismatched ? count(s.mismatched) : "None", tone: s.mismatched ? "mismatch" : undefined, onClick: () => tb.select("diff") },
+          { label: "Possible duplicates", value: dupCount ? `${count(dupCount)} group${dupCount === 1 ? "" : "s"}` : "None", tone: dupCount ? "mismatch" : undefined, onClick: () => tb.select("dup") },
+        ],
+      });
+
+      const warnings: HTMLElement[] = [];
+      if (r.flags.length) warnings.push(notice(`${plural(r.flags.length, "possible keying error")} (swapped digits, a slipped digit, a misplaced decimal point or a flipped sign). See the Note column.`, "warning"));
+      if (r.sumCapped.length || r.sumBudgetExhausted)
+        warnings.push(notice(`The split-payment search stopped early${r.sumCapped.length ? ` for ${plural(r.sumCapped.length, "line")}` : ""}${r.sumBudgetExhausted ? " and ran out of time for the rest" : ""}, so a split match may still exist. Fewer lines per split or a narrower date window helps.`, "warning"));
+      if (st.last!.bad) warnings.push(notice(`${plural(st.last!.bad, "value")} couldn't be read as an amount or a date and ${st.last!.bad === 1 ? "was" : "were"} left blank. Check the columns in step 1.`, "warning"));
+
+      // why don't these match?
+      whyA.setAttribute("aria-label", `Row in ${nameA}`);
+      whyB.setAttribute("aria-label", `Row in ${nameB}`);
+      whyA.addEventListener("input", () => (st.why.a = whyA.value.trim()));
+      whyB.addEventListener("input", () => (st.why.b = whyB.value.trim()));
+      const out = el("div", { className: "rc-why-out" });
+      out.setAttribute("aria-live", "polite");
+      const explainPair = () => {
+        const ra = a.find((x) => x.row === Number(whyA.value));
+        const rb = b.find((x) => x.row === Number(whyB.value));
+        if (!ra || !rb) {
+          out.replaceChildren(notice(`There's no data in ${!ra ? `${nameA} row ${whyA.value || "?"}` : `${nameB} row ${whyB.value || "?"}`}.`, "warning"));
+          return;
+        }
+        const e = explain(ra, rb, st.settings);
+        const kids: Node[] = [notice(e.rule ? `These match by: ${RULE_LABEL[e.rule]}.` : "These don't match with the current rules.", e.rule ? "success" : "info")];
+        if (e.reasons.length) kids.push(el("ul", { className: "rc-reasons" }, ...e.reasons.map((x) => el("li", { textContent: x.text }))));
+        if (e.normalised && e.normalised[0] !== e.normalised[1]) kids.push(el("p", { className: "tk-muted", textContent: `Tidied references: ${e.normalised[0] || "(empty)"} / ${e.normalised[1] || "(empty)"}` }));
+        if (e.suggestion) {
+          const sg = e.suggestion;
+          kids.push(
+            el(
+              "div",
+              { className: "rc-suggest" },
+              el("span", { textContent: `Suggestion: ${sg.text}` }),
+              button("Apply and match again", () => {
+                Object.assign(st.settings, { ...sg.settings, passes: { ...st.settings.passes, ...sg.settings.passes } });
+                const ra2 = readSide(wb.get(st.idA).source, st.mapA);
+                const rb2 = readSide(wb.get(st.idB).source, st.mapB);
+                const t0 = performance.now();
+                st.last = { r: reconcile(ra2.records, rb2.records, st.settings), a: ra2.records, b: rb2.records, bad: ra2.bad + rb2.bad, ms: performance.now() - t0 };
+                st.added = false;
+                showResults(d, st);
+              }, "secondary"),
+            ),
+          );
+        }
+        out.replaceChildren(...kids);
+      };
+      const whyBox = section(
+        "Why don't these match?",
+        el("p", { className: "tk-muted", textContent: "Click a line in each list (or type the row numbers) to see which rule stops them matching." }),
+        el("div", { className: "rc-why" }, field(nameA, whyA), field(nameB, whyB), button("Explain", explainPair, "secondary")),
+        out,
+      );
+      if (st.why.a && st.why.b) explainPair();
+
+      p.body.append(head, ...warnings, tb.element, whyBox);
+
+      const edit = button("Edit setup", () => openSetup(d, st, 0), "secondary");
+      edit.classList.add("tk-spacer");
+      const create = button(st.added ? "Results sheets added" : "Create results sheets", async () => {
+        if (!st.last) return;
+        create.disabled = true;
+        const sheets = reconSheets(st.last.r, st.last.a, st.last.b);
+        for (const sh of sheets) {
+          const source = new EditableSource(new Table(sh.columns), 10);
+          await d.run({ type: "sheet.insert", params: { name: sh.name, source: d.putBlob(source), numFmts: sh.numFmts } });
+        }
+        st.added = true;
+        create.textContent = "Results sheets added";
+        report(d.status, `Added ${sheets.length} results sheets: ${sheets.map((x) => x.name).join(", ")}`);
+      }, "primary");
+      create.disabled = st.added;
+      p.footer.append(el("div", { className: "tk-panel-actions" }, edit, create));
+    },
   });
-  back.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") close();
-  });
-  renderMap();
-  document.body.append(back);
-  actions.querySelector<HTMLButtonElement>("[data-act=match]")!.focus();
 }

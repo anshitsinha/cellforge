@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Table, type ColumnData } from "@cellforge/core";
 import { reconcile } from "@cellforge/core";
 import { EditableSource } from "./editable";
-import { guessMap, readSide, reconSheets, sheetHeader } from "./recondialog";
+import { guessMap, pickSides, readSide, reconSheets, sheetHeader } from "./recondialog";
 
 const str = (name: string, values: string[]): ColumnData => {
   const dict = [...new Set(values.filter(Boolean))];
@@ -61,5 +61,25 @@ describe("reconcile dialog helpers", () => {
     expect(rows(col(3, "Difference"))).toEqual([-9]);
     const note = col(3, "Note");
     expect(note.kind === "string" && note.dict[note.codes[0] - 1]).toContain("two digits swapped");
+  });
+});
+
+describe("picking the two sides", () => {
+  const sheets = [
+    { id: "s", name: "Start here", amounts: false },
+    { id: "c", name: "Cash book", amounts: true },
+    { id: "b", name: "Bank statement", amounts: true },
+    { id: "o", name: "Outstanding", amounts: true },
+  ];
+  it("skips sheets without amounts and puts the bank on side B", () => {
+    expect(pickSides(sheets, "s")).toEqual(["c", "b"]);
+    expect(pickSides(sheets, "b")).toEqual(["c", "b"]);
+  });
+  it("keeps the sheet on screen as side A when it has amounts", () => {
+    expect(pickSides(sheets, "o")).toEqual(["o", "b"]);
+    expect(pickSides([{ id: "1", name: "Sheet1", amounts: true }, { id: "2", name: "Sheet2", amounts: true }], "2")).toEqual(["2", "1"]);
+  });
+  it("falls back on the order when nothing has amounts", () => {
+    expect(pickSides([{ id: "1", name: "Sheet1", amounts: false }, { id: "2", name: "Sheet2", amounts: false }], "1")).toEqual(["1", "2"]);
   });
 });

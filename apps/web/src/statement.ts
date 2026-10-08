@@ -6,6 +6,7 @@ import type { Action } from "@cellforge/actions";
 import { formatValue, pageLines, parseStatement, previewCsv, readPdfText, rowsToLines, Table, type ColumnData, type Statement, type StatementLine } from "@cellforge/core";
 import { EditableSource } from "./editable";
 import { noteFileRead } from "./evidence";
+import { headline, report, toolDialog } from "./toolkit";
 
 export async function statementLines(file: File): Promise<StatementLine[]> {
   noteFileRead(file, "statement");
@@ -85,13 +86,21 @@ export async function importStatement(file: File, d: StatementDeps): Promise<voi
 }
 
 export function showStatement(fileName: string, s: Statement, d: StatementDeps): void {
-  const back = document.createElement("div");
-  back.className = "palette-backdrop";
-  back.innerHTML = `<div class="palette import-dialog" role="dialog" aria-label="Bank statement"><div class="palette-form"></div></div>`;
-  const body = back.querySelector<HTMLElement>(".palette-form")!;
-  const h = document.createElement("h3");
-  h.textContent = `Bank statement: ${fileName}`;
-  body.append(h);
+  const dlg = toolDialog({ title: "Import a bank statement", subtitle: fileName, size: "lg", closeLabel: "Cancel", className: "tk-legacy", onClose: () => d.focusGrid() });
+  const body = dlg.body;
+  if (s.transactions.length)
+    body.append(
+      headline({
+        value: s.transactions.length.toLocaleString(),
+        unit: "transactions",
+        tone: s.breaks || s.closingMatches === false ? "mismatch" : "match",
+        lines: [
+          { label: "Opening balance", value: s.opening === null ? "Not shown" : money(s.opening) },
+          { label: "Closing balance", value: s.closing === null ? "Not shown" : money(s.closing) },
+          { label: "Balance breaks", value: s.breaks ? String(s.breaks) : "None", tone: s.breaks ? "mismatch" : undefined },
+        ],
+      }),
+    );
   const p = (text: string, cls?: string) => {
     const el = document.createElement("p");
     el.textContent = text;
@@ -112,7 +121,7 @@ export function showStatement(fileName: string, s: Statement, d: StatementDeps):
     if (undated) p(`${undated} date${undated === 1 ? "" : "s"} couldn't be read; the text is kept in "Date as printed".`, "cleanup-warn");
 
     const table = document.createElement("table");
-    table.className = "cleanup-cols";
+    table.className = "data-table";
     table.innerHTML = "<tr><th>Page</th><th>Opening</th><th>Closing</th><th>Transactions</th><th>Breaks</th></tr>";
     for (const pg of s.pages) {
       const tr = document.createElement("tr");
@@ -130,33 +139,14 @@ export function showStatement(fileName: string, s: Statement, d: StatementDeps):
     body.append(wrap);
     p(`Dates read ${s.dateOrder === "mdy" ? "month first" : "day first"}; dates without a year take it from the statement.`, "hp-muted");
   }
-  const actions = document.createElement("div");
-  actions.className = "numfmt-actions";
-  actions.innerHTML = `<button type="button" data-act="cancel">Cancel</button>` + (s.transactions.length ? `<button type="button" data-act="ok">Add the transactions</button>` : "");
-  body.append(actions);
-  const close = () => {
-    back.remove();
-    d.focusGrid();
-  };
-  actions.addEventListener("click", (e) => {
-    const act = (e.target as HTMLElement).closest("button")?.dataset.act;
-    if (act === "cancel") close();
-    else if (act === "ok") {
-      back.remove();
+  if (s.transactions.length)
+    dlg.button("Add the transactions", () => {
+      dlg.close();
       const { columns, numFmts } = statementColumns(s);
       const source = new EditableSource(new Table(columns), 10);
       const name = fileName.replace(/\.[^.]+$/, "").slice(0, 31) || "Statement";
-      void d.run({ type: "sheet.insert", params: { name, source: d.putBlob(source), numFmts, origin: `Bank statement read from ${fileName} (the Page column says which page)` } }).then(() => {
-        d.status(`Added ${s.transactions.length} transactions from ${fileName}`);
-        d.focusGrid();
-      });
-    }
-  });
-  back.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") close();
-  });
-  document.body.append(back);
-  (actions.querySelector<HTMLButtonElement>("[data-act=ok]") ?? actions.querySelector<HTMLButtonElement>("button"))!.focus();
+      void d.run({ type: "sheet.insert", params: { name, source: d.putBlob(source), numFmts, origin: `Bank statement read from ${fileName} (the Page column says which page)` } }).then(() => report(d.status, `Added ${s.transactions.length} transactions from ${fileName}`));
+    }, { kind: "primary" }).focus();
 }
 
 /** Ask for a statement file. */

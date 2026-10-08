@@ -170,3 +170,13 @@ describe("safe copy", () => {
     expect(h[0]).toHaveLength(6);
   });
 });
+
+describe("default approval limits", () => {
+  it("starts at the three round limits nearest the largest amount", async () => {
+    const { defaultLimits } = await import("./jetools");
+    expect(defaultLimits([120, -48000, 9000])).toEqual([5000, 10000, 25000]);
+    expect(defaultLimits([1_200_000, 5])).toEqual([250000, 500000, 1000000]);
+    expect(defaultLimits([])).toEqual([10000]);
+    expect(defaultLimits([null, 500])).toEqual([10000]);
+  });
+});

@@ -1,7 +1,11 @@
-/** The "Explain this number" panel: the lineage tree, jump-to, and a write-up to copy. */
+/** The "Explain this number" panel: the headline value, the lineage tree with links, and a write-up to copy. */
 import { explainFormula, type Model } from "@cellforge/ai";
 import { explainCell, writeUp, type LineageNode, type LineageOptions } from "./lineage";
 import type { Workbook } from "./workbook";
+import "./evidence.css";
+import { button, el, headline, navigator, notice, report, section } from "./toolkit";
+import { iconButton } from "./ui/icons";
+import { openSidePanel } from "./ui/sidepanel";
 
 export interface LineageDeps {
   workbook: () => Workbook;
@@ -14,77 +18,101 @@ export interface LineageDeps {
   model?: () => Model | null;
 }
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] {
-  const e = Object.assign(document.createElement(tag), props);
-  e.append(...kids);
-  return e;
-}
+const KIND: Record<LineageNode["kind"], string> = { formula: "Formula", typed: "Typed in", imported: "Imported", empty: "Empty", range: "Range", spill: "Part of a formula's result" };
 
-const KIND: Record<LineageNode["kind"], string> = { formula: "formula", typed: "typed in", imported: "imported", empty: "empty", range: "range", spill: "from a formula's result" };
+const when = (at: number) => new Date(at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 export function openLineage(d: LineageDeps): void {
-  document.querySelector(".lineage-panel")?.remove();
   const { row, col } = d.cell();
   const root = explainCell(d.workbook(), d.sheetId(), row, col, { lastEdit: d.lastEdit });
-  const panel = el("aside", { className: "recipe-panel lineage-panel" });
-  panel.setAttribute("aria-label", "Where this number came from");
-  const close = el("button", { type: "button", textContent: "×", title: "Close" });
-  close.setAttribute("aria-label", "Close");
-  close.addEventListener("click", () => panel.remove());
-  panel.append(el("div", { className: "recipe-head" }, el("strong", { textContent: `Where ${root.label} came from` }), close));
-
-  const node = (n: LineageNode): HTMLElement => {
-    const li = el("li");
-    const go = el("button", { type: "button", className: "hp-cell", textContent: n.label, title: "Show it in the sheet" });
-    go.addEventListener("click", () => d.goTo(n.sheetId, n.row, n.col));
-    const what = el("span", { className: "hp-muted", textContent: ` ${KIND[n.kind]}` });
-    const value = el("span", { className: "lineage-value", textContent: n.kind === "range" ? `${n.range!.cells.toLocaleString()} cells, total ${n.range!.total.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : n.value || "(empty)" });
-    li.append(go, " ", value, what);
-    if (n.formula) li.append(el("div", { className: "lineage-formula", textContent: n.formula }));
-    if (n.words) li.append(el("div", { className: "lineage-words", textContent: n.words }));
-    if (n.typed) li.append(el("div", { className: "hp-muted", textContent: `typed ${new Date(n.typed.at).toLocaleString()}` }));
-    if (n.origin) li.append(el("div", { className: "hp-muted", textContent: n.origin }));
-    if (n.provenance) li.append(el("div", { className: "hp-muted", textContent: `this row: ${n.provenance}` }));
-    if (n.repeat) li.append(el("div", { className: "hp-muted", textContent: "(explained above)" }));
-    if (n.children.length) {
-      const ul = el("ul", { className: "lineage-tree" });
-      for (const c of n.children) ul.append(node(c));
-      li.append(ul);
-    }
-    return li;
-  };
-  panel.append(el("ul", { className: "lineage-tree lineage-root" }, node(root)));
-
+  const goTo = navigator(d.goTo);
   const text = writeUp(root);
-  const copy = el("button", { type: "button", textContent: "Copy the write-up" });
-  copy.addEventListener("click", async () => {
+  const copy = async () => {
     try {
-      await navigator.clipboard.writeText(text);
-      d.status("Copied the explanation");
+      await globalThis.navigator.clipboard.writeText(text);
+      report(d.status, "Copied the explanation, ready to paste into your working papers");
     } catch {
-      d.status("Couldn't copy; select the text below instead.");
+      report(d.status, "Couldn't copy: select the write-up text instead.", "error");
     }
-  });
-  const actions = el("div", { className: "numfmt-actions" }, copy);
-  const model = d.model?.() ?? null;
-  const said = el("div", { className: "lineage-model" });
-  said.setAttribute("aria-live", "polite");
-  if (root.kind === "formula" && root.formula && root.words) {
-    const ask = el("button", { type: "button", textContent: model ? "Explain with the local model" : "Explain with the local model (set it up first: AI in the command palette)", disabled: !model });
-    ask.addEventListener("click", async () => {
-      ask.disabled = true;
-      said.textContent = "Asking the local model…";
-      const r = await explainFormula({ formula: root.formula!, words: root.words!, value: root.value, lineage: text }, model);
-      said.replaceChildren(
-        el("p", { textContent: r.value }),
-        el("div", { className: "hp-muted", textContent: r.by === "model" ? "Written by the local model; every figure and cell it mentions was checked against the formula and its inputs." : `The model's answer wasn't used (${r.rejected ?? "no answer"}); this is the plain reading.` }),
+  };
+
+  openSidePanel({
+    id: "explain",
+    title: "Explain this number",
+    subtitle: `Where ${root.label} comes from`,
+    tools: [iconButton("copy", "Copy the write-up", { onClick: () => void copy() })],
+    render: (p) => {
+      const node = (n: LineageNode, depth: number): HTMLElement => {
+        const li = el("li", { className: `ln-node ln-node--${n.kind}` });
+        const go = el("button", { type: "button", className: "ln-cell", textContent: n.label, title: goTo ? "Show it in the sheet" : "" });
+        go.disabled = !goTo;
+        go.addEventListener("click", () => goTo?.(n.sheetId, n.row, n.col));
+        const value = n.kind === "range" ? `${n.range!.cells.toLocaleString()} cells · total ${n.range!.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : n.value || "(empty)";
+        li.append(el("div", { className: "ln-row" }, go, el("span", { className: "ln-kind", textContent: KIND[n.kind] }), el("span", { className: "ln-value", textContent: value })));
+        if (n.words) li.append(el("div", { className: "ln-words", textContent: n.words }));
+        if (n.formula) li.append(el("code", { className: "ln-formula", textContent: n.formula }));
+        const meta: string[] = [];
+        if (n.typed) meta.push(`Typed ${when(n.typed.at)}`);
+        if (n.origin) meta.push(n.origin);
+        if (n.provenance) meta.push(`This row: ${n.provenance}`);
+        if (n.repeat) meta.push("Explained above");
+        if (meta.length) li.append(el("div", { className: "ln-meta", textContent: meta.join(" · ") }));
+        if (n.children.length && depth < 12) li.append(el("ul", { className: "ln-tree" }, ...n.children.map((c) => node(c, depth + 1))));
+        return li;
+      };
+
+      const sources = (() => {
+        let typed = 0;
+        let imported = 0;
+        let formulas = 0;
+        const walk = (n: LineageNode) => {
+          if (n.repeat) return;
+          if (n.kind === "typed") typed++;
+          else if (n.kind === "imported") imported++;
+          else if (n.kind === "formula") formulas++;
+          n.children.forEach(walk);
+        };
+        walk(root);
+        return [formulas ? `${formulas} formula${formulas === 1 ? "" : "s"}` : "", imported ? `${imported} imported value${imported === 1 ? "" : "s"}` : "", typed ? `${typed} typed-in value${typed === 1 ? "" : "s"}` : ""].filter(Boolean).join(", ");
+      })();
+
+      const caption =
+        root.kind === "formula"
+          ? `A formula${sources ? ` built from ${sources}` : ""}. Each step is below, in plain English.`
+          : root.kind === "typed"
+            ? `Typed in${root.typed ? ` on ${when(root.typed.at)}` : ""}. Nothing feeds it: it's an input.`
+            : root.kind === "imported"
+              ? `Imported${root.origin ? `: ${root.origin}` : ""}.`
+              : `${KIND[root.kind]}.`;
+      p.body.append(
+        headline({ value: root.value || "(empty)", unit: root.label, tone: "accent", caption }),
+        section("How it's built", el("ul", { className: "ln-tree ln-root" }, node(root, 0)), goTo ? el("p", { className: "tk-muted", textContent: "Click a cell to see it in the sheet." }) : null),
       );
-      ask.disabled = false;
-    });
-    actions.append(ask);
-  }
-  panel.append(actions, said, el("pre", { className: "lineage-writeup", textContent: text }));
-  panel.addEventListener("keydown", (e) => e.key === "Escape" && panel.remove());
-  document.body.append(panel);
-  copy.focus();
+
+      const model = d.model?.() ?? null;
+      if (root.kind === "formula" && root.formula && root.words) {
+        const said = el("div", { className: "ln-model" });
+        said.setAttribute("aria-live", "polite");
+        const ask = button(
+          model ? "Explain in plain English (local AI)" : "Explain with the local AI (set it up first: AI in the command palette)",
+          async () => {
+            ask.disabled = true;
+            said.replaceChildren(el("p", { className: "tk-muted", textContent: "Asking the local model…" }));
+            const r = await explainFormula({ formula: root.formula!, words: root.words!, value: root.value, lineage: text }, model);
+            said.replaceChildren(
+              el("p", { className: "tk-lead", textContent: r.value }),
+              r.by === "model" ? notice("Written by the local model. Every figure and cell it mentions was checked against the formula and its inputs.", "success") : notice(`The model's answer wasn't used (${r.rejected ?? "no answer"}), so this is the plain reading.`, "warning"),
+            );
+            ask.disabled = false;
+          },
+          "secondary",
+          "sparkles",
+        );
+        ask.disabled = !model;
+        p.body.append(section("In plain English", ask, said));
+      }
+      p.body.append(section("Write-up for the working papers", el("div", { className: "ln-writeup", textContent: text })));
+      p.footer.append(button("Copy the write-up", () => copy(), "primary", "copy"));
+    },
+  });
 }

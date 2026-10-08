@@ -44,6 +44,12 @@ describe("join dialog helpers", () => {
     expect(guessKeyPair(a, b)).toEqual([1, 0]);
   });
 
+  it("prefers a reference over dates and amounts that happen to overlap", () => {
+    const a = sheet(num("Date", [46000, 46001, 46002, 46003]), str("Reference", ["INV-1", "INV-2", "PAY-3", "PAY-4"]), num("Amount", [10.5, 20.25, 30.1, 40.75]));
+    const b = sheet(num("Date", [46000, 46001, 46002, 46003]), str("Reference", ["INV-1", "INV-2", "", "PAY-9"]), num("Amount", [10.5, 20.25, 30.1, 40.75]));
+    expect(guessKeyPair(a, b)).toEqual([1, 1]);
+  });
+
   it("joins two sheets, bringing the chosen columns and saying how each row matched", () => {
     const a = sheet(num("ID", [1, 2, 3]), str("Name", ["Acme", "Beta", "Gamma"]));
     const b = sheet(str("ID", ["001", "003", "003", "009"]), num("Amount", [10, 30, 31, 90]));

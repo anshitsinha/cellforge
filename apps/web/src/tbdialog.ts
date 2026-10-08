@@ -7,7 +7,7 @@ import type { Action } from "@cellforge/actions";
 import { buildTb, formatValue, readTb, Table, TB_ROLES, type ColumnData, type TbResult, type TbRole } from "@cellforge/core";
 import { namedHeader, sheetText } from "./cleanup";
 import { EditableSource } from "./editable";
-import { modal } from "./a11y";
+import { headline, report, toolDialog } from "./toolkit";
 
 export interface TbDeps {
   source: () => EditableSource;
@@ -68,20 +68,16 @@ export function openTbMapper(d: TbDeps): void {
   const read = readTb(sheetText(src));
   const roles = [...read.roles];
 
-  const back = document.createElement("div");
-  back.className = "palette-backdrop";
-  modal(back);
-  back.innerHTML = `<div class="palette import-dialog" role="dialog" aria-label="Trial balance"><div class="palette-form"></div></div>`;
-  const body = back.querySelector<HTMLElement>(".palette-form")!;
-  const h = document.createElement("h3");
-  h.textContent = "Map as a trial balance";
+  const dlg = toolDialog({ title: "Map as a trial balance", subtitle: "Make a standard TB sheet: code, name, current, prior and movement", size: "lg", closeLabel: "Cancel", className: "tk-legacy", onClose: () => d.focusGrid() });
+  const back = { remove: () => dlg.close() };
+  const body = dlg.body;
   const intro = document.createElement("p");
-  intro.className = "hp-muted";
+  intro.className = "tk-muted";
   intro.textContent = "Say what each column is; the guesses are filled in. Debits come out positive and credits negative.";
   const mapTable = document.createElement("table");
-  mapTable.className = "cleanup-cols";
+  mapTable.className = "data-table";
   const result = document.createElement("div");
-  body.append(h, intro, mapTable, result);
+  body.append(intro, mapTable, result);
 
   mapTable.innerHTML = "<tr><th>Column</th><th>Is</th><th>First values</th></tr>";
   read.header.forEach((name, c) => {
@@ -130,7 +126,7 @@ export function openTbMapper(d: TbDeps): void {
     tb = buildTb(read.rows, roles);
     okBtn.disabled = !tb.lines.length;
     p(`${tb.lines.length} accounts.` + (tb.skipped.length ? ` ${tb.skipped.length} rows left out (totals and headings).` : ""));
-    p(tb.balances ? "Debits equal credits." : `Doesn't balance: debits minus credits is ${money(tb.totalCurrent)}.`, tb.balances ? undefined : "cleanup-warn");
+    result.append(headline({ value: tb.balances ? "Balances" : money(tb.totalCurrent), unit: tb.balances ? `debits equal credits · ${tb.lines.length} accounts` : "debits minus credits", tone: tb.balances ? "match" : "mismatch" }));
     if (tb.priorBalances !== null) p(tb.priorBalances ? "Prior period balances too." : `Prior period doesn't balance: ${money(tb.totalPrior ?? 0)}.`, tb.priorBalances ? undefined : "cleanup-warn");
     if (tb.duplicates.length) p(`Account codes used more than once: ${tb.duplicates.slice(0, 8).join(", ")}${tb.duplicates.length > 8 ? "…" : ""}`, "cleanup-warn");
     if (tb.bad.length) {
@@ -151,37 +147,19 @@ export function openTbMapper(d: TbDeps): void {
     }
   };
 
-  const actions = document.createElement("div");
-  actions.className = "numfmt-actions";
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.textContent = "Cancel";
-  okBtn.type = "button";
-  okBtn.textContent = "Make the trial balance sheet";
-  actions.append(cancel, okBtn);
-  body.append(actions);
-  update();
-
-  const close = () => {
-    back.remove();
-    d.focusGrid();
-  };
-  cancel.addEventListener("click", close);
-  okBtn.addEventListener("click", () => {
+  okBtn.remove();
+  const make = dlg.button("Make the trial balance sheet", () => {
     if (!tb) return;
-    back.remove();
+    dlg.close();
     const { columns, numFmts } = tbColumns(tb);
     const source = new EditableSource(new Table(columns), 5);
     const name = `${d.sheetName()} TB`.slice(0, 31);
     const lines = tb.lines.length;
-    void d.run({ type: "sheet.insert", params: { name, source: d.putBlob(source), numFmts } }).then(() => {
-      d.status(`Trial balance: ${lines} accounts`);
-      d.focusGrid();
-    });
-  });
-  back.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") close();
-  });
-  document.body.append(back);
-  okBtn.focus();
+    void d.run({ type: "sheet.insert", params: { name, source: d.putBlob(source), numFmts } }).then(() => report(d.status, `Trial balance: ${lines} accounts`));
+  }, { kind: "primary" });
+  const sync = new MutationObserver(() => (make.disabled = okBtn.disabled));
+  sync.observe(okBtn, { attributes: true });
+  update();
+  make.disabled = okBtn.disabled;
+  make.focus();
 }

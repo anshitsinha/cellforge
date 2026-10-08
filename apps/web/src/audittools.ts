@@ -28,7 +28,10 @@ import {
 import { namedHeader } from "./cleanup";
 import { EditableSource } from "./editable";
 import "./audittools.css";
-import { modal } from "./a11y";
+import { columnKind, defaultDuplicateKeys, firstOfKind, formatForKind, guessRoles, type ColumnKind, type ColumnSample } from "./colguess";
+import { activeSheetId, button, el, emptyState, field as tkField, headline, navigator, notice, report, section, type HeadlineOptions } from "./toolkit";
+import { openSidePanel } from "./ui/sidepanel";
+import { renderTable, type TableColumn } from "./ui/table";
 
 export type AuditToolKind = "duplicates" | "sequence" | "benford" | "stratify" | "topn" | "pareto" | "ageing" | "sample";
 
@@ -39,6 +42,10 @@ export interface AuditDeps {
   putBlob: (value: unknown) => string;
   status: (text: string) => void;
   focusGrid: () => void;
+  /** show a sheet row (makes result rows links); optional */
+  goTo?: (sheetId: string, row: number, col: number) => void;
+  /** the sheet on screen, for goTo; optional */
+  activeSheet?: () => string;
 }
 
 const MONEY = "#,##0.00;(#,##0.00)";
@@ -112,6 +119,22 @@ export function readSheet(src: EditableSource): SheetData {
   };
 }
 
+/** The columns as samples for colguess (header names without the "A: " prefix). */
+export function sheetSamples(data: SheetData, max = 300): ColumnSample[] {
+  return data.names.map((n, c) => ({ name: /^Column [A-Z]+$/.test(n) ? "" : n.replace(/^[A-Z]+: /, ""), values: data.col(c).slice(0, max), numFmt: data.numFmt(c) }));
+}
+
+const kinds = new WeakMap<SheetData, ColumnKind[]>();
+/** Each column's kind (cached per read). */
+export function columnKinds(data: SheetData): ColumnKind[] {
+  let k = kinds.get(data);
+  if (!k) {
+    k = sheetSamples(data).map(columnKind);
+    kinds.set(data, k);
+  }
+  return k;
+}
+
 /** Day-first unless some text date can only be month-first. */
 function guessDateOrder(values: AuditValue[]): DateOrder {
   let dmy = 0;
@@ -177,7 +200,11 @@ class Out {
 
 interface Preview {
   lines: { text: string; warn?: boolean }[];
+  /** the headline figure for the result */
+  headline?: HeadlineOptions;
   table?: string[][];
+  /** a formatted table whose rows can link to a sheet row (1-based, as shown) */
+  grid?: { columns: TableColumn<Record<string, unknown>>[]; rows: Record<string, unknown>[]; sheetRow?: (r: Record<string, unknown>) => number; empty?: string };
   chart?: SVGSVGElement;
   /** The sheets to add, or null when there's nothing to add. */
   sheets: { name: string; out: Out }[] | null;
@@ -193,36 +220,22 @@ interface Tool {
 
 // ------------------------------------------------------------- controls --
 
-function field(label: string, control: HTMLElement, hint?: string): HTMLLabelElement {
-  const l = document.createElement("label");
-  l.append(label, control);
-  if (hint) {
-    const s = document.createElement("small");
-    s.textContent = hint;
-    l.append(s);
-  }
-  return l;
-}
+const field = (label: string, control: HTMLElement, hint?: string): HTMLLabelElement => tkField(label, control, hint);
 
 function columnSelect(data: SheetData, opts: { none?: string; prefer?: "number" | "date" | "text"; skip?: number } = {}): HTMLSelectElement {
   const sel = document.createElement("select");
   if (opts.none) sel.append(new Option(opts.none, "-1"));
   data.names.forEach((n, c) => sel.append(new Option(n, String(c))));
   if (opts.prefer) {
-    const kindOf = (c: number) => {
-      const vals = data.col(c).slice(0, 200).filter((v) => v !== null);
-      if (!vals.length) return "empty";
-      const nums = vals.filter((v) => typeof v === "number").length / vals.length;
-      if (nums > 0.8) return /[dmy]/i.test(data.numFmt(c).replace(/"[^"]*"/g, "")) ? "date" : "number";
-      if (vals.filter((v) => typeof v === "string" && parseDateLoose(v) !== null).length / vals.length > 0.8) return "date";
-      return "text";
-    };
-    for (let c = 0; c < data.names.length; c++) {
-      if (c !== opts.skip && kindOf(c) === opts.prefer) {
-        sel.value = String(c);
-        break;
-      }
-    }
+    const samples = sheetSamples(data);
+    const roles = guessRoles(samples);
+    const kinds = columnKinds(data);
+    let pick = -1;
+    if (opts.prefer === "number") pick = roles.amount >= 0 ? roles.amount : firstOfKind(samples, ["amount", "number"]);
+    else if (opts.prefer === "date") pick = roles.date >= 0 ? roles.date : firstOfKind(samples, ["date"]);
+    else pick = roles.party >= 0 ? roles.party : roles.description >= 0 ? roles.description : kinds.findIndex((k) => k === "text");
+    if (pick === opts.skip) pick = -1;
+    if (pick >= 0) sel.value = String(pick);
   }
   return sel;
 }
@@ -254,7 +267,7 @@ function choice(options: [string, string][], value?: string): HTMLSelectElement 
 
 function checkbox(label: string, checked = false): { el: HTMLLabelElement; input: HTMLInputElement } {
   const el = document.createElement("label");
-  el.className = "audit-check";
+  el.className = "tk-check";
   const input = document.createElement("input");
   input.type = "checkbox";
   input.checked = checked;
@@ -279,15 +292,19 @@ const sheetRows = (data: SheetData, rows: number[], max = 12) => rows.slice(0, m
 
 function duplicatesTool(data: SheetData, sheet: string): Tool {
   const HOW: [string, string][] = [
-    ["exact", "Exactly the same"],
-    ["text", "Same text, ignoring case, spaces and punctuation"],
-    ["fuzzy", "Similar spelling (at least % alike)"],
-    ["number", "Numbers within"],
-    ["date", "Dates within (days)"],
+    ["exact", "Exactly"],
+    ["text", "Same text, any case"],
+    ["fuzzy", "Similar (% alike)"],
+    ["number", "Number within"],
+    ["date", "Date within (days)"],
   ];
+  const guess = defaultDuplicateKeys(sheetSamples(data));
   const keys = [0, 1, 2].map((i) => {
-    const col = columnSelect(data, i ? { none: "(not used)" } : {});
-    const how = choice(HOW, "exact");
+    const col = columnSelect(data, { none: "(not used)" });
+    col.value = String(guess[i]?.col ?? -1);
+    col.setAttribute("aria-label", `Key column ${i + 1}`);
+    const how = choice(HOW, guess[i]?.how === "text" ? "text" : "exact");
+    how.setAttribute("aria-label", `How key ${i + 1} must match`);
     const tol = numberInput("", { min: 0 });
     const row = document.createElement("div");
     row.className = "audit-key";
@@ -313,9 +330,10 @@ function duplicatesTool(data: SheetData, sheet: string): Tool {
   return {
     title: "Find duplicates",
     intro: "Rows count as duplicates when every key column matches. Blank keys are never duplicates. Near matches chain: if A is near B and B is near C, all three are one group.",
-    fields: [field("Key columns and how they must match", box, "For example: vendor exactly, amount exactly, invoice date within 7 days.")],
+    fields: [field("Key columns and how they must match", box, "Starts on the classic test: same vendor (or reference) and same amount. Add an invoice date within 7 days to catch re-keyed invoices.")],
     compute() {
       const used = keys.filter((k) => colOf(k.col) >= 0);
+      if (!used.length) return { lines: [{ text: "Pick at least one key column.", warn: true }], sheets: null, done: "" };
       const dk: DupKey[] = used.map((k) => {
         const values = data.col(colOf(k.col));
         const t = Number(k.tol.value) || 0;
@@ -337,7 +355,23 @@ function duplicatesTool(data: SheetData, sheet: string): Tool {
       if (!r.groups.length) lines.push({ text: `No duplicates in ${plural(data.rows, "row")}.` });
       else lines.push({ text: `${plural(r.groups.length, "group")} of duplicates, ${plural(r.flagged, "row")} in all.`, warn: true });
       if (r.blanks) lines.push({ text: `${plural(r.blanks, "row")} left out because a key is blank${used.some((k) => k.how.value === "number" || k.how.value === "date") ? " or not a number / date" : ""}.` });
-      const table = [["Key", "Rows", "Sheet rows"], ...r.groups.slice(0, 50).map((g) => [g.key, String(g.rows.length), sheetRows(data, g.rows)])];
+      const kinds = columnKinds(data);
+      const keyCols = used.map((k) => colOf(k.col));
+      const grid: Preview["grid"] = {
+        columns: [
+          ...keyCols.map((c) => ({ key: `k${c}`, label: label(data, c), format: formatForKind(kinds[c]) })),
+          { key: "n", label: "Rows", format: "integer" as const },
+          { key: "where", label: "Sheet rows" },
+        ],
+        rows: r.groups.slice(0, 500).map((g) => {
+          const row: Record<string, unknown> = { n: g.rows.length, where: sheetRows(data, g.rows, 6), first: data.sheetRow(g.rows[0]) };
+          for (const c of keyCols) row[`k${c}`] = data.col(c)[g.rows[0]];
+          return row;
+        }),
+        sheetRow: (x) => x.first as number,
+        empty: "No duplicates.",
+      };
+      const keyNames = keyCols.map((c) => label(data, c)).join(" + ");
       const rows: (number | null)[] = [];
       const group: (number | null)[] = [];
       r.groups.forEach((g, i) => {
@@ -353,9 +387,16 @@ function duplicatesTool(data: SheetData, sheet: string): Tool {
           rows.map((x) => data.sheetRow(x!)),
         )
         .copy(data, rows);
+      lines.shift();
       return {
         lines,
-        table: r.groups.length ? table : undefined,
+        headline: {
+          value: count(r.groups.length),
+          unit: r.groups.length === 1 ? "group of duplicates" : "groups of duplicates",
+          tone: r.groups.length ? "mismatch" : "match",
+          caption: r.groups.length ? `${plural(r.flagged, "row")} share the same ${keyNames}. Click a group to see its first row.` : `No two rows share the same ${keyNames}, out of ${plural(data.rows, "row")}.`,
+        },
+        grid: r.groups.length ? grid : undefined,
         sheets: r.groups.length ? [{ name: `${sheet} duplicates`, out }] : null,
         done: `Duplicates: ${plural(r.groups.length, "group")}, ${plural(r.flagged, "row")}`,
       };
@@ -407,6 +448,7 @@ function sequenceTool(data: SheetData, sheet: string): Tool {
       const out = new Out().text("Series", series).text("Issue", issue).text("Number", from).text("To", to).num("Count", counts).text("Sheet rows", where);
       return {
         lines,
+        headline: r.series.length ? { value: count(missing + dups + ooo), unit: missing + dups + ooo === 1 ? "exception" : "exceptions", tone: missing + dups + ooo ? "mismatch" : "match", caption: lines.shift()!.text } : undefined,
         table: r.series.length ? table : undefined,
         sheets: series.length ? [{ name: `${sheet} gaps`, out }] : null,
         done: `Sequence: ${plural(missing, "missing number")}, ${plural(dups, "duplicate")}, ${count(ooo)} out of order`,
@@ -507,7 +549,8 @@ function benfordTool(data: SheetData, sheet: string): Tool {
         .num("Z", pad(r.digits.map((d) => Math.round(d.z * 1000) / 1000), null), "0.000")
         .text("Note", [...r.digits.map((d) => (d.z > 1.96 ? (d.count > d.expectedCount ? "more than expected" : "fewer than expected") : "")), "", ...summary.map((s) => s[1])]);
       return {
-        lines,
+        lines: lines.slice(2),
+        headline: { value: r.mad.toFixed(4), unit: "MAD", tone: r.conformity === "nonconformity" ? "mismatch" : r.conformity === "marginal" ? "unmatched" : "match", caption: `${CONFORMITY[r.conformity][0].toUpperCase()}${CONFORMITY[r.conformity].slice(1)} (Nigrini: close up to ${r.bands[0]}, acceptable up to ${r.bands[1]}, marginal up to ${r.bands[2]}). ${lines[0].text}` },
         chart: benfordChart(r.digits),
         sheets: [{ name: `${sheet} Benford`, out }],
         done: `Benford (${r.test === "first" ? "first digit" : "first two digits"}): MAD ${r.mad.toFixed(4)}, ${CONFORMITY[r.conformity]}`,
@@ -795,7 +838,12 @@ function sampleTool(data: SheetData, sheet: string): Tool {
           data,
           r.items.map((it) => it.row),
         );
-      return { lines, sheets: r.items.length ? [{ name: `${sheet} sample`, out }] : null, done: `Sample: ${plural(r.items.length, "item")} (${note})` };
+      return {
+        lines,
+        headline: { value: count(r.items.length), unit: r.items.length === 1 ? "item picked" : "items picked", tone: r.items.length ? "accent" : "unmatched", caption: `Seed ${s}: the same seed on the same rows picks the same items again.` },
+        sheets: r.items.length ? [{ name: `${sheet} sample`, out }] : null,
+        done: `Sample: ${plural(r.items.length, "item")} (${note})`,
+      };
     },
   };
 }
@@ -813,128 +861,106 @@ const TOOLS: Record<AuditToolKind, (data: SheetData, sheet: string) => Tool> = {
 
 // --------------------------------------------------------------- dialog --
 
+/** A plain string table as a data table: numeric-looking columns right-aligned; a "Sheet row" column makes rows links. */
+export function stringGrid(table: string[][], goRow: ((row: number) => void) | null): HTMLElement {
+  const [head, ...body] = table;
+  const numeric = head.map((_, c) => body.length > 0 && body.every((r) => !r[c] || /^[-+(]?[\d,.]+%?\)?$/.test(r[c].trim())));
+  const rowCol = head.findIndex((h) => /^(sheet )?row$/i.test(h));
+  const t = renderTable<string[]>({
+    columns: head.map((h, c) => ({ key: String(c), label: h, value: (r) => r[c], align: numeric[c] ? "right" : "left" })),
+    rows: body,
+    onRowClick: goRow && rowCol >= 0 ? (r) => goRow(Number(r[rowCol])) : undefined,
+    maxHeight: "44vh",
+  });
+  return t.element;
+}
+
 export function openAuditTool(kind: AuditToolKind, d: AuditDeps): void {
   const data = readSheet(d.source());
-  const sheet = d.sheetName().slice(0, 18);
-  const back = document.createElement("div");
-  back.className = "palette-backdrop";
-  modal(back);
-  back.innerHTML = `<div class="palette import-dialog" role="dialog"><div class="palette-form audit-form"></div></div>`;
-  const body = back.querySelector<HTMLElement>(".palette-form")!;
-  const close = () => {
-    back.remove();
-    d.focusGrid();
-  };
-  const h = document.createElement("h3");
+  const sheetName = d.sheetName();
+  const sheet = sheetName.slice(0, 18);
+  const goTo = navigator(d.goTo);
+  const sheetId = activeSheetId(d.activeSheet);
+  const goRow = goTo && sheetId ? (row: number, col = 0) => goTo(sheetId, row - 1, col) : null;
   if (!data.names.length || !data.rows) {
-    h.textContent = "Audit tests";
-    const p = document.createElement("p");
-    p.textContent = "This sheet has no data to test. Open or paste the data first; the first row (or the column names) should name the columns.";
-    const actions = document.createElement("div");
-    actions.className = "numfmt-actions";
-    const ok = document.createElement("button");
-    ok.type = "button";
-    ok.textContent = "Close";
-    ok.addEventListener("click", close);
-    actions.append(ok);
-    body.append(h, p, actions);
-    document.body.append(back);
-    ok.focus();
+    openSidePanel({
+      id: `audit-${kind}`,
+      title: "Audit tests",
+      subtitle: sheetName,
+      render: (p) => {
+        p.body.append(emptyState({ icon: "audit", title: "This sheet has no data to test", text: "Open or paste the data first (a ledger, an invoice list, a bank statement), with the column names in the first row. Then run the test again from that sheet." }));
+      },
+      onClose: () => d.focusGrid(),
+    });
     return;
   }
   const tool = TOOLS[kind](data, sheet);
-  back.querySelector(".palette")!.setAttribute("aria-label", tool.title);
-  h.textContent = tool.title;
-  const intro = document.createElement("p");
-  intro.className = "hp-muted";
-  intro.textContent = tool.intro;
-  const fields = document.createElement("div");
-  fields.className = "fields";
-  fields.append(...tool.fields);
-  const result = document.createElement("div");
-  result.className = "audit-result";
-  result.setAttribute("aria-live", "polite");
-  body.append(h, intro, fields, result);
-
-  const actions = document.createElement("div");
-  actions.className = "numfmt-actions";
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.textContent = "Cancel";
-  const okBtn = document.createElement("button");
-  okBtn.type = "button";
-  okBtn.textContent = "Add the result sheet";
-  actions.append(cancel, okBtn);
-  body.append(actions);
-
   let preview: Preview | null = null;
-  const update = () => {
-    result.replaceChildren();
-    try {
-      preview = tool.compute();
-    } catch (e) {
-      preview = null;
-      const p = document.createElement("p");
-      p.className = "cleanup-warn";
-      p.textContent = (e as Error).message;
-      result.append(p);
-      okBtn.disabled = true;
-      return;
-    }
-    for (const l of preview.lines) {
-      const p = document.createElement("p");
-      p.textContent = l.text;
-      if (l.warn) p.className = "cleanup-warn";
-      result.append(p);
-    }
-    if (preview.chart) result.append(preview.chart);
-    if (preview.table) {
-      const table = document.createElement("table");
-      preview.table.forEach((row, i) => {
-        const tr = document.createElement("tr");
-        for (const v of row) {
-          const cell = document.createElement(i ? "td" : "th");
-          cell.textContent = v;
-          tr.append(cell);
-        }
-        table.append(tr);
-      });
-      const wrap = document.createElement("div");
-      wrap.className = "import-preview";
-      wrap.append(table);
-      result.append(wrap);
-    }
-    okBtn.disabled = !preview.sheets;
-    okBtn.textContent = preview.sheets && preview.sheets.length > 1 ? "Add the result sheets" : "Add the result sheet";
-  };
-  let timer = 0;
-  const later = () => {
-    clearTimeout(timer);
-    timer = window.setTimeout(update, 200);
-  };
-  fields.addEventListener("input", later);
-  fields.addEventListener("change", later);
-  update();
+  openSidePanel({ minWidth: 520,
+    id: `audit-${kind}`,
+    title: tool.title,
+    subtitle: `On ${sheetName} · ${plural(data.rows, "row")}`,
+    onClose: () => d.focusGrid(),
+    render: (p) => {
+      const fields = el("div", { className: "audit-fields" }, ...tool.fields);
+      const result = el("div", { className: "audit-result" });
+      result.setAttribute("aria-live", "polite");
+      p.body.append(el("p", { className: "tk-muted audit-intro", textContent: tool.intro }), section("Settings", fields), section("Result", result));
+      const create = button("Create results sheet", () => {
+        clearTimeout(timer);
+        update();
+        const pv = preview;
+        if (!pv?.sheets) return;
+        create.disabled = true;
+        void (async () => {
+          for (const s of pv.sheets!) {
+            const source = new EditableSource(new Table(s.out.columns), 5);
+            await d.run({ type: "sheet.insert", params: { name: s.name.slice(0, 31), source: d.putBlob(source), numFmts: s.out.numFmts } });
+          }
+          report(d.status, pv.done || `Added ${pv.sheets!.length === 1 ? "the results sheet" : "the results sheets"}`);
+          create.disabled = false;
+        })();
+      }, "primary");
+      p.footer.append(create);
 
-  cancel.addEventListener("click", close);
-  okBtn.addEventListener("click", () => {
-    clearTimeout(timer);
-    update();
-    const p = preview;
-    if (!p?.sheets) return;
-    back.remove();
-    void (async () => {
-      for (const s of p.sheets!) {
-        const source = new EditableSource(new Table(s.out.columns), 5);
-        await d.run({ type: "sheet.insert", params: { name: s.name.slice(0, 31), source: d.putBlob(source), numFmts: s.out.numFmts } });
-      }
-      d.status(p.done);
-      d.focusGrid();
-    })();
+      const update = () => {
+        result.replaceChildren();
+        try {
+          preview = tool.compute();
+        } catch (e) {
+          preview = null;
+          result.append(notice((e as Error).message, "danger"));
+          create.disabled = true;
+          return;
+        }
+        const pv = preview;
+        const lines = [...pv.lines];
+        if (pv.headline) result.append(headline(pv.headline));
+        else if (lines.length && !lines[0].warn) result.append(el("p", { className: "tk-lead", textContent: lines.shift()!.text }));
+        for (const l of lines) result.append(l.warn ? notice(l.text, "warning") : el("p", { className: "tk-muted", textContent: l.text }));
+        if (pv.chart) result.append(pv.chart);
+        if (pv.grid) {
+          const g = pv.grid;
+          const t = renderTable<Record<string, unknown>>({ columns: g.columns, rows: g.rows, onRowClick: goRow && g.sheetRow ? (r) => goRow(g.sheetRow!(r)) : undefined, empty: g.empty, maxHeight: "44vh" });
+          result.append(t.element);
+          if (goRow && g.sheetRow && g.rows.length) result.append(el("p", { className: "tk-muted", textContent: "Click a row to see it in the sheet." }));
+        } else if (pv.table) result.append(stringGrid(pv.table, goRow));
+        create.disabled = !pv.sheets;
+        create.textContent = pv.sheets && pv.sheets.length > 1 ? "Create results sheets" : "Create results sheet";
+        create.title = pv.sheets ? "" : "Nothing to put on a sheet yet";
+      };
+      let timer = 0;
+      const later = () => {
+        clearTimeout(timer);
+        timer = window.setTimeout(update, 200);
+      };
+      fields.addEventListener("input", later);
+      fields.addEventListener("change", later);
+      update();
+      (fields.querySelector("select, input") as HTMLElement | null)?.focus();
+      return () => clearTimeout(timer);
+    },
   });
-  back.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") close();
-  });
-  document.body.append(back);
-  (fields.querySelector("select, input") as HTMLElement | null)?.focus();
+
+
 }

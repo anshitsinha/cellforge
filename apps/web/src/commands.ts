@@ -199,7 +199,7 @@ export function buildCommands(d: CommandDeps): AppCommand[] {
   const { row, col } = d.grid.selection;
   const range = (): CellRange => d.grid.range;
   const sheetName = () => d.workbook().get(d.activeSheet()).name;
-  const base = () => ({ workbook: d.workbook, activeSheet: d.activeSheet, run: d.run, putBlob: d.putBlob, status: d.status, focusGrid: d.focusGrid });
+  const base = () => ({ workbook: d.workbook, activeSheet: d.activeSheet, run: d.run, putBlob: d.putBlob, status: d.status, focusGrid: d.focusGrid, goTo: d.goTo });
   const fmt = (style: Record<string, unknown>) => () => d.run({ type: "format.set", params: { range: range(), style } });
   const toggle = (prop: "bold" | "italic" | "underline" | "strike" | "wrap") => () => fmt({ [prop]: d.source().getStyle(row, col)?.[prop] ? null : true })();
   const border = (which: string) => () => d.run({ type: "format.borders", params: { range: range(), which, line: { style: "thin", color: "auto" } } });
@@ -334,7 +334,7 @@ export function buildCommands(d: CommandDeps): AppCommand[] {
       : []),
     ...src.filterViews.map((v): Def => ({ group: "Data", section: "filter", id: `view:${v.name}`, title: `Switch to view: ${v.name}`, description: "A saved filter view", icon: "filter", hint: "filter view saved", menu: false, run: () => d.run({ type: "filter.applyView", params: { name: v.name } }) })),
     { group: "Data", section: "clean", id: "cleanup", title: "Clean up this sheet (messy export)…", description: "Unwrap report headers, drop totals, fix dates and numbers stored as text", icon: "check", hint: "unwrap report header totals footers dates numbers text to numbers type", run: () => openCleanup({ source: d.source, run: d.run, goTo: (r, c) => d.goTo(d.activeSheet(), r, c), focusGrid: d.focusGrid }) },
-    { group: "Data", section: "clean", id: "variants", title: "Fix spelling variants in this column…", description: "Merge \"ACME Ltd\" and \"Acme Limited\" into one name", icon: "check", hint: "clean spelling variants duplicates names vendors customers case spaces typos abbreviations merge normalise standardise", run: () => void openVariants({ source: d.source, activeSheet: d.activeSheet, col: () => d.grid.selection.col, run: d.run, status: d.status, focusGrid: d.focusGrid, model: d.aiModelKiln }) },
+    { group: "Data", section: "clean", id: "variants", title: "Fix spelling variants in this column…", description: "Merge \"ACME Ltd\" and \"Acme Limited\" into one name", icon: "check", hint: "clean spelling variants duplicates names vendors customers case spaces typos abbreviations merge normalise standardise", run: () => void openVariants({ source: d.source, activeSheet: d.activeSheet, col: () => d.grid.selection.col, run: d.run, status: d.status, focusGrid: d.focusGrid, model: d.aiModelKiln, goTo: d.goTo }) },
     ...transforms(d, sheetName),
     { group: "Data", section: "rules", id: "validation", title: "Data validation (dropdown list, allowed values)…", description: "Limit what can be typed: lists, ranges, dates, tick boxes", icon: "check", hint: "validation dropdown list choices allowed values restrict input checkbox tick box", run: () => openValidationDialog(d.dvDeps()) },
     { group: "Data", section: "rules", id: "validation-tick", title: "Tick boxes in the selection", description: "Turn the selected cells into tick boxes", icon: "check", hint: "checkbox check box tick boxes true false column type", run: () => d.run({ type: "validation.add", params: { rule: { kind: "checkbox", ranges: [range()] } } }) },
@@ -461,7 +461,7 @@ function auditTools(d: CommandDeps, sheetName: () => string): Def[] {
     description,
     icon,
     hint,
-    run: () => openAuditTool(kind, { ...d.statementDeps(), source: d.source, sheetName }),
+    run: () => openAuditTool(kind, { ...d.statementDeps(), source: d.source, sheetName, goTo: d.goTo, activeSheet: d.activeSheet }),
   }));
 }
 
@@ -481,7 +481,7 @@ function jeTools(d: CommandDeps, sheetName: () => string, range: () => CellRange
     description,
     icon,
     hint,
-    run: () => openJeTool(kind, { ...d.statementDeps(), workbook: d.workbook, source: d.source, activeSheet: d.activeSheet, range, sheetName }),
+    run: () => openJeTool(kind, { ...d.statementDeps(), workbook: d.workbook, source: d.source, activeSheet: d.activeSheet, range, sheetName, goTo: d.goTo }),
   }));
 }
 

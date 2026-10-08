@@ -1,0 +1,149 @@
+/* Review and sign-off panel (reviewui.ts) */
+
+.rv-who {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.rv-who button {
+  margin-left: auto;
+}
+
+.rv-sheet {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.rv-sheet--prepared {
+  border-left-color: var(--accent-solid);
+}
+
+.rv-sheet--reviewed {
+  border-left-color: var(--success-solid);
+}
+
+.rv-sheet--changed {
+  border-left-color: var(--warning-solid);
+}
+
+.rv-sheet__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.rv-sheet__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-strong);
+}
+
+.rv-ref {
+  height: 22px;
+  padding: 0 var(--space-1-5);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  border: 1px dashed var(--border-strong);
+  color: var(--text-muted);
+}
+
+.rv-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+  font-size: var(--text-sm);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-1);
+}
+
+.rv-line__role {
+  flex: none;
+  width: 68px;
+  color: var(--text-muted);
+}
+
+.rv-line__who {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-line__warn {
+  color: var(--warning);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+
+.rv-line__acts {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-1);
+}
+
+.rv-notes__title {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--danger);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rv-notes {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rv-note {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  width: 100%;
+  height: auto;
+  padding: var(--space-1) var(--space-1-5);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  box-shadow: none;
+  text-align: left;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  color: var(--text-default);
+}
+
+.rv-note:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+
+.rv-note:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.rv-note__cell {
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.rv-note__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

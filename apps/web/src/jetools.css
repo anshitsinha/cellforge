@@ -64,3 +64,20 @@
     grid-template-columns: 1fr;
   }
 }
+
+.je-subtitle {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.je-fields .je-map,
+.je-fields .je-params,
+.je-fields .je-tests {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.je-fields .je-map {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}

@@ -41,11 +41,14 @@ import {
   type LearnedRule,
 } from "@cellforge/core";
 import { setCells, type SheetCtx } from "./actions";
-import { readSheet, type SheetData } from "./audittools";
+import { readSheet, sheetSamples, type SheetData } from "./audittools";
 import type { EditableSource } from "./editable";
 import type { Sheet, Workbook } from "./workbook";
 import "./checks.css";
-import { modal } from "./a11y";
+import { guessRoles, profileColumns, type ColumnSample } from "./colguess";
+import { emptyState, headline, report } from "./toolkit";
+import { openDialog } from "./ui/dialog";
+import { closeSidePanel, openSidePanel } from "./ui/sidepanel";
 
 // ------------------------------------------------------------------ store --
 
@@ -245,35 +248,44 @@ export async function gateExport(continueFn: () => unknown, wb: Workbook | undef
 }
 
 function confirmExport(failing: readonly CheckResult[]): Promise<boolean> {
-  return new Promise((resolve) => {
-    const back = el("div", "palette-backdrop");
-    modal(back);
-    const box = el("div", "palette ck-dialog ck-confirm");
-    box.setAttribute("role", "alertdialog");
-    box.setAttribute("aria-label", "Checks are failing");
-    const body = el("div", "palette-form");
-    const h = el("h3", "", "Checks are failing — export anyway?");
-    const p = el("p", "", `${failing.length === 1 ? "1 check fails" : `${failing.length} checks fail`}:`);
-    const list = el("ul", "ck-confirm-list");
-    for (const r of failing.slice(0, 8)) list.append(el("li", "", `${r.name}: ${r.message}`));
-    if (failing.length > 8) list.append(el("li", "", `and ${failing.length - 8} more`));
-    const cancel = button("Don't export");
-    const go = button("Export anyway");
-    body.append(h, p, list, row("numfmt-actions", cancel, go));
-    box.append(body);
-    back.append(box);
-    const done = (v: boolean) => {
-      back.remove();
-      resolve(v);
-    };
-    cancel.addEventListener("click", () => done(false));
-    go.addEventListener("click", () => done(true));
-    back.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") done(false);
-    });
-    document.body.append(back);
-    cancel.focus();
+  const list = el("ul", "ck-confirm-list");
+  for (const r of failing.slice(0, 8)) list.append(el("li", "", `${r.name}: ${r.message}`));
+  if (failing.length > 8) list.append(el("li", "", `and ${failing.length - 8} more`));
+  const dlg = openDialog({
+    title: "Checks are failing: export anyway?",
+    size: "md",
+    role: "alertdialog",
+    initialFocus: "[data-act=cancel]",
+    body: [`${failing.length === 1 ? "1 check fails" : `${failing.length} checks fail`}. The exported file will carry the problems below.`, list],
+    actions: [
+      { label: "Don't export", dismiss: true },
+      { label: "Export anyway", id: "go", kind: "danger" },
+    ],
   });
+  return dlg.closed.then((r) => r === "go");
+}
+
+/** One-click checks for a sheet, from what its columns look like. Pure. */
+export function starterChecks(sheet: string, samples: readonly ColumnSample[]): { label: string; def: CheckDef }[] {
+  const roles = guessRoles(samples);
+  const profiles = profileColumns(samples);
+  const name = (c: number) => samples[c].name || `column ${c + 1}`;
+  const out: { label: string; def: CheckDef }[] = [];
+  const id = () => newId("chk");
+  const debit = samples.findIndex((x) => /debit|\bdr\b/i.test(x.name));
+  const credit = samples.findIndex((x) => /credit|\bcr\b/i.test(x.name));
+  if (debit >= 0 && credit >= 0) out.push({ label: "Debits equal credits", def: { id: id(), sheet, kind: "totalsEqual", col: debit, otherCol: credit, tolerance: 0.005, name: "Debits equal credits" } });
+  else if (roles.amount >= 0 && samples.some((x) => /entry|journal|\bje\b/i.test(x.name))) out.push({ label: `${name(roles.amount)} nets to zero`, def: { id: id(), sheet, kind: "totalsEqual", col: roles.amount, tolerance: 0.005, name: `${name(roles.amount)} nets to zero (debits = credits)` } });
+  if (roles.reference >= 0) {
+    out.push({ label: `No blank ${name(roles.reference)}`, def: { id: id(), sheet, kind: "notBlank", col: roles.reference } });
+    if (profiles[roles.reference].distinctShare > 0.95) out.push({ label: `${name(roles.reference)} is unique`, def: { id: id(), sheet, kind: "unique", col: roles.reference } });
+  }
+  if (roles.account >= 0) out.push({ label: `No blank ${name(roles.account)}`, def: { id: id(), sheet, kind: "notBlank", col: roles.account } });
+  if (roles.amount >= 0) out.push({ label: `${name(roles.amount)} holds numbers`, def: { id: id(), sheet, kind: "type", col: roles.amount, type: "number", allowBlank: true } });
+  if (roles.date >= 0) out.push({ label: `${name(roles.date)} holds dates`, def: { id: id(), sheet, kind: "type", col: roles.date, type: "date", allowBlank: false } });
+  const dupKey = [roles.party, roles.reference, roles.amount].filter((c) => c >= 0);
+  if (dupKey.length >= 2) out.push({ label: `No duplicate ${dupKey.map(name).join(" + ")}`, def: { id: id(), sheet, kind: "noDuplicateKeys", cols: dupKey } });
+  return out.slice(0, 6);
 }
 
 // ------------------------------------------------------------ list editing --
@@ -494,23 +506,28 @@ function tick(text: string, checked: boolean): { el: HTMLLabelElement; input: HT
   return { el: l, input: i };
 }
 
-function dialog(title: string, cls: string, onClose: () => void): { back: HTMLDivElement; body: HTMLDivElement; close: () => void } {
-  const back = el("div", "palette-backdrop");
-  modal(back);
-  const box = el("div", `palette import-dialog ck-dialog ${cls}`);
-  box.setAttribute("role", "dialog");
-  box.setAttribute("aria-label", title);
-  const body = el("div", "palette-form audit-form");
-  box.append(body);
-  back.append(box);
-  const close = () => {
-    back.remove();
-    onClose();
-  };
-  back.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !(e.target instanceof HTMLSelectElement)) close();
+function dialog(title: string, cls: string, onClose: () => void): { back: { remove(): void }; body: HTMLElement; close: () => void } {
+  const dlg = openDialog({ title, size: "lg", className: `ck-dialog tk-legacy ${cls}`, onClose: () => onClose() });
+  // the tool adds its own button row and title to the body: move the row into the fixed footer, drop the repeated title
+  dlg.footer.hidden = true;
+  const tidy = new MutationObserver(() => {
+    for (const r of dlg.body.querySelectorAll<HTMLElement>(":scope > .numfmt-actions")) {
+      dlg.footer.hidden = false;
+      dlg.footer.append(...r.children);
+      r.remove();
+      const buttons = [...dlg.footer.querySelectorAll<HTMLButtonElement>(":scope > button")];
+      const main = buttons[buttons.length - 1];
+      for (const b of buttons) b.className = b === main ? "btn-primary" : b.textContent === "Close" ? "" : "btn-secondary";
+    }
+    const h = dlg.body.querySelector(":scope > h3");
+    if (h?.textContent === title) h.remove();
   });
-  return { back, body, close };
+  tidy.observe(dlg.body, { childList: true });
+  const close = () => {
+    tidy.disconnect();
+    dlg.close();
+  };
+  return { back: { remove: close }, body: dlg.body, close };
 }
 
 const colOptions = (names: readonly string[]) => names.map((n, c) => [String(c), n] as const);
@@ -530,21 +547,35 @@ const STATUS_MARK: Record<CheckResult["status"] | "none", string> = { pass: "✓
 
 /** The "Data checks" panel: the list of checks, add / edit / delete / reorder, Run checks. */
 export function openChecks(d: ChecksDeps): void {
-  const { back, body, close } = dialog("Data checks", "ck-panel", () => {
-    stop();
-    d.focusGrid();
+  let panelBody: HTMLElement | null = null;
+  let panelFooter: HTMLElement | null = null;
+  let stop: () => void = () => undefined;
+  openSidePanel({
+    id: "data-checks",
+    title: "Data checks",
+    subtitle: "Rules the data must pass before export",
+    onClose: () => d.focusGrid(),
+    render: (p) => {
+      panelBody = p.body;
+      panelFooter = p.footer;
+      stop = onChecksChange(() => render());
+      return () => stop();
+    },
   });
-  const stop = onChecksChange(() => render());
-  const h = el("h3", "", "Data checks");
-  const intro = el("p", "hp-muted", "Rules the data must keep. Run them before you export; while any check fails, exporting asks first. Checks are saved with the workbook.");
+  const body = panelBody! as HTMLElement;
+  const close = () => closeSidePanel();
+  const intro = el("p", "tk-muted", "Rules the data must keep, saved with the workbook. Run them before you export: while any check fails, exporting asks first.");
   const summary = el("div", "ck-summary");
   summary.setAttribute("aria-live", "polite");
   const list = el("ol", "ck-list");
   const editor = el("div", "ck-editor");
   const add = button("Add check…");
+  add.className = "btn-secondary";
   const runBtn = button("Run checks");
-  const closeBtn = button("Close");
-  body.append(h, intro, summary, list, editor, row("numfmt-actions", add, runBtn, closeBtn));
+  runBtn.className = "btn-primary";
+  const starters = el("div", "ck-starters");
+  body.append(intro, summary, starters, list, editor);
+  (panelFooter! as HTMLElement).append(add, runBtn);
   const expanded = new Set<string>();
 
   const save = (checks: CheckDef[], label: string) => void d.run({ type: "checks.set", params: { checks, label } }).catch((e: Error) => d.status(e.message));
@@ -553,7 +584,28 @@ export function openChecks(d: ChecksDeps): void {
     const wb = d.workbook();
     const checks = getChecks();
     list.replaceChildren();
-    if (!checks.length) list.append(el("li", "ck-empty hp-muted", "No checks yet. Add one: for example, the account column is in the chart of accounts, or debits equal credits."));
+    starters.replaceChildren();
+    if (!checks.length) {
+      const sheetId = d.activeSheet();
+      const src = wb.get(sheetId).source;
+      const data = readSheet(src);
+      const offers = data.names.length ? starterChecks(sheetId, sheetSamples(data)) : [];
+      const box = el("div", "ck-starter-list");
+      for (const o of offers) {
+        const b = button(`+ ${o.label}`, "Add this check");
+        b.className = "btn-secondary btn-sm";
+        b.addEventListener("click", () => save([...getChecks(), o.def], "add a check"));
+        box.append(b);
+      }
+      starters.append(
+        emptyState({
+          icon: "check",
+          title: "No checks yet",
+          text: offers.length ? `Start with a few for ${wb.get(sheetId).name}, picked from its columns. Click to add; you can edit them later.` : "Add rules such as: the account is in the chart of accounts, debits equal credits, invoice numbers are unique.",
+          action: offers.length ? box : undefined,
+        }),
+      );
+    }
     checks.forEach((c, i) => {
       const r = lastResults.get(c.id);
       const off = c.enabled === false;
@@ -607,8 +659,15 @@ export function openChecks(d: ChecksDeps): void {
     if (results.length && results.every(Boolean)) {
       const fails = results.filter((r) => r!.status === "fail").length;
       const warns = results.filter((r) => r!.status === "warn").length;
-      const p = el("p", fails ? "ck-bad" : "ck-good", fails ? `${fails} of ${results.length} checks fail${warns ? `, ${warns} warn` : ""}.` : `All ${results.length} checks pass${warns ? ` (${warns} with warnings)` : ""}.`);
-      summary.append(p);
+      summary.append(
+        headline({
+          value: `${results.length - fails} of ${results.length}`,
+          unit: "checks pass",
+          progress: (results.length - fails) / results.length,
+          tone: fails ? "mismatch" : "match",
+          caption: fails ? `${fails} fail${warns ? `, ${warns} warn` : ""}. Open a failing check to see its rows.` : `Everything passes${warns ? ` (${warns} with warnings)` : ""}. Exports go ahead without asking.`,
+        }),
+      );
     }
   }
 
@@ -857,11 +916,10 @@ export function openChecks(d: ChecksDeps): void {
     const fails = results.filter((r) => r.status === "fail");
     for (const r of fails) expanded.add(r.id);
     render();
-    d.status(results.length ? (fails.length ? `${fails.length} of ${results.length} checks fail` : `All ${results.length} checks pass`) : "No checks to run");
+    report(d.status, results.length ? (fails.length ? `${fails.length} of ${results.length} checks fail` : `All ${results.length} checks pass`) : "No checks to run", fails.length ? "warning" : "success");
   });
-  closeBtn.addEventListener("click", close);
+  void close;
   render();
-  document.body.append(back);
   (getChecks().length ? runBtn : add).focus();
 }
 
@@ -896,7 +954,7 @@ const MATCH_OPTIONS = [
 export function openCategorise(d: CategoriseDeps): void {
   const sheetId = d.activeSheet();
   let data = readSheet(d.source());
-  const { back, body, close } = dialog("Categorise", "ck-cat", () => d.focusGrid());
+  const { body, close } = dialog("Categorise", "ck-cat", () => d.focusGrid());
   const h = el("h3", "", "Categorise");
   body.append(h);
   if (!data.names.length || !data.rows) {
@@ -904,7 +962,6 @@ export function openCategorise(d: CategoriseDeps): void {
     const ok = button("Close");
     ok.addEventListener("click", close);
     body.append(row("numfmt-actions", ok));
-    document.body.append(back);
     ok.focus();
     return;
   }
@@ -1266,6 +1323,5 @@ export function openCategorise(d: CategoriseDeps): void {
   );
   drawRules();
   update();
-  document.body.append(back);
   textSel.focus();
 }
