@@ -896,7 +896,7 @@ export function openAuditTool(kind: AuditToolKind, d: AuditDeps): void {
   }
   const tool = TOOLS[kind](data, sheet);
   let preview: Preview | null = null;
-  openSidePanel({
+  openSidePanel({ minWidth: 520,
     id: `audit-${kind}`,
     title: tool.title,
     subtitle: `On ${sheetName} · ${plural(data.rows, "row")}`,

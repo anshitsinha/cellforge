@@ -679,7 +679,7 @@ function showResults(d: ReconDeps, st: ReconState): void {
   const notesOf = notes(r, a, b);
   const s = r.summary;
 
-  openSidePanel({
+  openSidePanel({ minWidth: 560,
     id: "recon",
     title: "Reconciliation",
     subtitle: `${nameA} ⇄ ${nameB}`,

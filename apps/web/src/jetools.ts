@@ -992,7 +992,7 @@ export function openJeTool(kind: JeToolKind, d: JeToolDeps): void {
   }
 
   let preview: Preview | null = null;
-  openSidePanel({
+  openSidePanel({ minWidth: 560,
     id: `je-${kind}`,
     title: tool.title,
     subtitle: kind === "overlaps" ? "Two lists side by side" : `On ${sheetName}`,
