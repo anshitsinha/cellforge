@@ -12,6 +12,7 @@ export default defineConfig({
       input: {
         home: resolve(__dirname, "index.html"),
         app: resolve(__dirname, "app.html"),
+        bench: resolve(__dirname, "bench.html"),
       },
     },
   },
