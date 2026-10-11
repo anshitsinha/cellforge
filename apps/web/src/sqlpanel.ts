@@ -263,6 +263,8 @@ export function openSql(d: SqlDeps): void {
   openSidePanel({
     id: "sql",
     title: "SQL query",
+    // results are tables: start wide enough to read a few columns
+    minWidth: 480,
     subtitle: "Every sheet is a table; its first row names the columns",
     onClose: () => d.focusGrid(),
     render: (p) => renderSql(p, d),

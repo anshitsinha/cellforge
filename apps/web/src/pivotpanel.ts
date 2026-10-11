@@ -445,6 +445,7 @@ export function openPivot(d: PivotDeps): void {
   openSidePanel({
     id: "pivot",
     title: "Pivot table",
+    minWidth: 420,
     subtitle: data.rows ? `${sheet} · ${data.rows.toLocaleString()} rows` : sheet,
     onClose: () => d.focusGrid(),
     render: (p) => renderPivot(p, d, data, sheet),
