@@ -5,10 +5,10 @@ A scenario is a named set of values for your model's input cells: *Base*,
 from the command palette (Ctrl+K).
 
 1. Select the input cells (growth rate, price, headcount…) and click
-   **Use the selected cells** under *Inputs*.
+   **Use selection** beside *Inputs*.
 2. Select the cells you want to compare (revenue, margin, cash at year end)
-   and click **Use the selected cells** under *Results*.
-3. **Add the current inputs as a scenario** saves what's in the inputs now,
+   and click **Use selection** beside *Results*.
+3. **Save the current inputs as Base** (later **Add the current inputs**) saves what's in the inputs now,
    usually as *Base*. Add more, then type each one's values in the table
    (formulas are fine). Rename scenarios by editing their names.
 

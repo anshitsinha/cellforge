@@ -1,16 +1,17 @@
 # Find and replace
 
 Press **Ctrl+F** to find, or **Ctrl+H** to find and replace. Both are also in
-the command palette. The dialog stays open at the side, so you can see each
-match in the sheet while you work.
+the command palette. It opens as a small card at the top right that stays
+open, so you can see each match in the sheet while you work. The **Find**
+and **Replace** tabs at its top switch between the two.
 
 ## Find
 
 Type what you're looking for, then:
 
-- **Enter** or **Find next** jumps to the next match after the selected
+- **Enter** or **Next** jumps to the next match after the selected
   cell. At the end it starts again from the top.
-- **Shift+Enter** or **Previous** goes back.
+- **Shift+Enter** or the up arrow button goes back.
 - **Find all** lists every match with its address. Click an address to go
   to that cell. The list shows the first 1,000; the count tells you how
   many there are (up to 10,000).
@@ -20,15 +21,16 @@ Empty cells never match.
 
 ## Options
 
-- **Match case**: `North` doesn't find `north`. Off by default.
-- **Whole cell**: the whole cell has to match, not just part of it.
+- **Match case** (**Aa**): `North` doesn't find `north`. Off by default.
+- **Whole cell** (**[ab]**): the whole cell has to match, not just part of it.
   `100` then finds `100` but not `1000`.
-- **Regular expression**: the search is a JavaScript regular expression,
+- **Regular expression** (**.***): the search is a JavaScript regular expression,
   so `INV-\d{4}` finds invoice numbers. To match the whole cell, tick
   **Whole cell** rather than adding `^` and `$`. If the expression is
   broken, the dialog says what's wrong as you type.
-- **Within**: **Selection** (the range selected when you opened the
-  dialog), **Sheet**, or **All sheets** (hidden sheets are skipped).
+- **In the selection** (the range selected when you opened it), **In this
+  sheet**, or **In all sheets** (hidden sheets are skipped).
+- Under **More**:
 - **Search**: **By rows** goes along each row before moving down; **By
   columns** goes down each column before moving right.
 - **Look in**: **Values** searches what cells show, as formatted (`12%`,

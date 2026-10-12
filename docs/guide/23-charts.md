@@ -4,16 +4,25 @@ Select the cells to chart, including the header row and the label column,
 then choose **Insert chart…** from the command palette (Ctrl+K). If only
 one cell is selected, the chart uses everything on the sheet.
 
-The chart opens in a window over the sheet. Drag its title bar to move it,
-and drag the bottom-right corner to resize it. Open as many as you like.
+The chart editor opens in the side panel, with a preview. It starts with a
+chart that makes sense for the data: an amount over time, or summed by a
+category such as Vendor, and never IDs, references or account codes as
+series. A journal whose amounts net to nothing is charted as the number of
+lines per day instead. Change the type, the title and the columns, then
+**Insert chart**. **Cancel** or Esc leaves the sheet as it was.
+
+The chart then sits over the sheet. Drag its title to move it, drag the
+bottom-right corner to resize it, or click it and use the arrow keys.
 Charts redraw when you change the cells they read.
 
-## The chart window
+## On the sheet
 
-- **Edit** shows the options beside the chart. Every change shows straight
-  away. Esc hides them again.
-- **PNG** downloads the chart as an image, for a report or an email.
-- **✕** closes the chart.
+- **Edit** (the settings button, Enter, or a double-click) opens the editor
+  beside the grid; the chart follows every change.
+- **Download** saves the chart as a PNG image, for a report or an email.
+- **Delete** (the bin, or the Delete key) removes the chart; the message
+  that follows has **Undo**.
+- **Esc** puts you back in the grid.
 
 Point at a bar, a slice or a point to see its label and value.
 
@@ -55,9 +64,14 @@ Point at a bar, a slice or a point to see its label and value.
 
 ## Options
 
-- **Data range**: type a range like `A1:C20`, or whole columns like `A:C`
-  (cut to the rows in use). It refers to the sheet you are on.
-- **Series in**: columns or rows. **First row has the names** and **First
+- **Cells**: type a range like `A1:C20`, or whole columns like `A:C`
+  (cut to the rows in use), or select cells and press **Use selection**.
+- **Labels along the axis** and **Values**: which column labels the
+  points, and which columns are plotted. Click a column under **Values** to
+  add or remove it.
+- A chart summed from the whole sheet (a pivot chart) shows **Show … of …
+  by …** instead: change what is added up, or counted, and by what.
+- **Series** (under *Axes, number format and layout*): columns or rows. **First row has the names** and **First
   column has the labels** say whether the header row and label column are
   part of the data. They are guessed when you insert the chart.
 - **Title** and **axis titles**.
@@ -86,7 +100,3 @@ and charts follow the light or dark look of your system. A chart has at
 most eight series; select fewer columns, or use a pivot first, if you have
 more.
 
-## Not yet
-
-Charts are not saved in the file yet: they close when you close the
-workbook.

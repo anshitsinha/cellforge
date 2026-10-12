@@ -5,6 +5,9 @@
 A pivot table adds up a sheet by groups: sales by region and product,
 spend by vendor and month, journal lines by account. Open the sheet with
 the data and choose **Pivot table…** from the command palette (Ctrl+K).
+The builder opens in the side panel, beside the data, and the result builds
+live as you add fields. On an empty pivot it offers a first one to try,
+such as the amount by vendor; IDs and account codes go to Rows, not Values.
 
 The fields are the sheet's columns. Their names come from the column
 headers of an imported sheet, or else from the first row of the sheet.
@@ -96,14 +99,14 @@ last. In Filters you can untick (blank) like any other item.
 
 ### Show the rows behind a number
 
-Click a number in the preview, then **Show these rows** (or double-click
+Click a number in the result, then **Show rows** (or double-click
 it, or press Enter on it). A new sheet opens with every row behind that
 number, all columns, and a **Row** column with the row number in the
 original sheet. This works for totals and subtotals too.
 
-### Put the pivot on a new sheet
+### Add as sheet
 
-**Put the pivot on a new sheet** adds the whole pivot as a sheet. It has one
+**Add as sheet** adds the whole pivot as a sheet, in the number format picked above the result. It has one
 column for each Rows field, then one column for each item across the top
 (and each value, when there are several). Item labels are repeated on every
 row, so you can filter and sort the result. Subtotal rows read
