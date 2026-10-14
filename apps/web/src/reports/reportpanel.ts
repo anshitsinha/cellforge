@@ -1,5 +1,5 @@
 /**
- * The report builder: pick or start a report, set its parameters, add and
+ * The report builder: start from a pack laid out for the sheet, add and
  * order blocks (headings, text with {{=formula}}, tables of a range or a
  * pivot, charts, page breaks), preview it, print it, and export a PDF, or a
  * report book with one report per entity and a contents page.
@@ -17,10 +17,16 @@ import { readSheetColumns } from "../pivotpanel";
 import type { Workbook } from "../workbook";
 import { reportsOf } from "./actions";
 import { rollForward, runBook, runForValues, runReport, workbookEnv, type RenderedReport } from "./engine";
-import { BLOCK_LABEL, newBlock, newReport, type BlockKind, type ParamFilter, type Report, type ReportBlock } from "./model";
+import { BLOCK_LABEL, newBlock, type BlockKind, type ParamFilter, type Report, type ReportBlock } from "./model";
 import { reportHtml, reportPdf, type ChartBlock } from "./output";
 import "./reports.css";
+import "./reportui.css";
 import { confirmDialog } from "../ui/confirm";
+import { makeButton, openDialog } from "../ui/dialog";
+import { icon, iconButton } from "../ui/icons";
+import { toast } from "../ui/toast";
+import "../analysis.css";
+import { sheetFacts, starterReport, STARTERS, type SheetFacts, type StarterKind } from "./starters";
 
 export interface ReportDeps {
   workbook: () => Workbook;
@@ -89,19 +95,8 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   return e;
 }
 
-function button(text: string, onClick: () => void, title?: string): HTMLButtonElement {
-  const b = el("button", undefined, text);
-  b.type = "button";
-  if (title) {
-    b.title = title;
-    b.setAttribute("aria-label", title);
-  }
-  b.addEventListener("click", onClick);
-  return b;
-}
-
-function labelled(label: string, input: HTMLElement, cls = "report-field"): HTMLLabelElement {
-  const l = el("label", cls);
+function field(label: string, input: HTMLElement): HTMLLabelElement {
+  const l = el("label", "an-field");
   l.append(el("span", undefined, label), input);
   return l;
 }
@@ -117,31 +112,96 @@ function selectOf(options: [string, string][], value: string, label: string): HT
 /** How many entity reports the preview shows (the PDF has them all). */
 const PREVIEW_RUNS = 3;
 
+const BLOCK_ICON: Record<BlockKind, string> = {
+  heading: "document",
+  paragraph: "document",
+  table: "table",
+  chart: "chart",
+  pageBreak: "chevron-down",
+};
+const BLOCK_HINT: Record<BlockKind, string> = {
+  heading: "A title for a section",
+  paragraph: "Words, with live figures from the sheet",
+  table: "Cells of a sheet, or a summary (pivot)",
+  chart: "A chart from this workbook",
+  pageBreak: "Start a new page",
+};
+
+/** A tiny page sketch for a starter card. */
+function starterThumb(kind: StarterKind): HTMLElement {
+  const t = el("span", `report-thumb report-thumb--${kind}`);
+  t.setAttribute("aria-hidden", "true");
+  for (const part of kind === "blank" ? ["h"] : kind === "entity" ? ["h", "l", "l", "b", "t"] : kind === "close" ? ["h", "l", "b", "t", "l"] : ["h", "l", "t", "b"]) t.append(el("i", `report-thumb__${part}`));
+  return t;
+}
+
+/**
+ * Reports: start from a pack laid out for the sheet (or a blank page) with a
+ * live preview, then edit the contents and print or export a PDF. Reports
+ * save with the workbook ("report.set", one undo step per change). The
+ * {{…}} templating and run-for-each live under "Parameters and paper".
+ */
 export function openReports(d: ReportDeps): void {
   const wb = d.workbook();
   const env = workbookEnv(wb);
-  const back = el("div", "palette-backdrop");
-  const dialog = el("div", "palette import-dialog report-dialog");
-  dialog.setAttribute("role", "dialog");
-  dialog.setAttribute("aria-label", "Reports");
-  back.append(dialog);
-  const body = el("div", "palette-form report-form");
-  dialog.append(body);
-
-  let rep: Report = structuredClone(reportsOf(wb)[0] ?? newReport(d.activeSheet()));
-  let saved = reportsOf(wb).some((r) => r.id === rep.id) ? JSON.stringify(rep) : "";
+  let rep: Report | null = reportsOf(wb)[0] ? structuredClone(reportsOf(wb)[0]) : null;
+  let saved = rep ? JSON.stringify(rep) : "";
   let saveTimer = 0;
   let previewTimer = 0;
+  let mode: "start" | "edit" = rep ? "edit" : "start";
+  let starter: StarterKind = "summary";
+
+  const editor = el("div", "report-editor");
+  const previewWrap = el("div", "report-preview-wrap");
+  const previewNote = el("div", "an-note an-note--warning report-preview-note");
+  previewNote.hidden = true;
+  const previewBox = el("div", "report-preview report-doc");
+  previewBox.setAttribute("aria-label", "Preview");
+  previewBox.tabIndex = 0;
+  previewWrap.append(previewNote, previewBox);
+  const split = el("div", "report-split");
+  split.append(editor, previewWrap);
+
+  const dlg = openDialog({
+    title: "Reports",
+    subtitle: "Board packs, close packs and one-report-per-entity books, as PDF",
+    size: "xl",
+    className: "report-dlg",
+    body: split,
+    actions: [],
+    onClose: () => {
+      if (mode === "edit") void save();
+      clearTimeout(previewTimer);
+      d.focusGrid();
+    },
+  });
+  const footer = dlg.footer;
+  footer.hidden = false;
+
+  const facts = (): SheetFacts => {
+    const id = wb.has(d.activeSheet()) ? d.activeSheet() : wb.sheets[0]?.id;
+    if (!id) return sheetFacts("", "Sheet", null);
+    const sheet = wb.get(id);
+    let data = null;
+    try {
+      data = readSheetColumns(sheet.source);
+    } catch {
+      data = null;
+    }
+    return sheetFacts(id, sheet.name, data);
+  };
+  const sheetInfo = facts();
 
   const save = async () => {
     clearTimeout(saveTimer);
+    if (!rep) return;
     const now = JSON.stringify(rep);
     if (now === saved) return;
     saved = now;
     try {
       await d.run({ type: "report.set", params: { id: rep.id, report: structuredClone(rep) } });
     } catch (e) {
-      d.status(`Report not saved: ${(e as Error).message}`);
+      toast({ kind: "error", title: "The report wasn't saved", text: (e as Error).message });
     }
   };
   /** Something changed: save soon and refresh the preview. */
@@ -152,25 +212,6 @@ export function openReports(d: ReportDeps): void {
     clearTimeout(previewTimer);
     previewTimer = window.setTimeout(preview, 250);
   };
-  const close = () => {
-    void save();
-    clearTimeout(previewTimer);
-    back.remove();
-    d.focusGrid();
-  };
-
-  // ---- layout
-  const head = el("div", "report-head");
-  const editor = el("div", "report-editor");
-  const previewBox = el("div", "report-preview report-doc");
-  previewBox.setAttribute("aria-label", "Preview");
-  previewBox.setAttribute("aria-live", "polite");
-  const split = el("div", "report-split");
-  split.append(editor, previewBox);
-  const statusLine = el("p", "report-status");
-  statusLine.setAttribute("aria-live", "polite");
-  const actions = el("div", "numfmt-actions");
-  body.append(el("h3", undefined, "Reports"), head, split, statusLine, actions);
 
   const sheets = () => wb.sheets.map((s) => [s.id, s.name] as [string, string]);
   const columnsOf = (sheetId: string): [string, string][] => {
@@ -180,51 +221,157 @@ export function openReports(d: ReportDeps): void {
     const out: [string, string][] = [];
     for (let c = 0; c < cols; c++) {
       const name = src.getColumnName?.(c) || String(src.getCell(0, c) ?? "");
-      out.push([String(c), `${columnLetter(c)}${name ? ` · ${name}` : ""}`]);
+      out.push([String(c), name ? `${name} (${columnLetter(c)})` : `Column ${columnLetter(c)}`]);
     }
     return out;
   };
 
-  // ---- the header: which report, title, page
-  function renderHead() {
-    head.replaceChildren();
-    const list = reportsOf(wb);
-    const pick = selectOf([...list.map((r) => [r.id, r.title || "Untitled"] as [string, string]), ...(list.some((r) => r.id === rep.id) ? [] : [[rep.id, `${rep.title || "Untitled"} (new)`] as [string, string]]), ["__new", "New report…"]], rep.id, "Report");
-    pick.addEventListener("change", () => {
-      void save();
-      if (pick.value === "__new") {
-        rep = newReport(d.activeSheet(), `Report ${list.length + 1}`);
-        saved = "";
-        changed(true);
-      } else {
-        const r = reportsOf(wb).find((x) => x.id === pick.value);
-        if (r) {
-          rep = structuredClone(r);
-          saved = JSON.stringify(rep);
-          render();
-          preview();
-        }
-      }
+  // ---------------------------------------------------------- start view --
+
+  function renderStart() {
+    editor.replaceChildren();
+    const intro = el("div", "report-start-intro");
+    intro.append(el("h3", "report-start-title", "Start a report"), el("p", "an-hint", `Laid out for ${sheetInfo.sheetName}${sheetInfo.amount !== null ? `: ${sheetInfo.names[sheetInfo.amount]}` : ""}${sheetInfo.category !== null ? ` by ${sheetInfo.names[sheetInfo.category]}` : ""}. Everything can be changed afterwards.`));
+    const list = el("div", "report-starters");
+    list.setAttribute("role", "radiogroup");
+    list.setAttribute("aria-label", "Start from");
+    const cards: HTMLButtonElement[] = [];
+    for (const s of STARTERS) {
+      const b = el("button", "report-starter");
+      b.type = "button";
+      b.setAttribute("role", "radio");
+      b.setAttribute("aria-checked", String(s.kind === starter));
+      b.tabIndex = s.kind === starter ? 0 : -1;
+      const txt = el("span", "report-starter__text");
+      txt.append(el("span", "report-starter__title", s.title), el("span", "report-starter__desc", s.text));
+      b.append(starterThumb(s.kind), txt);
+      b.addEventListener("click", () => pickStarter(s.kind));
+      b.addEventListener("dblclick", () => create());
+      cards.push(b);
+      list.append(b);
+    }
+    list.addEventListener("keydown", (e) => {
+      if (!["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft"].includes(e.key)) return;
+      e.preventDefault();
+      const i = STARTERS.findIndex((s) => s.kind === starter);
+      const next = (i + (e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : STARTERS.length - 1)) % STARTERS.length;
+      pickStarter(STARTERS[next].kind);
+      cards[next].focus();
     });
-    const title = el("input");
-    title.value = rep.title;
+    editor.append(intro, list);
+    const existing = reportsOf(wb);
+    if (existing.length) {
+      const sec = el("section", "an-section");
+      const head = el("div", "an-section__head");
+      head.append(el("h3", "an-section__title", "Or open a saved report"));
+      const ul = el("ul", "an-list");
+      for (const r of existing) {
+        const li = el("li");
+        const b = el("button", "report-open");
+        b.type = "button";
+        b.append(icon("report", { size: 14 }), el("span", undefined, r.title || "Untitled"));
+        b.addEventListener("click", () => openReport(r));
+        li.append(b, el("span", "an-list__sub", `${r.blocks.length} block${r.blocks.length === 1 ? "" : "s"}`));
+        ul.append(li);
+      }
+      sec.append(head, ul);
+      editor.append(sec);
+    }
+    footer.replaceChildren();
+    const start = el("div", "cf-dialog__footer-start");
+    footer.append(start);
+    if (existing.length) {
+      const back = makeButton("Back to the report", "ghost", "arrow-left");
+      back.addEventListener("click", () => openReport(existing[0]));
+      start.append(back);
+    }
+    const cancel = makeButton("Cancel", "secondary");
+    cancel.addEventListener("click", () => dlg.close("dismiss"));
+    const go = makeButton("Create report", "primary");
+    go.addEventListener("click", create);
+    footer.append(cancel, go);
+    requestAnimationFrame(() => cards.find((c) => c.tabIndex === 0)?.focus());
+    preview();
+
+    function pickStarter(k: StarterKind) {
+      starter = k;
+      cards.forEach((c, i) => {
+        const on = STARTERS[i].kind === k;
+        c.setAttribute("aria-checked", String(on));
+        c.tabIndex = on ? 0 : -1;
+      });
+      preview();
+    }
+  }
+
+  function create() {
+    rep = starterReport(starter, sheetInfo);
+    saved = "";
+    mode = "edit";
+    void save();
+    render();
+    preview();
+    toast({ kind: "success", text: `Created "${rep.title}". It's saved with the workbook.` });
+    requestAnimationFrame(() => editor.querySelector<HTMLInputElement>(".report-title-input")?.focus());
+  }
+
+  function openReport(r: Report) {
+    void save();
+    rep = structuredClone(r);
+    saved = JSON.stringify(rep);
+    mode = "edit";
+    render();
+    preview();
+  }
+
+  // ----------------------------------------------------------- edit view --
+
+  function renderTop(r: Report): HTMLElement {
+    const top = el("div", "an-stack");
+    const list = reportsOf(wb);
+    const pickRow = el("div", "an-row");
+    const options: [string, string][] = list.map((x) => [x.id, x.title || "Untitled"]);
+    if (!list.some((x) => x.id === r.id)) options.push([r.id, r.title || "Untitled"]);
+    const pick = selectOf(options, r.id, "Report");
+    pick.addEventListener("change", () => {
+      const x = reportsOf(wb).find((y) => y.id === pick.value);
+      if (x) openReport(x);
+    });
+    const add = makeButton("New", "secondary", "plus");
+    add.classList.add("an-fit");
+    add.title = "Start another report";
+    add.addEventListener("click", () => {
+      void save();
+      mode = "start";
+      render();
+    });
+    pickRow.append(field("Report", pick), add);
+    const title = el("input", "report-title-input");
+    title.value = r.title;
     title.addEventListener("input", () => {
-      rep.title = title.value;
+      r.title = title.value;
       changed();
+      pick.selectedOptions[0] && (pick.selectedOptions[0].textContent = r.title || "Untitled");
     });
     const subtitle = el("input");
-    subtitle.value = rep.subtitle ?? "";
-    subtitle.placeholder = "e.g. {{entity}}, period ended {{period}}";
+    subtitle.value = r.subtitle ?? "";
+    subtitle.placeholder = "e.g. Period ended 31 October 2026";
     subtitle.addEventListener("input", () => {
-      rep.subtitle = subtitle.value || undefined;
+      r.subtitle = subtitle.value || undefined;
       changed();
     });
-    const home = selectOf(sheets(), rep.sheetId, "Formulas read");
-    home.addEventListener("change", () => {
-      rep.sheetId = home.value;
-      changed();
-    });
-    const page = rep.page ?? { size: "A4", landscape: false };
+    top.append(pickRow, field("Title", title), field("Subtitle", subtitle));
+    return top;
+  }
+
+  function renderAdvanced(r: Report): HTMLElement {
+    const box = el("details", "an-more");
+    box.append(el("summary", undefined, "Parameters, paper and run for each"));
+    const inner = el("div", "an-stack");
+    box.append(inner);
+    if (r.params.length || r.runFor) box.open = true;
+
+    const page = r.page ?? { size: "A4", landscape: false };
     const size = selectOf(
       [
         ["A4", "A4"],
@@ -242,31 +389,29 @@ export function openReports(d: ReportDeps): void {
       "Orientation",
     );
     const setPage = () => {
-      rep.page = { size: size.value as "A4" | "Letter", landscape: orient.value === "landscape" };
+      r.page = { size: size.value as "A4" | "Letter", landscape: orient.value === "landscape" };
       changed();
     };
     size.addEventListener("change", setPage);
     orient.addEventListener("change", setPage);
-    const del = button("Delete report", async () => {
-      if (!(await confirmDialog({ title: `Delete the report "${rep.title}"?`, text: "Undo brings it back.", confirm: "Delete report", danger: true }))) return;
-      clearTimeout(saveTimer);
-      const id = rep.id;
-      void d.run({ type: "report.set", params: { id, report: null } }).then(() => {
-        rep = structuredClone(reportsOf(wb)[0] ?? newReport(d.activeSheet()));
-        saved = reportsOf(wb).some((r) => r.id === rep.id) ? JSON.stringify(rep) : "";
-        render();
-        preview();
-      });
+    const home = selectOf(sheets(), r.sheetId, "Formulas read");
+    home.addEventListener("change", () => {
+      r.sheetId = home.value;
+      changed();
     });
-    head.append(labelled("Report", pick), labelled("Title", title), labelled("Subtitle", subtitle), labelled("Formulas read", home), labelled("Paper", size), labelled("Orientation", orient), del);
-  }
+    const paper = el("div", "an-row");
+    paper.append(field("Paper", size), field("Orientation", orient));
+    inner.append(paper, field("Formulas read the sheet", home));
 
-  // ---- parameters and "run for each"
-  function renderParams(): HTMLElement {
-    const box = el("section", "report-params");
-    box.append(el("h4", undefined, "Parameters"));
-    box.append(el("p", "hp-muted", "Use {{name}} in text and {name} inside a formula, e.g. {{=SUMIFS(C:C,A:A,{entity})}}. A date like 2026-03-31 goes into formulas as a date."));
-    rep.params.forEach((p, i) => {
+    // parameters
+    const params = el("div", "an-section");
+    const ph = el("div", "an-section__head");
+    ph.append(el("h3", "an-section__title", "Parameters"));
+    params.append(ph);
+    const help = el("p", "an-hint report-syntax");
+    help.append("Write ", el("code", undefined, "{{period}}"), " in any text to show a parameter, and ", el("code", undefined, "{{=SUM(F:F)}}"), " for a live figure. Inside a formula a parameter is ", el("code", undefined, "{period}"), ", e.g. ", el("code", undefined, "{{=SUMIFS(F:F,C:C,{entity})}}"), ".");
+    params.append(help);
+    r.params.forEach((p, i) => {
       const row = el("div", "report-param");
       const name = el("input");
       name.value = p.name;
@@ -274,7 +419,7 @@ export function openReports(d: ReportDeps): void {
       name.addEventListener("change", () => {
         const old = p.name;
         p.name = name.value.trim();
-        if (rep.runFor?.param === old) rep.runFor.param = p.name;
+        if (r.runFor?.param === old) r.runFor.param = p.name;
         changed(true);
       });
       const value = el("input");
@@ -284,36 +429,57 @@ export function openReports(d: ReportDeps): void {
         p.value = value.value;
         changed();
       });
-      row.append(name, el("span", undefined, "="), value, button("✕", () => {
-        rep.params.splice(i, 1);
-        if (rep.runFor?.param === p.name) delete rep.runFor;
-        changed(true);
-      }, `Remove parameter ${p.name}`));
-      box.append(row);
+      row.append(
+        name,
+        el("span", "report-eq", "="),
+        value,
+        iconButton("close", `Remove parameter ${p.name}`, {
+          size: "sm",
+          onClick: () => {
+            r.params.splice(i, 1);
+            if (r.runFor?.param === p.name) delete r.runFor;
+            changed(true);
+          },
+        }),
+      );
+      params.append(row);
     });
-    const add = el("div", "report-row");
-    add.append(
-      button("Add parameter", () => {
-        const taken = new Set(rep.params.map((p) => p.name.toLowerCase()));
-        const name = ["entity", "period", "param"].find((n) => !taken.has(n)) ?? `param${rep.params.length + 1}`;
-        rep.params.push({ name, value: name === "period" ? new Date().toISOString().slice(0, 7) : "" });
-        changed(true);
-      }),
-      button("Roll back a period", () => roll(-1), "Move period parameters back one period"),
-      button("Roll forward a period", () => roll(1), "Move period parameters on one period (2026-03 → 2026-04, Q1 2026 → Q2 2026)"),
-    );
-    box.append(add);
-
-    // run for each
-    const rf = rep.runFor;
-    const each = el("div", "report-runfor");
-    const param = selectOf([["", "Just once"], ...rep.params.map((p) => [p.name, `Once for each ${p.name}`] as [string, string])], rf?.param ?? "", "Run for each");
-    param.addEventListener("change", () => {
-      if (!param.value) delete rep.runFor;
-      else rep.runFor = { ...(rep.runFor ?? { sheetId: rep.sheetId, column: 0 }), param: param.value };
+    const addRow = el("div", "report-row");
+    const addParam = makeButton("Add parameter", "secondary", "plus");
+    addParam.classList.add("btn-sm");
+    addParam.addEventListener("click", () => {
+      const taken = new Set(r.params.map((p) => p.name.toLowerCase()));
+      const name = ["entity", "period", "param"].find((n) => !taken.has(n)) ?? `param${r.params.length + 1}`;
+      r.params.push({ name, value: name === "period" ? new Date().toISOString().slice(0, 7) : "" });
       changed(true);
     });
-    each.append(labelled("Run", param));
+    const back = makeButton("Previous period", "ghost");
+    back.classList.add("btn-sm");
+    back.title = "Move period parameters back one period";
+    back.addEventListener("click", () => roll(-1));
+    const fwd = makeButton("Next period", "ghost");
+    fwd.classList.add("btn-sm");
+    fwd.title = "Move period parameters on one period (2026-03 → 2026-04, Q1 2026 → Q2 2026)";
+    fwd.addEventListener("click", () => roll(1));
+    addRow.append(addParam, back, fwd);
+    params.append(addRow);
+    inner.append(params);
+
+    // run for each
+    const rf = r.runFor;
+    const each = el("div", "an-section");
+    const eh = el("div", "an-section__head");
+    eh.append(el("h3", "an-section__title", "Run for each"));
+    each.append(eh);
+    const param = selectOf([["", "Just once"], ...r.params.map((p) => [p.name, `Once for each ${p.name}`] as [string, string])], rf?.param ?? "", "Run");
+    param.disabled = !r.params.length;
+    if (!r.params.length) param.title = "Add a parameter first";
+    param.addEventListener("change", () => {
+      if (!param.value) delete r.runFor;
+      else r.runFor = { ...(r.runFor ?? { sheetId: r.sheetId, column: 0 }), param: param.value };
+      changed(true);
+    });
+    each.append(field("Run", param));
     if (rf) {
       const fromList = !!rf.list;
       const how = selectOf(
@@ -325,34 +491,38 @@ export function openReports(d: ReportDeps): void {
         "Values from",
       );
       how.addEventListener("change", () => {
-        if (how.value === "list") {
-          rep.runFor = { param: rf.param, list: [], ...(rf.consolidated ? { consolidated: true } : {}) };
-        } else rep.runFor = { param: rf.param, sheetId: rep.sheetId, column: 0, ...(rf.consolidated ? { consolidated: true } : {}) };
+        if (how.value === "list") r.runFor = { param: rf.param, list: [], ...(rf.consolidated ? { consolidated: true } : {}) };
+        else r.runFor = { param: rf.param, sheetId: r.sheetId, column: 0, ...(rf.consolidated ? { consolidated: true } : {}) };
         changed(true);
       });
-      each.append(labelled("Values from", how));
+      each.append(field("Values from", how));
       if (fromList) {
         const list = el("input");
         list.value = (rf.list ?? []).join(", ");
         list.placeholder = "North, South, East";
         list.addEventListener("input", () => {
-          rf.list = list.value.split(",").map((x) => x.trim()).filter(Boolean);
+          rf.list = list.value
+            .split(",")
+            .map((x) => x.trim())
+            .filter(Boolean);
           changed();
         });
-        each.append(labelled("Values", list));
+        each.append(field("Values", list));
       } else {
-        const sheet = selectOf(sheets(), rf.sheetId ?? rep.sheetId, "Sheet");
+        const sheet = selectOf(sheets(), rf.sheetId ?? r.sheetId, "Sheet");
         sheet.addEventListener("change", () => {
           rf.sheetId = sheet.value;
           rf.column = 0;
           changed(true);
         });
-        const col = selectOf(columnsOf(rf.sheetId ?? rep.sheetId), String(rf.column ?? 0), "Column");
+        const col = selectOf(columnsOf(rf.sheetId ?? r.sheetId), String(rf.column ?? 0), "Column");
         col.addEventListener("change", () => {
           rf.column = Number(col.value);
           changed();
         });
-        each.append(labelled("Sheet", sheet), labelled("Column", col));
+        const row = el("div", "an-row");
+        row.append(field("Sheet", sheet), field("Column", col));
+        each.append(row);
       }
       const cons = el("input");
       cons.type = "checkbox";
@@ -361,99 +531,123 @@ export function openReports(d: ReportDeps): void {
         rf.consolidated = cons.checked;
         changed();
       });
-      const cl = el("label", "report-check");
-      cl.append(cons, "Also a consolidated report (all of them; filters off, {" + rf.param + '} = "*")');
+      const cl = el("label", "an-check");
+      cl.append(cons, el("span", undefined, "Also a consolidated report of all of them"));
       each.append(cl);
-      const n = runForValues(rep, env).length;
-      each.append(el("small", "hp-muted", `${n.toLocaleString("en-US")} value${n === 1 ? "" : "s"}${rf.consolidated ? " plus the consolidated report" : ""}.`));
+      const n = runForValues(r, env).length;
+      each.append(el("p", "an-hint", `${n.toLocaleString()} report${n === 1 ? "" : "s"}${rf.consolidated ? " plus the consolidated one" : ""} in the PDF.`));
     }
-    box.append(each);
+    inner.append(each);
     return box;
   }
 
   function roll(steps: number) {
+    if (!rep) return;
     const { report, changed: names } = rollForward(rep, steps);
     if (!names.length) {
-      statusLine.textContent = "No parameter looks like a period (2026-03-31, 2026-03, Mar 2026, Q1 2026, FY2026, 2026).";
+      toast({ kind: "warning", text: "No parameter looks like a period (2026-03-31, 2026-03, Mar 2026, Q1 2026, FY2026, 2026)." });
       return;
     }
     rep = report;
-    statusLine.textContent = `${names.join(", ")} → ${names.map((n) => rep.params.find((p) => p.name === n)!.value).join(", ")}`;
+    toast({ text: `${names.join(", ")} now ${names.map((n) => rep!.params.find((p) => p.name === n)!.value).join(", ")}` });
     changed(true);
   }
 
   // ---- blocks
-  function filterEditor(b: { filter?: ParamFilter; sheetId?: string }, sheetId: string): HTMLElement {
-    const wrap = el("div", "report-row");
-    const param = selectOf([["", "All rows"], ...rep.params.map((p) => [p.name, `Only this ${p.name}`] as [string, string])], b.filter?.param ?? "", "Filter");
-    const col = selectOf(columnsOf(sheetId), String(b.filter?.column ?? 0), "in column");
-    col.hidden = !b.filter;
+  function filterEditor(r: Report, b: { filter?: ParamFilter; sheetId?: string }, sheetId: string): HTMLElement | null {
+    if (!r.params.length) return null;
+    const wrap = el("div", "an-row");
+    const param = selectOf([["", "All rows"], ...r.params.map((p) => [p.name, `Only this ${p.name}`] as [string, string])], b.filter?.param ?? "", "Rows");
+    const col = selectOf(columnsOf(sheetId), String(b.filter?.column ?? 0), "In column");
+    const colField = field("In column", col);
+    colField.hidden = !b.filter;
     param.addEventListener("change", () => {
       if (!param.value) delete b.filter;
       else b.filter = { param: param.value, column: Number(col.value) || 0 };
-      col.hidden = !b.filter;
+      colField.hidden = !b.filter;
       changed();
     });
     col.addEventListener("change", () => {
       if (b.filter) b.filter.column = Number(col.value);
       changed();
     });
-    wrap.append(labelled("Rows", param), labelled("In column", col));
+    wrap.append(field("Rows", param), colField);
     return wrap;
   }
 
   function pivotEditor(b: Extract<ReportBlock, { source: "pivot" }>): HTMLElement {
-    const wrap = el("div", "report-row");
+    const wrap = el("div", "an-row report-pivot-row");
     const cols = columnsOf(b.sheetId);
     const p = b.pivot;
     const rowsSel = selectOf(cols, String(p.rows[0]?.field ?? 0), "Rows");
-    const colsSel = selectOf([["", "(none)"], ...cols], p.cols[0] ? String(p.cols[0].field) : "", "Columns");
+    const colsSel = selectOf([["", "(none)"], ...cols], p.cols[0] ? String(p.cols[0].field) : "", "Across");
     const valSel = selectOf(cols, String(p.values[0]?.field ?? 0), "Values");
     const aggSel = selectOf(Object.entries(AGG_LABEL) as [string, string][], p.values[0]?.agg ?? "sum", "Summarise by");
     const set = () => {
       const names = wb.has(b.sheetId) ? readSheetColumns(wb.get(b.sheetId).source).names : undefined;
       b.pivot = {
-        rows: [{ field: Number(rowsSel.value) }],
+        rows: [{ field: Number(rowsSel.value), ...(p.rows[0]?.field === Number(rowsSel.value) && p.rows[0]?.group ? { group: p.rows[0].group } : {}) }],
         cols: colsSel.value ? [{ field: Number(colsSel.value) }] : [],
         values: [{ field: Number(valSel.value), agg: aggSel.value as PivotAgg }],
         filters: p.filters,
-        subtotals: true,
-        grandTotals: true,
+        subtotals: p.subtotals ?? true,
+        grandTotals: p.grandTotals ?? true,
         ...(names ? { names } : {}),
       };
       changed();
     };
     for (const s of [rowsSel, colsSel, valSel, aggSel]) s.addEventListener("change", set);
-    wrap.append(labelled("Rows", rowsSel), labelled("Columns", colsSel), labelled("Values", valSel), labelled("As", aggSel));
+    wrap.append(field("Summarise", aggSel), field("of", valSel), field("by", rowsSel), field("across", colsSel));
     return wrap;
   }
 
   const defaultPivot = (sheetId: string): SavedPivot => {
-    const names = wb.has(sheetId) ? readSheetColumns(wb.get(sheetId).source).names : [];
     const data = wb.has(sheetId) ? readSheetColumns(wb.get(sheetId).source) : null;
-    const num = data ? data.columns.findIndex((c, i) => c.kind === "number" && !data.isDate[i]) : -1;
-    const txt = data ? data.columns.findIndex((c) => c.kind === "string") : -1;
-    return { rows: [{ field: Math.max(0, txt) }], cols: [], values: [{ field: Math.max(0, num), agg: num >= 0 ? "sum" : "count" }], filters: [], subtotals: true, grandTotals: true, names };
+    const f = sheetFacts(sheetId, "", data);
+    const by = f.category ?? Math.max(0, data ? data.columns.findIndex((c) => c.kind === "string") : 0);
+    return { rows: [{ field: by }], cols: [], values: [f.amount === null ? { field: by, agg: "count" } : { field: f.amount, agg: "sum" }], filters: [], subtotals: true, grandTotals: true, names: f.names };
   };
 
-  function blockEditor(b: ReportBlock, i: number): HTMLElement {
+  function blockSummary(b: ReportBlock): string {
+    switch (b.kind) {
+      case "heading":
+        return b.text || "Heading";
+      case "paragraph":
+        return b.text ? b.text.slice(0, 60) : "Text";
+      case "table":
+        return b.title || (b.source === "pivot" ? "Summary table" : `Cells ${b.range}`);
+      case "chart":
+        return b.title || b.spec?.title || "Chart";
+      case "pageBreak":
+        return "Page break";
+    }
+  }
+
+  function blockEditor(r: Report, b: ReportBlock, i: number): HTMLElement {
     const card = el("section", "report-block");
     card.dataset.kind = b.kind;
     const top = el("div", "report-block-head");
-    top.append(el("b", undefined, BLOCK_LABEL[b.kind]));
+    const kind = el("span", "report-block-kind");
+    kind.append(icon(BLOCK_ICON[b.kind], { size: 14 }), el("span", undefined, BLOCK_LABEL[b.kind]));
+    const sum = el("span", "report-block-sum", b.kind === "heading" || b.kind === "paragraph" || b.kind === "pageBreak" ? "" : blockSummary(b));
+    top.append(kind, sum);
     const move = (to: number) => {
-      const [x] = rep.blocks.splice(i, 1);
-      rep.blocks.splice(to, 0, x);
+      const [x] = r.blocks.splice(i, 1);
+      r.blocks.splice(to, 0, x);
       changed(true);
       editor.querySelectorAll<HTMLElement>(".report-block")[to]?.querySelector<HTMLElement>("button")?.focus();
     };
-    if (i > 0) top.append(button("↑", () => move(i - 1), `Move ${BLOCK_LABEL[b.kind]} up`));
-    if (i < rep.blocks.length - 1) top.append(button("↓", () => move(i + 1), `Move ${BLOCK_LABEL[b.kind]} down`));
+    if (i > 0) top.append(iconButton("chevron-up", `Move ${BLOCK_LABEL[b.kind]} up`, { size: "sm", onClick: () => move(i - 1) }));
+    if (i < r.blocks.length - 1) top.append(iconButton("chevron-down", `Move ${BLOCK_LABEL[b.kind]} down`, { size: "sm", onClick: () => move(i + 1) }));
     top.append(
-      button("✕", () => {
-        rep.blocks.splice(i, 1);
-        changed(true);
-      }, `Remove ${BLOCK_LABEL[b.kind]}`),
+      iconButton("trash", `Remove ${BLOCK_LABEL[b.kind]}`, {
+        size: "sm",
+        onClick: () => {
+          const removed = r.blocks.splice(i, 1)[0];
+          changed(true);
+          toast({ text: `Removed the ${BLOCK_LABEL[removed.kind].toLowerCase()}`, action: { label: "Undo", run: () => (r.blocks.splice(i, 0, removed), changed(true)) } });
+        },
+      }),
     );
     card.append(top);
     switch (b.kind) {
@@ -467,18 +661,19 @@ export function openReports(d: ReportDeps): void {
         });
         const lvl = selectOf(
           [
-            ["1", "Level 1"],
-            ["2", "Level 2"],
-            ["3", "Level 3"],
+            ["1", "Large"],
+            ["2", "Medium"],
+            ["3", "Small"],
           ],
           String(b.level),
-          "Heading level",
+          "Heading size",
         );
         lvl.addEventListener("change", () => {
           b.level = Number(lvl.value) as 1 | 2 | 3;
           changed();
         });
-        const row = el("div", "report-row");
+        lvl.classList.add("report-level");
+        const row = el("div", "an-row");
         row.append(t, lvl);
         card.append(row);
         break;
@@ -487,7 +682,7 @@ export function openReports(d: ReportDeps): void {
         const t = el("textarea");
         t.value = b.text;
         t.rows = 3;
-        t.placeholder = 'Revenue rose {{=TEXT(B5/B4-1,"0%")}} on last year.';
+        t.placeholder = "Write a note. A live figure looks like {{=SUM(F:F)}}.";
         t.setAttribute("aria-label", "Text");
         t.addEventListener("input", () => {
           b.text = t.value;
@@ -497,18 +692,18 @@ export function openReports(d: ReportDeps): void {
         break;
       }
       case "table": {
-        const row = el("div", "report-row");
+        const row = el("div", "an-row");
         const source = selectOf(
           [
-            ["range", "A range of cells"],
-            ["pivot", "A pivot"],
+            ["pivot", "A summary (pivot)"],
+            ["range", "Cells as they are"],
           ],
           b.source,
-          "Table of",
+          "Show",
         );
         source.addEventListener("change", () => {
           const base = { id: b.id, kind: "table" as const, sheetId: b.sheetId, ...(b.title ? { title: b.title } : {}), ...(b.filter ? { filter: b.filter } : {}) };
-          rep.blocks[i] = source.value === "pivot" ? { ...base, source: "pivot", pivot: defaultPivot(b.sheetId) } : { ...base, source: "range", range: "A1:D10", headerRow: true };
+          r.blocks[i] = source.value === "pivot" ? { ...base, source: "pivot", pivot: defaultPivot(b.sheetId) } : { ...base, source: "range", range: "A1:D10", headerRow: true };
           changed(true);
         });
         const sheet = selectOf(sheets(), b.sheetId, "Sheet");
@@ -517,22 +712,13 @@ export function openReports(d: ReportDeps): void {
           if (b.source === "pivot") b.pivot = defaultPivot(b.sheetId);
           changed(true);
         });
-        const title = el("input");
-        title.value = b.title ?? "";
-        title.placeholder = "Caption (optional)";
-        title.setAttribute("aria-label", "Table caption");
-        title.addEventListener("input", () => {
-          b.title = title.value || undefined;
-          changed();
-        });
-        row.append(labelled("Table of", source), labelled("Sheet", sheet), labelled("Caption", title));
+        row.append(field("Show", source), field("From", sheet));
         card.append(row);
         if (b.source === "range") {
-          const r = el("div", "report-row");
+          const rr = el("div", "an-row");
           const range = el("input");
           range.value = b.range;
           range.placeholder = "A1:D20 or A:D";
-          range.setAttribute("aria-label", "Range");
           range.addEventListener("input", () => {
             b.range = range.value.trim();
             changed();
@@ -544,71 +730,107 @@ export function openReports(d: ReportDeps): void {
             b.headerRow = hdr.checked;
             changed();
           });
-          const hl = el("label", "report-check");
-          hl.append(hdr, "First row is the header");
-          r.append(labelled("Range", range), hl);
-          card.append(r);
+          const hl = el("label", "an-check an-fit");
+          hl.append(hdr, el("span", undefined, "Header row"));
+          rr.append(field("Cells", range), hl);
+          card.append(rr);
         } else card.append(pivotEditor(b));
-        card.append(filterEditor(b, b.sheetId));
+        const title = el("input");
+        title.value = b.title ?? "";
+        title.placeholder = "Optional";
+        title.addEventListener("input", () => {
+          b.title = title.value || undefined;
+          changed();
+        });
+        card.append(field("Caption", title));
+        const f = filterEditor(r, b, b.sheetId);
+        if (f) card.append(f);
         break;
       }
       case "chart": {
         const charts = wb.charts;
         const label = (c: ChartSpec) => `${c.title || (c.pivot ? "Pivot chart" : `${c.type} chart`)} (${wb.has(c.range.sheetId) ? wb.get(c.range.sheetId).name : "?"})`;
-        const pick = selectOf([["", charts.length ? "Pick a chart…" : "No charts yet: insert one first"], ...charts.map((c) => [c.id, label(c)] as [string, string])], b.chartId ?? "", "Chart");
+        const own = b.spec && !b.chartId ? [["__own", b.spec.title || "This report's chart"] as [string, string]] : [];
+        const pick = selectOf([...own, ["", charts.length || own.length ? "Pick a chart…" : "No charts yet: insert one on the sheet first"], ...charts.map((c) => [c.id, label(c)] as [string, string])], b.chartId ?? (own.length ? "__own" : ""), "Chart");
         pick.addEventListener("change", () => {
+          if (pick.value === "__own") return;
           b.chartId = pick.value || undefined;
-          changed();
+          if (b.chartId) delete b.spec;
+          changed(true);
         });
         const title = el("input");
         title.value = b.title ?? "";
-        title.placeholder = "Title (default: the chart's)";
-        title.setAttribute("aria-label", "Chart title");
+        title.placeholder = "The chart's own title";
         title.addEventListener("input", () => {
           b.title = title.value || undefined;
           changed();
         });
-        const row = el("div", "report-row");
-        row.append(labelled("Chart", pick), labelled("Title", title));
-        card.append(row);
-        const spec = charts.find((c) => c.id === b.chartId);
-        if (spec) card.append(filterEditor(b, spec.pivot?.sheetId ?? spec.range.sheetId));
+        card.append(field("Chart", pick), field("Title", title));
+        const spec = b.spec ?? charts.find((c) => c.id === b.chartId);
+        if (spec) {
+          const f = filterEditor(r, b, spec.pivot?.sheetId ?? spec.range.sheetId);
+          if (f) card.append(f);
+        }
         break;
       }
       case "pageBreak":
-        card.append(el("small", "hp-muted", "What follows starts on a new page."));
+        card.classList.add("report-block--break");
         break;
     }
     return card;
   }
 
   function render() {
-    renderHead();
+    if (mode === "start" || !rep) {
+      mode = "start";
+      renderStart();
+      return;
+    }
+    const r = rep;
     const scroll = editor.scrollTop;
-    editor.replaceChildren(renderParams());
-    const blocks = el("div", "report-blocks");
-    blocks.append(el("h4", undefined, "Blocks"));
-    rep.blocks.forEach((b, i) => blocks.append(blockEditor(b, i)));
-    if (!rep.blocks.length) blocks.append(el("p", "hp-muted", "Add headings, text, tables and charts. They print in this order."));
-    const add = el("div", "report-row report-add");
+    editor.replaceChildren(renderTop(r));
+    const blocks = el("section", "an-section report-blocks");
+    const bh = el("div", "an-section__head");
+    bh.append(el("h3", "an-section__title", "Contents"), el("span", "an-hint", `${r.blocks.length} block${r.blocks.length === 1 ? "" : "s"}, printed in this order`));
+    blocks.append(bh);
+    r.blocks.forEach((b, i) => blocks.append(blockEditor(r, b, i)));
+    if (!r.blocks.length) {
+      const empty = el("div", "an-empty");
+      empty.append(el("p", undefined, "An empty page. Add a heading, some text with live figures, a table or a chart below."));
+      blocks.append(empty);
+    }
+    const add = el("div", "report-add");
+    add.setAttribute("role", "group");
+    add.setAttribute("aria-label", "Add to the report");
     for (const kind of ["heading", "paragraph", "table", "chart", "pageBreak"] as BlockKind[]) {
-      add.append(
-        button(`+ ${BLOCK_LABEL[kind]}`, () => {
-          rep.blocks.push(newBlock(kind, rep.sheetId));
-          changed(true);
-          editor.scrollTop = editor.scrollHeight;
-        }),
-      );
+      const btn = el("button", "report-add__btn");
+      btn.type = "button";
+      btn.title = BLOCK_HINT[kind];
+      btn.append(icon("plus", { size: 12 }), el("span", undefined, BLOCK_LABEL[kind]));
+      btn.addEventListener("click", () => {
+        const nb = newBlock(kind, r.sheetId);
+        if (nb.kind === "table") Object.assign(nb, { source: "pivot", pivot: defaultPivot(r.sheetId) });
+        r.blocks.push(nb);
+        changed(true);
+        requestAnimationFrame(() => {
+          const cards = editor.querySelectorAll<HTMLElement>(".report-block");
+          const last = cards[cards.length - 1];
+          last?.scrollIntoView({ block: "nearest" });
+          last?.querySelector<HTMLElement>("input, textarea, select")?.focus();
+        });
+      });
+      add.append(btn);
     }
     blocks.append(add);
-    editor.append(blocks);
+    editor.append(blocks, renderAdvanced(r));
     editor.scrollTop = scroll;
-    renderActions();
+    renderActions(r);
   }
 
   // ---- running
   let lastRuns: RenderedReport[] = [];
-  const runs = (): RenderedReport[] => (rep.runFor ? runBook(rep, env) : [runReport(rep, env)]);
+  const currentReport = (): Report => (mode === "start" || !rep ? starterReport(starter, sheetInfo) : rep);
+  const runs = (r = currentReport()): RenderedReport[] => (r.runFor ? runBook(r, env) : [runReport(r, env)]);
 
   function preview() {
     clearTimeout(previewTimer);
@@ -621,11 +843,15 @@ export function openReports(d: ReportDeps): void {
     }
     lastRuns = all;
     const shown = all.slice(0, PREVIEW_RUNS);
+    const scroll = previewBox.scrollTop;
     previewBox.innerHTML = reportHtml(shown);
-    if (all.length > shown.length) previewBox.append(el("p", "hp-muted", `Showing ${shown.length} of ${all.length} reports. The PDF has them all.`));
+    if (all.length > shown.length) previewBox.append(el("p", "an-hint report-more", `Showing ${shown.length} of ${all.length} reports here. The PDF has them all.`));
     drawCharts(previewBox, shown);
-    const warn = all.reduce((n, r) => n + r.warnings.length, 0);
-    statusLine.textContent = `${all.length} report${all.length === 1 ? "" : "s"}${warn ? `, ${warn} thing${warn === 1 ? "" : "s"} to check` : ""}.`;
+    previewBox.scrollTop = scroll;
+    const warn = [...new Set(all.flatMap((r) => r.warnings))];
+    previewNote.hidden = !warn.length;
+    previewNote.replaceChildren();
+    if (warn.length) previewNote.append(icon("warning"), el("span", undefined, warn.length === 1 ? warn[0] : `${warn.length} things to check: ${warn.slice(0, 3).join(" · ")}`));
   }
 
   function drawCharts(root: HTMLElement, reports: RenderedReport[]) {
@@ -640,25 +866,27 @@ export function openReports(d: ReportDeps): void {
   }
 
   async function exportPdf() {
+    if (!rep) return;
     await save();
     let all: RenderedReport[];
     try {
-      all = runs();
+      all = runs(rep);
     } catch (e) {
-      statusLine.textContent = (e as Error).message;
+      toast({ kind: "error", title: "Couldn't run the report", text: (e as Error).message });
       return;
     }
-    statusLine.textContent = `Writing ${all.length} report${all.length === 1 ? "" : "s"}…`;
+    const progress = toast({ text: `Writing ${all.length} report${all.length === 1 ? "" : "s"} to PDF…`, duration: 0 });
     const page = rep.page ?? { size: "A4", landscape: false };
     try {
       const bytes = await reportPdf(all, { title: rep.title, size: page.size, landscape: page.landscape, footer: rep.title }, paintChart);
       const name = `${safeName(all.length === 1 ? all[0].title : rep.title)}.pdf`;
       download(bytes, name);
       const pages = (new TextDecoder("latin1").decode(bytes).match(/\/Type \/Page\b/g) ?? []).length;
-      statusLine.textContent = `Saved ${name}: ${all.length} report${all.length === 1 ? "" : "s"}, ${pages} page${pages === 1 ? "" : "s"}.`;
-      d.status(`Report PDF saved: ${name}`);
+      progress.close();
+      toast({ kind: "success", text: `Saved ${name}: ${all.length} report${all.length === 1 ? "" : "s"}, ${pages} page${pages === 1 ? "" : "s"}` });
     } catch (e) {
-      statusLine.textContent = `Couldn't write the PDF: ${(e as Error).message}`;
+      progress.close();
+      toast({ kind: "error", title: "Couldn't write the PDF", text: (e as Error).message });
     }
   }
 
@@ -680,26 +908,37 @@ export function openReports(d: ReportDeps): void {
     setTimeout(done, 1000);
   }
 
-  function renderActions() {
-    actions.replaceChildren(
-      button("Close", close),
-      button("Print", print, "Print the preview (the browser's print dialog can save a PDF too)"),
-      button(rep.runFor ? `Export PDF book (each ${rep.runFor.param})` : "Export PDF", () => void exportPdf()),
-    );
+  function renderActions(r: Report) {
+    footer.replaceChildren();
+    const start = el("div", "cf-dialog__footer-start");
+    const del = makeButton("Delete report", "ghost", "trash");
+    del.classList.add("btn-danger-ghost");
+    del.addEventListener("click", async () => {
+      if (!(await confirmDialog({ title: `Delete the report "${r.title}"?`, text: "Undo brings it back.", confirm: "Delete report", danger: true }))) return;
+      clearTimeout(saveTimer);
+      const id = r.id;
+      void d.run({ type: "report.set", params: { id, report: null } }).then(() => {
+        const next = reportsOf(wb)[0];
+        if (next) openReport(next);
+        else {
+          rep = null;
+          saved = "";
+          mode = "start";
+          render();
+        }
+        toast({ text: `Deleted the report "${r.title}". Undo (Ctrl+Z) brings it back.` });
+      });
+    });
+    start.append(del);
+    const printBtn = makeButton("Print", "secondary");
+    printBtn.title = "Print the preview (the print dialog can also save a PDF)";
+    printBtn.addEventListener("click", print);
+    const pdf = makeButton(r.runFor ? `Export PDF book` : "Export PDF", "primary", "download");
+    pdf.title = r.runFor ? `One report for each ${r.runFor.param}, with a contents page` : "Save the report as a PDF";
+    pdf.addEventListener("click", () => void exportPdf());
+    footer.append(start, printBtn, pdf);
   }
 
-  back.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      close();
-    }
-  });
-  back.addEventListener("mousedown", (e) => {
-    if (e.target === back) close();
-  });
-
   render();
-  preview();
-  document.body.append(back);
-  (head.querySelector("input") as HTMLElement | null)?.focus();
+  if (mode === "edit") preview();
 }

@@ -2,9 +2,8 @@
 
 ## Pivot charts
 
-In the pivot table builder (**Pivot table…**), lay out the pivot, pick
-Column, Bar, Line or Pie next to **Chart this pivot**, and click it. The
-chart sits over the sheet like any other chart and shows the pivot's rows
+In the pivot table builder (**Pivot table…**), lay out the pivot and press
+**Chart** at the bottom of the pivot panel. The chart sits over the sheet like any other chart and shows the pivot's rows
 (without subtotals and grand totals) with one series per value, or per
 column item when a field is on Columns.
 
@@ -16,8 +15,16 @@ again.
 
 ## Reports
 
-**Reports…** opens the report builder. A report is a list of blocks,
-printed in order:
+**Reports…** opens the report builder. The first time, pick a starting
+point, laid out for the sheet you are on, with a live preview beside it:
+**Summary pack** (key figures, a table and a chart of the main amount by
+category, then the detail), **Month-end pack** (a period on the cover,
+totals by month and category, review notes), **One report per item** (the
+same report for every vendor, entity or cost centre, plus a consolidated
+one) or **Blank report**. **Create report** saves it with the workbook;
+nothing is saved before that.
+
+A report is a list of blocks, printed in order:
 
 - **Heading**: levels 1 to 3. Levels 1 and 2 go in the PDF's contents
   page and bookmarks.
@@ -48,7 +55,8 @@ under **Check** in the preview.
 
 ## Parameters: one template for many entities
 
-**Add parameter** gives the report a name and a value, like `entity` =
+Parameters, paper size and **Run for each** are under **Parameters, paper
+and run for each** at the bottom of the editor. **Add parameter** gives the report a name and a value, like `entity` =
 `North` or `period` = `2026-03-31`.
 
 - In text, `{{entity}}` is replaced by the value.
@@ -67,10 +75,10 @@ entity.
 
 ## Period roll-forward
 
-**Roll forward a period** moves every parameter that looks like a period
+**Next period** moves every parameter that looks like a period
 on by one, in the same style: `2026-03-31` → `2026-04-30` (month ends stay
 month ends), `2026-03` → `2026-04`, `Mar 2026` → `Apr 2026`, `Q4 2026` →
-`Q1 2027`, `FY2026` → `FY2027`, `2026` → `2027`. **Roll back a period**
+`Q1 2027`, `FY2026` → `FY2027`, `2026` → `2027`. **Previous period**
 goes the other way. The parameter you run for each of isn't touched.
 Write the report's formulas in terms of `{period}` (for example
 `EDATE({period},-12)` for the same month last year) and next month's pack

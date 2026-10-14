@@ -13,11 +13,16 @@ import { formatValue, isDateFormat, parseDateLoose, Table, type ColumnData } fro
 import { columnLetter } from "@cellforge/grid";
 import { AGG_LABEL, fieldMembers, pivot, type DateGroup, type PivotAgg, type PivotItem, type PivotKey, type PivotResult, type PivotSpec, type ShowAs } from "@cellforge/core";
 import type { ChartSpec, ChartType } from "./charts/model";
-import { PIVOT_CHART_TYPES, pivotChartSpec, savePivot } from "./charts/pivotspec";
+import { pivotChartSpec, savePivot } from "./charts/pivotspec";
 import { namedHeader } from "./cleanup";
 import { EditableSource } from "./editable";
 import "./pivot.css";
-import { modal } from "./a11y";
+import "./analysis.css";
+import { describeColumn, isIdLike, measureColumns, type ColumnInfo } from "./charts/defaults";
+import { openSidePanel, type SidePanelContext } from "./ui/sidepanel";
+import { makeButton } from "./ui/dialog";
+import { icon, iconButton } from "./ui/icons";
+import { toast } from "./ui/toast";
 
 export interface PivotDeps {
   source: () => EditableSource;
@@ -327,10 +332,61 @@ export function describeCell(t: PivotTable, ri: number, j: number): string {
   return [labels.join(" / "), col].filter(Boolean).join(", ");
 }
 
-// ---------------------------------------------------------------- dialog --
+// ------------------------------------------------------------- helpers --
+
+/**
+ * A first pivot to suggest on an empty layout: a repeating category (or a
+ * date, by month) down the side and the main amount added up. Null when the
+ * sheet has nothing that summarises. Reads a sample, so it's quick on big sheets.
+ */
+export function quickStart(data: SheetColumns): { rows: number; value: number | null } | null {
+  const infos = quickInfos(data);
+  const measures = measureColumns(infos, 1);
+  const cat = infos.find((c) => c.kind === "text" && !isIdLike(c) && c.distinct < c.count && c.distinct <= 60);
+  const date = infos.find((c) => c.kind === "date");
+  const by = cat ?? date;
+  if (!by) return null;
+  return { rows: by.col, value: measures[0] ?? null };
+}
+
+/** Profiles of the sheet's columns from their first rows (charts/defaults.ts). */
+export function quickInfos(data: SheetColumns): ColumnInfo[] {
+  const SAMPLE = 2000;
+  return data.columns.map((col, i) => {
+    const n = Math.min(data.rows, SAMPLE);
+    const values: (string | number | null)[] = new Array(n);
+    for (let r = 0; r < n; r++) {
+      if (col.kind === "number") values[r] = Number.isNaN(col.values[r]) ? null : col.values[r];
+      else values[r] = col.codes[r] ? col.dict[col.codes[r] - 1] : null;
+    }
+    return describeColumn(i, data.names[i], values, data.isDate[i]);
+  });
+}
+
+/** Number formats offered for the values. "" keeps the sheet's format. */
+export const VALUE_FORMATS: [string, string][] = [
+  ["", "Automatic"],
+  ["#,##0", "1,235"],
+  ["#,##0.00", "1,234.56"],
+  ["#,##0.00;(#,##0.00)", "(1,234.56)"],
+  ['#,##0,"k"', "1k"],
+  ["0.0%", "12.3%"],
+];
+
+/**
+ * The table with every value column in `fmt` (percent show-as columns keep
+ * their %). "" is automatic: the sheet's own format, or #,##0.00 for values
+ * in General so amounts read like amounts.
+ */
+export function withValueFormat(t: PivotTable, fmt: string): PivotTable {
+  if (!fmt) return { ...t, numFmts: t.numFmts.map((f, j) => (j < t.labelCols || (f && f.toLowerCase() !== "general") ? f : "#,##0.00")) };
+  return { ...t, numFmts: t.numFmts.map((f, j) => (j < t.labelCols || (f === "0.0%" && fmt !== "0.0%") ? f : fmt)) };
+}
+
+// ---------------------------------------------------------------- panel --
 
 const GROUPS: [string, string][] = [
-  ["", "No date grouping"],
+  ["", "No grouping"],
   ["year", "Years"],
   ["quarter", "Quarters"],
   ["month", "Months"],
@@ -338,24 +394,25 @@ const GROUPS: [string, string][] = [
 ];
 const AGGS = Object.entries(AGG_LABEL) as [PivotAgg, string][];
 const SHOW_AS: [ShowAs, string][] = [
-  ["value", "Plain value"],
+  ["value", "Value"],
   ["pctGrand", "% of grand total"],
   ["pctRow", "% of row total"],
   ["pctCol", "% of column total"],
   ["running", "Running total"],
 ];
 const ZONES: [Zone, string, string][] = [
-  ["filters", "Filters", "Pick which items to include"],
-  ["cols", "Columns", "Items across the top"],
   ["rows", "Rows", "Items down the side"],
+  ["cols", "Columns", "Items across the top"],
   ["values", "Values", "What to add up or count"],
+  ["filters", "Filters", "Which items count"],
 ];
 const PREVIEW_ROWS = 300;
-const PREVIEW_COLS = 60;
+const PREVIEW_COLS = 40;
 const CHECKLIST_MAX = 300;
 
-/** Layouts from earlier in the session, by sheet name. */
+/** Layouts and value formats from earlier in the session, by sheet name. */
 const remembered = new Map<string, PivotLayout>();
+const rememberedFormat = new Map<string, string>();
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -369,124 +426,127 @@ function select(options: [string, string][], value: string, label: string): HTML
   for (const [v, t] of options) s.append(new Option(t, v));
   s.value = value;
   s.setAttribute("aria-label", label);
+  s.title = label;
   return s;
 }
 
-function iconButton(text: string, label: string, onClick: () => void): HTMLButtonElement {
-  const b = el("button", "pivot-icon", text);
-  b.type = "button";
-  b.title = label;
-  b.setAttribute("aria-label", label);
-  b.addEventListener("click", onClick);
-  return b;
+const kindName = (data: SheetColumns, f: number) => (data.isDate[f] ? "date" : data.columns[f].kind === "number" ? "number" : "text");
+const kindIcon = (data: SheetColumns, f: number) => (data.isDate[f] ? "calendar" : data.columns[f].kind === "number" ? "formula" : "document");
+
+/**
+ * The pivot builder in the side panel, beside the data it summarises.
+ * Fields are clicked or dragged into Rows, Columns, Values and Filters; the
+ * result shows live underneath and goes onto a new sheet (or a chart) from
+ * the footer. Click a result cell to see the rows behind it.
+ */
+export function openPivot(d: PivotDeps): void {
+  const sheet = d.sheetName();
+  const data = readSheetColumns(d.source());
+  openSidePanel({
+    id: "pivot",
+    title: "Pivot table",
+    minWidth: 420,
+    subtitle: data.rows ? `${sheet} · ${data.rows.toLocaleString()} rows` : sheet,
+    onClose: () => d.focusGrid(),
+    render: (p) => renderPivot(p, d, data, sheet),
+  });
 }
 
-const kindLabel = (data: SheetColumns, f: number) => (data.isDate[f] ? "date" : data.columns[f].kind === "number" ? "number" : "text");
-
-export function openPivot(d: PivotDeps): void {
-  const data = readSheetColumns(d.source());
-  const sheet = d.sheetName();
-  const back = el("div", "palette-backdrop");
-  modal(back);
-  const dialog = el("div", "palette import-dialog pivot-dialog");
-  dialog.setAttribute("role", "dialog");
-  dialog.setAttribute("aria-label", "Pivot table");
-  const body = el("div", "palette-form pivot-form");
-  dialog.append(body);
-  back.append(dialog);
-  const close = () => {
-    clearTimeout(timer);
-    back.remove();
-    d.focusGrid();
-  };
+function renderPivot(p: SidePanelContext, d: PivotDeps, data: SheetColumns, sheet: string): () => void {
   let timer = 0;
-  body.append(el("h3", undefined, "Pivot table"));
+  const root = el("div", "an-stack an-stack--loose pivot-panel");
+  p.body.append(root);
 
   if (!data.rows || !data.columns.length) {
-    body.append(el("p", undefined, "This sheet has no data to pivot. Open or paste the data first; the first row (or the column names) should name the columns."));
-    const actions = el("div", "numfmt-actions");
-    const ok = el("button", undefined, "Close");
-    ok.type = "button";
-    ok.addEventListener("click", close);
-    actions.append(ok);
-    body.append(actions);
-    back.addEventListener("keydown", (e) => e.key === "Escape" && close());
-    document.body.append(back);
-    ok.focus();
-    return;
+    const empty = el("div", "an-empty");
+    const ic = el("span", "an-empty__icon");
+    ic.append(icon("pivot", { size: 20 }));
+    empty.append(ic, el("h3", "an-empty__title", "Nothing to summarise yet"), el("p", undefined, "A pivot table adds up, counts or averages a sheet by what's in it: spend by vendor, totals by month, entries by user. Open or paste data with a header row, then come back."));
+    root.append(empty);
+    return () => clearTimeout(timer);
   }
 
   let layout: PivotLayout = remembered.get(sheet) ?? emptyLayout();
-  // drop fields that no longer exist (columns deleted since)
+  let valueFmt = rememberedFormat.get(sheet) ?? "";
   const ok = (f: { field: number }) => f.field < data.columns.length;
   layout = { ...layout, rows: layout.rows.filter(ok), cols: layout.cols.filter(ok), values: layout.values.filter(ok), filters: layout.filters.filter(ok) };
 
-  const intro = el("p", "hp-muted", `${data.rows.toLocaleString("en-US")} rows of ${sheet}. Drag fields into the boxes, or click a field to add it (numbers go to Values, text and dates to Rows). Click a result cell, then "Show these rows" to see the rows behind it.`);
-  const builder = el("div", "pivot-builder");
-  const fieldBox = el("section", "pivot-fields");
-  fieldBox.setAttribute("aria-label", "Fields");
-  const fieldHead = el("h4", undefined, "Fields");
+  // ---- fields
+  const fieldSec = el("section", "an-section");
+  const fieldHead = el("div", "an-section__head");
+  fieldHead.append(el("h3", "an-section__title", "Fields"));
   const search = el("input");
   search.type = "search";
   search.placeholder = "Find a field";
   search.setAttribute("aria-label", "Find a field");
+  search.className = "pivot-search";
+  if (data.names.length > 8) fieldHead.append(search);
   const fieldList = el("ul", "pivot-field-list");
-  fieldBox.append(fieldHead, search, fieldList);
+  fieldList.setAttribute("aria-label", "Fields: click to add, or drag into a box below");
+  fieldSec.append(fieldHead, fieldList);
+
+  // ---- zones
   const zonesBox = el("div", "pivot-zones");
   const zoneEls = new Map<Zone, HTMLElement>();
   for (const [zone, title, hint] of ZONES) {
     const sec = el("section", "pivot-zone");
     sec.dataset.zone = zone;
-    sec.setAttribute("aria-label", title);
-    const h = el("h4", undefined, title);
+    const h = el("h4", "pivot-zone__title", title);
+    h.id = `pivot-zone-${zone}`;
     const drop = el("div", "pivot-drop");
+    drop.setAttribute("role", "list");
+    drop.setAttribute("aria-labelledby", h.id);
     drop.dataset.hint = hint;
     sec.append(h, drop);
     zonesBox.append(sec);
     zoneEls.set(zone, drop);
   }
-  builder.append(fieldBox, zonesBox);
 
+  // ---- result
+  const resultSec = el("section", "an-section");
+  const resultHead = el("div", "an-section__head");
+  resultHead.append(el("h3", "an-section__title", "Result"));
+  const fmtSel = select(VALUE_FORMATS, valueFmt, "Number format of the values");
+  fmtSel.className = "pivot-format";
+  fmtSel.addEventListener("change", () => {
+    valueFmt = fmtSel.value;
+    rememberedFormat.set(sheet, valueFmt);
+    renderPreview();
+  });
+  resultHead.append(fmtSel);
   const options = el("div", "pivot-options");
-  const subBox = checkbox("Subtotals", layout.subtotals, (v) => update({ ...layout, subtotals: v }));
-  const grandBox = checkbox("Grand totals", layout.grandTotals, (v) => update({ ...layout, grandTotals: v }));
-  options.append(subBox, grandBox);
-
-  const statusLine = el("p", "pivot-status");
-  statusLine.setAttribute("aria-live", "polite");
-  const preview = el("div", "import-preview pivot-preview");
-  const actions = el("div", "numfmt-actions");
-  const closeBtn = el("button", undefined, "Close");
-  closeBtn.type = "button";
-  const drillBtn = el("button", undefined, "Show these rows");
-  drillBtn.type = "button";
-  drillBtn.disabled = true;
-  const sheetBtn = el("button", undefined, "Put the pivot on a new sheet");
-  sheetBtn.type = "button";
-  actions.append(closeBtn, drillBtn, sheetBtn);
-  // a pivot chart: saved with the workbook, worked out again when the data changes
-  const chartType = select(
-    PIVOT_CHART_TYPES.map((t) => [t, t[0].toUpperCase() + t.slice(1)] as [string, string]),
-    "column",
-    "Pivot chart type",
+  options.append(
+    checkbox("Subtotals", layout.subtotals, (v) => update({ ...layout, subtotals: v })),
+    checkbox("Grand totals", layout.grandTotals, (v) => update({ ...layout, grandTotals: v })),
   );
-  const chartBtn = el("button", undefined, "Chart this pivot");
-  chartBtn.type = "button";
-  chartBtn.title = "A chart of this pivot that updates when the data changes";
-  if (d.addChart && d.sheetId) actions.append(chartType, chartBtn);
-  body.append(intro, builder, options, statusLine, preview, actions);
+  const statusLine = el("p", "an-hint pivot-status");
+  statusLine.setAttribute("aria-live", "polite");
+  const preview = el("div", "pivot-preview");
+  resultSec.append(resultHead, preview, statusLine, options);
+
+  const startBox = el("div", "pivot-start");
+  root.append(fieldSec, zonesBox, startBox, resultSec);
+
+  // ---- footer
+  const foot = el("div", "an-footer");
+  const chartBtn = makeButton("Chart", "ghost", "chart");
+  const drillBtn = makeButton("Show rows", "secondary");
+  const sheetBtn = makeButton("Add as sheet", "primary");
+  if (d.addChart && d.sheetId) foot.append(chartBtn);
+  foot.append(el("span", "an-spacer"), drillBtn, sheetBtn);
+  p.footer.append(foot);
 
   let result: PivotResult | null = null;
   let table: PivotTable | null = null;
   let picked: { r: number; j: number } | null = null;
 
   function checkbox(label: string, checked: boolean, onChange: (v: boolean) => void): HTMLLabelElement {
-    const l = el("label", "pivot-check");
+    const l = el("label", "an-check");
     const i = el("input");
     i.type = "checkbox";
     i.checked = checked;
     i.addEventListener("change", () => onChange(i.checked));
-    l.append(i, label);
+    l.append(i, el("span", undefined, label));
     return l;
   }
 
@@ -499,13 +559,14 @@ export function openPivot(d: PivotDeps): void {
       dragging = drag;
       e.dataTransfer?.setData("text/plain", data.names[drag.field]);
       if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
+      zonesBox.classList.add("is-dragging");
     });
     node.addEventListener("dragend", () => {
       dragging = null;
+      zonesBox.classList.remove("is-dragging");
       for (const z of zoneEls.values()) z.classList.remove("pivot-over");
     });
   };
-  /** Remove the item at `index` of zone `z`. */
   const without = (l: PivotLayout, z: Zone, index: number): PivotLayout => {
     const next = { ...l, rows: [...l.rows], cols: [...l.cols], values: [...l.values], filters: [...l.filters] };
     (next[z] as unknown[]).splice(index, 1);
@@ -520,13 +581,11 @@ export function openPivot(d: PivotDeps): void {
     if (drag.from === to && at !== undefined && at > drag.index) at--;
     let l = without(layout, drag.from, drag.index);
     if (drag.from === to) {
-      // reordering: keep the item as it is (aggregation, grouping, picked items)
       (l[to] as unknown[]).splice(at ?? (l[to] as unknown[]).length, 0, item);
       update(l);
       return;
     }
     l = placeField(l, data, drag.field, to, at);
-    // keep the date grouping when moving between rows, columns and filters
     if (to !== "values" && drag.from !== "values" && item.group) {
       const list = l[to] as { field: number; group?: DateGroup }[];
       const i = list.findIndex((x) => x.field === drag.field);
@@ -545,7 +604,6 @@ export function openPivot(d: PivotDeps): void {
       e.preventDefault();
       drop.classList.remove("pivot-over");
       if (!dragging) return;
-      // drop position: before the chip under the pointer
       const chips = [...drop.querySelectorAll<HTMLElement>(".pivot-chip")];
       let at: number | undefined;
       for (let i = 0; i < chips.length; i++) {
@@ -560,17 +618,19 @@ export function openPivot(d: PivotDeps): void {
       move(drag, zone, at);
     });
   }
-  // dropping back on the field list removes it
-  fieldBox.addEventListener("dragover", (e) => {
+  fieldSec.addEventListener("dragover", (e) => {
     if (dragging && dragging.from !== "list") e.preventDefault();
   });
-  fieldBox.addEventListener("drop", (e) => {
+  fieldSec.addEventListener("drop", (e) => {
     e.preventDefault();
     if (dragging && dragging.from !== "list") update(without(layout, dragging.from, dragging.index));
     dragging = null;
   });
 
   // ---- field list
+  // codes and IDs (Account 6000, Invoice no) go to Rows, not Values
+  const codes = new Set(quickInfos(data).filter(isIdLike).map((c) => c.col));
+  const zoneFor = (f: number): Zone => (codes.has(f) ? "rows" : defaultZone(data, f));
   const renderFields = () => {
     const q = search.value.trim().toLowerCase();
     fieldList.replaceChildren();
@@ -578,11 +638,16 @@ export function openPivot(d: PivotDeps): void {
     data.names.forEach((name, f) => {
       if (q && !name.toLowerCase().includes(q)) return;
       const li = el("li");
-      const b = el("button", "pivot-field" + (inUse.has(f) ? " pivot-used" : ""));
+      const used = inUse.has(f);
+      const b = el("button", "pivot-field" + (used ? " is-used" : ""));
       b.type = "button";
-      b.append(el("span", undefined, name), el("small", undefined, kindLabel(data, f)));
-      b.title = `Add ${name} to ${defaultZone(data, f) === "values" ? "Values" : "Rows"}. Drag it to put it somewhere else.`;
-      b.addEventListener("click", () => update(placeField(layout, data, f, defaultZone(data, f))));
+      const k = el("span", "pivot-field__kind");
+      k.append(icon(kindIcon(data, f), { size: 12 }));
+      b.append(k, el("span", "pivot-field__name", name));
+      const dest = zoneFor(f) === "values" ? "Values" : "Rows";
+      b.title = `${name} (${kindName(data, f)}). Click to add to ${dest}, or drag it into a box.`;
+      b.setAttribute("aria-label", `${name}, ${kindName(data, f)}${used ? ", in use" : ""}. Add to ${dest}`);
+      b.addEventListener("click", () => update(placeField(layout, data, f, zoneFor(f))));
       draggable(b, { field: f, from: "list", index: -1 });
       li.append(b);
       fieldList.append(li);
@@ -591,37 +656,38 @@ export function openPivot(d: PivotDeps): void {
   search.addEventListener("input", renderFields);
 
   // ---- zones
-  const moveSelect = (zone: Zone, index: number, field: number) => {
-    const s = select(
-      [["", "Move to…"], ...ZONES.filter(([z]) => z !== zone).map(([z, t]) => [z, t] as [string, string])],
-      "",
-      `Move ${data.names[field]} to another box`,
-    );
-    s.addEventListener("change", () => s.value && move({ field, from: zone, index }, s.value as Zone));
-    return s;
-  };
-  const chip = (zone: Zone, index: number, field: number, label: string): { chip: HTMLElement; controls: HTMLElement } => {
-    const c = el("div", "pivot-chip");
-    const head = el("div", "pivot-chip-head");
-    const name = el("span", "pivot-chip-name", label);
-    const controls = el("div", "pivot-chip-controls");
-    const list = layout[zone] as unknown[];
-    if (index > 0) head.append(iconButton("↑", `Move ${data.names[field]} up`, () => update(reorder(zone, index, index - 1))));
-    if (index < list.length - 1) head.append(iconButton("↓", `Move ${data.names[field]} down`, () => update(reorder(zone, index, index + 1))));
-    head.prepend(name);
-    head.append(iconButton("✕", `Remove ${data.names[field]}`, () => update(without(layout, zone, index))));
-    c.append(head, controls);
-    controls.append(moveSelect(zone, index, field));
-    // only the head drags, so the selects and the slicer search box work normally
-    draggable(head, { field, from: zone, index });
-    return { chip: c, controls };
-  };
   const reorder = (zone: Zone, from: number, to: number): PivotLayout => {
     const next = { ...layout, [zone]: [...(layout[zone] as unknown[])] } as PivotLayout;
     const list = next[zone] as unknown[];
     const [x] = list.splice(from, 1);
     list.splice(to, 0, x);
     return next;
+  };
+  const moveSelect = (zone: Zone, index: number, field: number) => {
+    const s = select(
+      [["", "Move"], ...ZONES.filter(([z]) => z !== zone).map(([z, t]) => [z, `To ${t}`] as [string, string])],
+      "",
+      `Move ${data.names[field]} to another box`,
+    );
+    s.className = "pivot-move";
+    s.addEventListener("change", () => s.value && move({ field, from: zone, index }, s.value as Zone));
+    return s;
+  };
+  const chip = (zone: Zone, index: number, field: number, label: string): { chip: HTMLElement; controls: HTMLElement } => {
+    const c = el("div", "pivot-chip");
+    c.setAttribute("role", "listitem");
+    const head = el("div", "pivot-chip-head");
+    const grip = el("span", "pivot-grip");
+    grip.setAttribute("aria-hidden", "true");
+    head.append(grip, el("span", "pivot-chip-name", label));
+    const list = layout[zone] as unknown[];
+    if (index > 0) head.append(iconButton("chevron-up", `Move ${data.names[field]} up`, { size: "sm", onClick: () => update(reorder(zone, index, index - 1)) }));
+    if (index < list.length - 1) head.append(iconButton("chevron-down", `Move ${data.names[field]} down`, { size: "sm", onClick: () => update(reorder(zone, index, index + 1)) }));
+    head.append(moveSelect(zone, index, field), iconButton("close", `Remove ${data.names[field]}`, { size: "sm", onClick: () => update(without(layout, zone, index)) }));
+    const controls = el("div", "pivot-chip-controls");
+    c.append(head, controls);
+    draggable(head, { field, from: zone, index });
+    return { chip: c, controls };
   };
   const groupSelect = (zone: "rows" | "cols" | "filters", index: number, f: { field: number; group?: DateGroup }) => {
     const s = select(GROUPS, f.group ?? "", `Group ${data.names[f.field]} by`);
@@ -630,7 +696,7 @@ export function openPivot(d: PivotDeps): void {
       const list = next[zone] as { field: number; group?: DateGroup; keep?: Set<PivotKey> | null }[];
       const item = { ...list[index], group: (s.value || undefined) as DateGroup | undefined };
       if (!item.group) delete item.group;
-      if (zone === "filters") item.keep = null; // members change with the grouping
+      if (zone === "filters") item.keep = null;
       list[index] = item;
       update(next);
     });
@@ -655,22 +721,20 @@ export function openPivot(d: PivotDeps): void {
     }
     return m;
   };
-  const memberLabel = (field: number, group: DateGroup | undefined, key: PivotKey, label: string) =>
-    typeof key === "number" && !group ? formatValue(key, data.numFmts[field]).text : label;
+  const memberLabel = (field: number, group: DateGroup | undefined, key: PivotKey, label: string) => (typeof key === "number" && !group ? formatValue(key, data.numFmts[field]).text : label);
   const checklist = (index: number, flt: PlacedFilter): HTMLElement => {
     const box = el("div", "pivot-slicer");
     const members = membersOf(flt.field, flt.group);
     const find = el("input");
     find.type = "search";
-    find.placeholder = `Find in ${members.length.toLocaleString("en-US")} items`;
+    find.placeholder = `Find in ${members.length.toLocaleString()} items`;
     find.setAttribute("aria-label", `Find items of ${data.names[flt.field]}`);
     const list = el("div", "pivot-slicer-list");
-    // read the filter fresh each time: ticking boxes doesn't re-render the zones
     const current = () => layout.filters[index].keep;
-    const shown = el("small", "hp-muted");
+    const shown = el("small", "an-hint");
     const count = () => {
       const keep = current();
-      shown.textContent = keep ? `${keep.size.toLocaleString("en-US")} of ${members.length.toLocaleString("en-US")} picked` : "All items";
+      shown.textContent = keep ? `${keep.size.toLocaleString()} of ${members.length.toLocaleString()} picked` : "All items";
     };
     const setKeep = (keep: Set<PivotKey> | null) => {
       const next = { ...layout, filters: [...layout.filters] };
@@ -679,20 +743,20 @@ export function openPivot(d: PivotDeps): void {
       count();
     };
     const all = el("div", "pivot-slicer-all");
-    const selAll = el("button", undefined, "All");
-    selAll.type = "button";
+    const selAll = makeButton("All", "ghost");
+    selAll.classList.add("btn-sm");
     selAll.addEventListener("click", () => {
       setKeep(null);
       render();
     });
-    const selNone = el("button", undefined, "None");
-    selNone.type = "button";
+    const selNone = makeButton("None", "ghost");
+    selNone.classList.add("btn-sm");
     selNone.addEventListener("click", () => {
       setKeep(new Set());
       render();
     });
     count();
-    all.append(selAll, selNone, shown);
+    all.append(shown, selAll, selNone);
     const render = () => {
       const keepNow = current();
       const q = find.value.trim().toLowerCase();
@@ -702,10 +766,10 @@ export function openPivot(d: PivotDeps): void {
         const text = memberLabel(flt.field, flt.group, m.key, m.label);
         if (q && !text.toLowerCase().includes(q)) continue;
         if (n++ >= CHECKLIST_MAX) {
-          list.append(el("small", "hp-muted", "More items: type to find them."));
+          list.append(el("small", "an-hint", "More items: type to find them."));
           break;
         }
-        const l = el("label", "pivot-check");
+        const l = el("label", "an-check");
         const i = el("input");
         i.type = "checkbox";
         i.checked = !keepNow || keepNow.has(m.key);
@@ -715,7 +779,7 @@ export function openPivot(d: PivotDeps): void {
           else keep.delete(m.key);
           setKeep(keep.size === members.length ? null : keep);
         });
-        l.append(i, `${text} `, el("small", "hp-muted", `(${m.count.toLocaleString("en-US")})`));
+        l.append(i, el("span", undefined, text), el("small", "pivot-count", m.count.toLocaleString()));
         list.append(l);
       }
     };
@@ -756,45 +820,86 @@ export function openPivot(d: PivotDeps): void {
           drop.append(c);
         });
       }
+      drop.closest(".pivot-zone")!.classList.toggle("is-empty", !drop.childElementCount);
       if (!drop.childElementCount) drop.append(el("p", "pivot-empty", drop.dataset.hint));
     }
   };
 
+  // ---- a first pivot to try, while the layout is empty
+  const renderStart = () => {
+    startBox.replaceChildren();
+    const empty = !layout.rows.length && !layout.cols.length && !layout.values.length;
+    startBox.hidden = !empty;
+    resultSec.hidden = empty;
+    if (!empty) return;
+    const box = el("div", "an-empty");
+    const ic = el("span", "an-empty__icon");
+    ic.append(icon("pivot", { size: 20 }));
+    box.append(ic, el("h3", "an-empty__title", "Summarise this sheet"));
+    box.append(el("p", undefined, "Add up, count or average the rows by anything in them. The result builds live here; the sheet isn't changed until you put it on a new sheet."));
+    const q = quickStart(data);
+    if (q) {
+      const what = q.value === null ? `Count of rows by ${data.names[q.rows]}` : `${data.names[q.value]} by ${data.names[q.rows]}${data.isDate[q.rows] ? " (month)" : ""}`;
+      const tryBtn = makeButton(`Try ${what}`, "primary", "sparkles");
+      tryBtn.addEventListener("click", () => {
+        let l = placeField(emptyLayout(), data, q.rows, "rows");
+        l = placeField(l, data, q.value ?? q.rows, "values");
+        update({ ...l, subtotals: layout.subtotals, grandTotals: layout.grandTotals });
+        requestAnimationFrame(() => sheetBtn.focus());
+      });
+      box.append(tryBtn);
+    }
+    startBox.append(box);
+  };
+
   // ---- preview
-  const fmtCell = (v: string | number | null, fmt: string) => (v === null ? "" : typeof v === "number" ? formatValue(v, fmt).text : v);
+  // float dust like 1e-12 (debits and credits that net to nothing) shows as 0
+  const fmtCell = (v: string | number | null, fmt: string) => (v === null ? "" : typeof v === "number" ? formatValue(Math.abs(v) < 1e-6 ? 0 : v, fmt).text : v);
   const renderPreview = () => {
     preview.replaceChildren();
-    drillBtn.disabled = true;
-    picked = null;
+    setDrill(null);
     if (!table) return;
-    const t = table;
+    const t = withValueFormat(table, valueFmt);
     const cols = Math.min(t.headers.length, t.labelCols + PREVIEW_COLS);
-    const tbl = el("table", "pivot-table");
+    const wrap = el("div", "table-wrap pivot-table-wrap");
+    const tbl = el("table", "data-table data-table--dense pivot-table");
     const thead = el("thead");
     const htr = el("tr");
-    for (let j = 0; j < cols; j++) htr.append(el("th", j < t.labelCols ? "pivot-label" : "pivot-num", t.headers[j]));
+    for (let j = 0; j < cols; j++) {
+      const th = el("th", j < t.labelCols ? "pivot-label" : "num", t.headers[j]);
+      th.scope = "col";
+      htr.append(th);
+    }
     thead.append(htr);
     const tbody = el("tbody");
     t.rows.slice(0, PREVIEW_ROWS).forEach((row, ri) => {
       const tr = el("tr", `pivot-${row.kind}`);
       for (let j = 0; j < cols; j++) {
-        const td = el(j < t.labelCols ? "th" : "td", j < t.labelCols ? "pivot-label" : "pivot-num", fmtCell(row.cells[j], t.numFmts[j]));
+        const v = row.cells[j];
+        const td = el(j < t.labelCols ? "th" : "td", j < t.labelCols ? "pivot-label" : "num", fmtCell(v, t.numFmts[j]));
         if (j < t.labelCols) td.setAttribute("scope", "row");
         else {
           td.tabIndex = -1;
           td.dataset.r = String(ri);
           td.dataset.j = String(j);
+          if (typeof v === "number" && v < -1e-6) td.classList.add("is-negative");
         }
         tr.append(td);
       }
       tbody.append(tr);
     });
     tbl.append(thead, tbody);
-    preview.append(tbl);
+    wrap.append(tbl);
+    preview.append(wrap);
     if (t.rows.length > PREVIEW_ROWS || t.headers.length > cols)
-      preview.append(el("p", "hp-muted pivot-more", `Showing ${Math.min(PREVIEW_ROWS, t.rows.length)} of ${t.rows.length.toLocaleString("en-US")} rows and ${cols - t.labelCols} of ${t.headers.length - t.labelCols} value columns. Put the pivot on a new sheet to see it all.`));
+      preview.append(el("p", "an-hint", `Showing ${Math.min(PREVIEW_ROWS, t.rows.length)} of ${t.rows.length.toLocaleString()} rows and ${cols - t.labelCols} of ${t.headers.length - t.labelCols} value columns. Put it on a new sheet to see it all.`));
     const firstCell = tbl.querySelector<HTMLElement>("td");
     if (firstCell) firstCell.tabIndex = 0;
+  };
+  const setDrill = (cell: { r: number; j: number } | null) => {
+    picked = cell;
+    drillBtn.disabled = !cell;
+    drillBtn.title = cell ? "List the rows behind this number on a new sheet" : "Click a number in the result first";
   };
   const pick = (td: HTMLElement) => {
     preview.querySelectorAll(".pivot-picked").forEach((x) => {
@@ -803,12 +908,11 @@ export function openPivot(d: PivotDeps): void {
     });
     td.classList.add("pivot-picked");
     td.tabIndex = 0;
-    picked = { r: Number(td.dataset.r), j: Number(td.dataset.j) };
-    drillBtn.disabled = false;
-    if (table && result) {
+    setDrill({ r: Number(td.dataset.r), j: Number(td.dataset.j) });
+    if (table && result && picked) {
       const { c } = table.valueAt[picked.j - table.labelCols];
       const n = result.members(picked.r, c).length;
-      statusLine.textContent = `${describeCell(table, picked.r, picked.j)}: ${n.toLocaleString("en-US")} row${n === 1 ? "" : "s"}. Press Enter or "Show these rows" to see them.`;
+      statusLine.textContent = `${describeCell(table, picked.r, picked.j)}: ${n.toLocaleString()} row${n === 1 ? "" : "s"} behind it. Press Enter or Show rows to list them.`;
     }
   };
   preview.addEventListener("click", (e) => {
@@ -850,49 +954,49 @@ export function openPivot(d: PivotDeps): void {
     if (td && !td.classList.contains("pivot-picked")) pick(td);
   });
 
+  const setActions = (canSheet: boolean, canChart: boolean) => {
+    sheetBtn.disabled = !canSheet;
+    sheetBtn.title = canSheet ? "Write the pivot to a new sheet" : "Add a field first";
+    chartBtn.disabled = !canChart;
+    chartBtn.title = canChart ? "A chart of this pivot that updates when the data changes" : "Put a field on Rows or Columns and one on Values to chart it";
+  };
   const compute = () => {
     result = null;
     table = null;
+    statusLine.classList.remove("is-error");
     if (!layout.rows.length && !layout.cols.length && !layout.values.length) {
-      statusLine.textContent = "Add a field to start.";
-      sheetBtn.disabled = true;
-      chartBtn.disabled = true;
+      statusLine.textContent = "";
+      setActions(false, false);
       renderPreview();
       return;
     }
     try {
       result = pivot(data.columns, toSpec(layout));
       table = pivotTable(result, data);
-      const f = result.rowsUsed === result.rowCount ? "" : ` (${result.rowsUsed.toLocaleString("en-US")} after filters)`;
-      statusLine.textContent = `${result.rowItems.length.toLocaleString("en-US")} result rows from ${result.rowCount.toLocaleString("en-US")} data rows${f}, in ${Math.round(result.ms)} ms.`;
-      statusLine.classList.remove("cleanup-warn");
-      sheetBtn.disabled = false;
-      chartBtn.disabled = !layout.values.length || (!layout.rows.length && !layout.cols.length);
+      const f = result.rowsUsed === result.rowCount ? "" : ` (${result.rowsUsed.toLocaleString()} after filters)`;
+      statusLine.textContent = `${result.rowItems.length.toLocaleString()} rows from ${result.rowCount.toLocaleString()} data rows${f}, in ${Math.max(1, Math.round(result.ms))} ms. Click a number to see the rows behind it.`;
+      setActions(true, !!layout.values.length && (!!layout.rows.length || !!layout.cols.length));
     } catch (e) {
       statusLine.textContent = (e as Error).message;
-      statusLine.classList.add("cleanup-warn");
-      sheetBtn.disabled = true;
-      chartBtn.disabled = true;
+      statusLine.classList.add("is-error");
+      setActions(false, false);
     }
     renderPreview();
   };
 
-  /** Change the layout. Re-renders the zones (unless a checklist is being ticked) and recomputes soon. */
   function update(next: PivotLayout, rerenderZones = true) {
     layout = next;
     remembered.set(sheet, layout);
-    // focus survives a re-render by its aria-label
     const focused = document.activeElement as HTMLElement | null;
-    const focusLabel = focused && zonesBox.contains(focused) ? focused.getAttribute("aria-label") : null;
-    // ticking a slicer box leaves the zones alone so the list keeps its place
+    const focusLabel = focused && (zonesBox.contains(focused) || fieldList.contains(focused)) ? focused.getAttribute("aria-label") : null;
     if (rerenderZones) {
       renderFields();
       renderZones();
+      renderStart();
     }
     if (rerenderZones && focusLabel) {
-      const find = (label: string) => zonesBox.querySelector<HTMLElement>(`[aria-label="${CSS.escape(label)}"]`);
-      // an up / down button that is gone at the end of the list: fall back to the item's remove button
-      (find(focusLabel) ?? find(focusLabel.replace(/^Move (.+) (up|down)$/, "Remove $1")))?.focus();
+      const find = (label: string) => root.querySelector<HTMLElement>(`[aria-label="${CSS.escape(label)}"]`);
+      (find(focusLabel) ?? find(focusLabel.replace(/^Move (.+) (up|down)$/, "Remove $1")) ?? find(focusLabel.replace(/, in use\./, ".").replace(/\. Add/, ", in use. Add")))?.focus();
     }
     statusLine.textContent = "Working…";
     clearTimeout(timer);
@@ -909,46 +1013,41 @@ export function openPivot(d: PivotDeps): void {
     const { c } = table.valueAt[picked.j - table.labelCols];
     const members = result.members(picked.r, c);
     if (!members.length) {
-      statusLine.textContent = "No rows behind this cell.";
+      statusLine.textContent = "There are no rows behind this cell.";
       return;
     }
     const what = describeCell(table, picked.r, picked.j);
     const cols = drillColumns(data, members);
-    close();
-    void addSheet(`${sheet.slice(0, 20)} rows`, cols).then(() => d.status(`${members.length.toLocaleString("en-US")} rows behind ${what}`));
+    void addSheet(`${sheet.slice(0, 20)} rows`, cols)
+      .then(() => toast({ kind: "success", text: `${members.length.toLocaleString()} rows behind ${what}, on a new sheet` }))
+      .catch((e: Error) => toast({ kind: "error", title: "Couldn't add the sheet", text: e.message }));
   }
   drillBtn.addEventListener("click", drill);
   sheetBtn.addEventListener("click", () => {
     clearTimeout(timer);
     compute();
     if (!table) return;
-    const cols = pivotSheetColumns(table);
+    const cols = pivotSheetColumns(withValueFormat(table, valueFmt));
     const n = table.rows.length;
-    close();
-    void addSheet(`${sheet.slice(0, 24)} pivot`, cols).then(() => d.status(`Pivot table: ${n.toLocaleString("en-US")} rows`));
+    p.close();
+    void addSheet(`${sheet.slice(0, 24)} pivot`, cols)
+      .then(() => toast({ kind: "success", text: `Pivot table added as a new sheet (${n.toLocaleString()} rows)` }))
+      .catch((e: Error) => toast({ kind: "error", title: "Couldn't add the pivot sheet", text: e.message }));
   });
   chartBtn.addEventListener("click", () => {
     if (!d.addChart || !d.sheetId) return;
-    const spec = pivotChartForLayout(layout, data, d.sheetId(), chartType.value as ChartType);
+    const spec = pivotChartForLayout(layout, data, d.sheetId(), layout.rows.length && data.isDate[layout.rows[0].field] ? "line" : "column");
     if (!spec) return;
-    close();
+    if (valueFmt) spec.numFmt = valueFmt;
+    p.close();
     d.addChart(spec);
-    d.status(`Pivot chart of ${sheet}: it updates when the data changes`);
-  });
-  closeBtn.addEventListener("click", close);
-  back.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      close();
-    }
-  });
-  back.addEventListener("mousedown", (e) => {
-    if (e.target === back) close();
+    toast({ kind: "success", text: `Added a chart of the pivot. It updates when ${sheet} changes.` });
   });
 
   renderFields();
   renderZones();
+  renderStart();
   compute();
-  document.body.append(back);
-  (fieldList.querySelector("button") as HTMLElement | null)?.focus();
+  requestAnimationFrame(() => (startBox.querySelector<HTMLElement>("button") ?? fieldList.querySelector<HTMLElement>("button"))?.focus());
+  return () => clearTimeout(timer);
 }

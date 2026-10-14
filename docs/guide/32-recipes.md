@@ -20,7 +20,7 @@ the work as it stands.
 
 ## Saving and running
 
-**Save as a recipe…** names the steps and saves them with the workbook. Saved
+**Save as recipe** names the steps and saves them with the workbook. Saved
 recipes are listed below the steps, and each also appears in the command
 palette as **Run recipe: …**.
 

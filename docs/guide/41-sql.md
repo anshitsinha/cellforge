@@ -5,7 +5,13 @@ and month, ledger lines with no match on the bank statement, duplicate
 invoices, a running balance. It runs on your computer, inside the app, like
 everything else. Nothing is sent anywhere.
 
-Choose **SQL query…** from the command palette (Ctrl+K).
+Choose **SQL query…** from the command palette (Ctrl+K). The query opens in
+the side panel beside the sheet. **Examples for this workbook** lists
+queries written for your columns (totals by category, possible duplicates,
+the largest items, totals by month, rows of one sheet missing from
+another): click one to run it. **Run** (or Ctrl+Enter) shows the result
+under the query, numbers and dates formatted; a mistake is pointed out in
+red with its line and column.
 
 ## Sheets are tables
 
@@ -14,7 +20,7 @@ are named by the column headers of an imported file, or else by the first
 row of the sheet. A column with no name is called `Column A`, `Column B`
 and so on.
 
-The panel lists the sheets and their columns on the left. Click a name to
+**Sheets and columns** lists every sheet and its columns. Click a name to
 put it into the query at the cursor.
 
 Names are not case-sensitive: `amount`, `Amount` and `AMOUNT` are the same
@@ -41,7 +47,7 @@ and the cursor jumps there. For example:
 - `"Description" isn't in GROUP BY: add it to GROUP BY, or summarise it`
 - `SUM() can't be used in WHERE; use HAVING after GROUP BY to filter on totals`
 
-**Put the result on a new sheet** adds the result as a sheet you can sort,
+**Add as sheet** adds the result as a sheet you can sort,
 filter, chart or export. Dates and number formats carry over. The sheet
 remembers the query it came from (see *Explain*). Undo removes it.
 

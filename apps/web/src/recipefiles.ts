@@ -6,6 +6,8 @@
  * with one input. Every run is reported: which file, whether it worked,
  * which step failed, and how long it took.
  */
+import "./analysis.css";
+import { openDialog } from "./ui/dialog";
 import { ActionHistory, BlobStore, type Action, type ActionRegistry } from "@cellforge/actions";
 import { radixSortIndices, Table, type FilePart } from "@cellforge/core";
 import type { SheetCtx } from "./actions";
@@ -95,28 +97,21 @@ function download(blob: Blob, name: string): void {
 export function openRunOnFiles(d: RecipeFilesDeps, recipe: Recipe): void {
   const inputs = recipeInputs(recipe);
   const chosen = new Map<string, File>();
-  const back = document.createElement("div");
-  back.className = "palette-backdrop";
-  back.innerHTML = `<div class="palette import-dialog" role="dialog" aria-label="Run on files"><div class="palette-form"></div></div>`;
-  const body = back.querySelector<HTMLElement>(".palette-form")!;
-  const h = Object.assign(document.createElement("h3"), { textContent: `Run "${recipe.name}" on files` });
-  const intro = Object.assign(document.createElement("p"), {
-    className: "hp-muted",
-    textContent: inputs.length === 1 ? `The recipe works on one sheet, "${inputs[0]}". Pick a file for it, or a folder to run once per file.` : `The recipe works on ${inputs.length} sheets. Pick a file for each.`,
-  });
-  body.append(h, intro);
+  const body = document.createElement("div");
+  body.className = "an-stack an-stack--loose";
   const table = document.createElement("table");
-  table.className = "cleanup-cols";
+  table.className = "data-table";
   for (const name of inputs) {
     const tr = document.createElement("tr");
     const label = Object.assign(document.createElement("td"), { textContent: name });
-    const fileCell = Object.assign(document.createElement("td"), { textContent: "(no file)" });
-    const pick = Object.assign(document.createElement("button"), { type: "button", textContent: "Choose file…" });
+    const fileCell = Object.assign(document.createElement("td"), { textContent: "No file yet", className: "an-hint" });
+    const pick = Object.assign(document.createElement("button"), { type: "button", textContent: "Choose file…", className: "btn-secondary btn-sm" });
     pick.addEventListener("click", async () => {
       const got = await pickFiles(false);
       if (got?.files[0]) {
         chosen.set(name, got.files[0]);
         fileCell.textContent = got.files[0].name;
+        fileCell.className = "";
       }
     });
     const td = document.createElement("td");
@@ -129,37 +124,40 @@ export function openRunOnFiles(d: RecipeFilesDeps, recipe: Recipe): void {
   where.setAttribute("aria-label", "Where the results go");
   where.append(new Option("Add the results to this workbook", "add"), new Option("Download each result as an Excel file", "download"));
   const whereLabel = document.createElement("label");
-  whereLabel.append("Results: ", where);
+  whereLabel.className = "an-field";
+  whereLabel.append(Object.assign(document.createElement("span"), { textContent: "Results" }), where);
   body.append(whereLabel);
   const report = document.createElement("div");
+  report.className = "an-stack";
   body.append(report);
-  const actions = document.createElement("div");
-  actions.className = "numfmt-actions";
-  const close = Object.assign(document.createElement("button"), { type: "button", textContent: "Close" });
-  const folder = Object.assign(document.createElement("button"), { type: "button", textContent: "Run on a folder…", hidden: inputs.length !== 1 });
-  const go = Object.assign(document.createElement("button"), { type: "button", textContent: "Run" });
-  actions.append(close, folder, go);
-  body.append(actions);
-  document.body.append(back);
-  close.addEventListener("click", () => {
-    back.remove();
-    d.focusGrid();
+  const dlg = openDialog({
+    title: `Run "${recipe.name}" on files`,
+    subtitle: inputs.length === 1 ? `The recipe works on one sheet, "${inputs[0]}". Pick a file for it, or a folder to run it once per file.` : `The recipe works on ${inputs.length} sheets. Pick a file for each.`,
+    size: "md",
+    body,
+    actions: [
+      { label: "Close", id: "close" },
+      ...(inputs.length === 1 ? [{ label: "Run on a folder…", id: "folder", onClick: () => (void runFolder(), false) }] : []),
+      { label: "Run", id: "run", kind: "primary" as const, onClick: () => (runChosen(), false) },
+    ],
+    onClose: () => d.focusGrid(),
   });
-  back.addEventListener("keydown", (e) => e.key === "Escape" && close.click());
+  const go = dlg.button("run")!;
+  const folder = dlg.button("folder") ?? document.createElement("button");
 
   const showReport = (results: RunResult[]) => {
     const t = document.createElement("table");
-    t.className = "cleanup-cols";
+    t.className = "data-table";
     t.innerHTML = "<tr><th>Run</th><th>Result</th><th>Time</th></tr>";
     for (const r of results) {
       const tr = document.createElement("tr");
       const res = Object.assign(document.createElement("td"), { textContent: r.ok ? "done" : r.message ?? "failed" });
-      if (!r.ok) res.className = "cleanup-warn";
+      if (!r.ok) res.style.color = "var(--danger)";
       tr.append(Object.assign(document.createElement("td"), { textContent: r.label }), res, Object.assign(document.createElement("td"), { textContent: `${(r.ms / 1000).toFixed(2)} s` }));
       t.append(tr);
     }
     const ok = results.filter((r) => r.ok).length;
-    report.replaceChildren(Object.assign(document.createElement("p"), { textContent: `${ok} of ${results.length} run${results.length === 1 ? "" : "s"} worked.` }), t);
+    report.replaceChildren(Object.assign(document.createElement("p"), { className: "an-hint", textContent: `${ok} of ${results.length} run${results.length === 1 ? "" : "s"} worked.` }), t);
   };
 
   const finish = async (r: RunResult) => {
@@ -194,17 +192,17 @@ export function openRunOnFiles(d: RecipeFilesDeps, recipe: Recipe): void {
     go.disabled = folder.disabled = false;
   };
 
-  go.addEventListener("click", () => {
+  function runChosen() {
     const missing = inputs.filter((n) => !chosen.has(n));
     if (missing.length) {
-      report.replaceChildren(Object.assign(document.createElement("p"), { className: "cleanup-warn", textContent: `Choose a file for ${missing.join(", ")}.` }));
+      dlg.setError(`Choose a file for ${missing.join(", ")}.`);
       return;
     }
     void runBatch([{ label: [...chosen.values()].map((f) => f.name).join(" + "), files: new Map(chosen) }]);
-  });
-  folder.addEventListener("click", async () => {
+  }
+  async function runFolder() {
     const got = await pickFiles(true);
     if (!got?.files.length) return;
     void runBatch(got.files.map((f) => ({ label: f.name, files: new Map([[inputs[0], f]]) })));
-  });
+  }
 }

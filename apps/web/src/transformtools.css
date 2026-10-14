@@ -1,13 +1,13 @@
 /* Transform dialogs (transformtools.ts). Builds on the palette-form and import-dialog styles. */
 
-.palette-form .tx-check {
+:is(.palette-form, .tool-dlg) .tx-check {
   display: flex;
   gap: var(--space-1-5);
   align-items: center;
 }
 
-.palette-form label[hidden],
-.palette-form .tx-check[hidden] {
+:is(.palette-form, .tool-dlg) label[hidden],
+:is(.palette-form, .tool-dlg) .tx-check[hidden] {
   display: none;
 }
 
@@ -66,4 +66,49 @@
   .tx-role {
     grid-template-columns: 1fr;
   }
+}
+
+/* inside the kit dialog (tooldialog.ts) */
+.tool-fields {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.tool-fields > label:not(.tx-check) {
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-strong);
+}
+
+.tool-fields select,
+.tool-fields input:not([type="checkbox"]):not([type="radio"]) {
+  font-weight: var(--weight-regular);
+}
+
+.tool-result .tx-result {
+  gap: var(--space-2);
+}
+
+.tool-line {
+  margin: 0;
+  color: var(--text);
+}
+
+.tool-table {
+  max-height: 36vh;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+}
+
+.tool-dlg [hidden] {
+  display: none !important;
+}
+
+.tool-fields label small {
+  font-weight: var(--weight-regular);
+  color: var(--muted);
+  font-size: var(--text-xs);
 }

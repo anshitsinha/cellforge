@@ -1,43 +1,203 @@
-/* Find & replace: a dialog that stays open beside the grid, so the backdrop
-   doesn't dim or block it. */
-.palette-backdrop.find-backdrop {
-  background: transparent;
-  pointer-events: none;
-  justify-content: flex-end;
-  padding: 72px var(--space-4) var(--space-4);
+/* Find & replace (finddialog.ts): a floating card at the top right that
+   leaves the sheet usable behind it. Tokens only. */
+
+.find-bar {
+  position: fixed;
+  top: 112px;
+  right: var(--space-5);
+  z-index: var(--z-popover);
+  width: min(400px, calc(100vw - 2 * var(--space-4)));
+  display: grid;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+  animation: cf-pop-in var(--dur-med) var(--ease-out);
 }
 
-.find-backdrop .find-dialog {
-  pointer-events: auto;
-  width: min(440px, 100%);
+.find-bar [hidden] {
+  display: none !important;
+}
+
+.find-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) 0 var(--space-3);
+}
+
+.find-tabs {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--surface-3);
+}
+
+.find-tabs button {
+  height: 24px;
+  min-height: 0;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.find-tabs button[aria-selected="true"] {
+  background: var(--surface-0);
+  color: var(--text-strong);
+  box-shadow: var(--shadow-1);
+}
+
+.find-body {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.find-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.find-field__icon {
+  position: absolute;
+  left: 10px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.find-field input {
+  width: 100%;
+  padding-left: 30px;
+  padding-right: 56px;
+}
+
+.find-count {
+  position: absolute;
+  right: 10px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
 
 .find-options {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1-5) 14px;
+  align-items: center;
+  gap: var(--space-1);
 }
 
-.palette-form .find-options label {
-  display: flex;
-  align-items: center;
-  gap: 5px;
+.find-toggle {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 26px;
+  padding: 0 var(--space-1-5);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  color: var(--muted);
+  font: var(--weight-semibold) var(--text-xs) / 1 var(--font-mono);
+  cursor: pointer;
+}
+
+.find-toggle input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.find-toggle:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.find-toggle:has(input:focus-visible) {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+.find-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 var(--space-1);
+  background: var(--border-default);
+}
+
+.find-select select {
+  height: 26px;
+  min-height: 0;
+  padding-block: 0;
+  font-size: var(--text-sm);
+}
+
+.find-more {
+  margin-left: auto;
+}
+
+.find-more > summary {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  padding: var(--space-1);
+}
+
+.find-more[open] {
+  flex-basis: 100%;
+  margin-left: 0;
+}
+
+.find-more__body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
+}
+
+.find-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.find-status.is-error {
+  color: var(--danger);
 }
 
 .find-status:empty {
   display: none;
 }
 
-.find-dialog .numfmt-actions {
-  flex-wrap: wrap;
+.find-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+}
+
+.find-actions .an-spacer {
+  flex: 1;
 }
 
 .find-results {
   list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 30vh;
+  margin: 0 calc(-1 * var(--space-3)) calc(-1 * var(--space-3));
+  padding: var(--space-1) var(--space-3) var(--space-2);
+  max-height: 32vh;
   overflow-y: auto;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-1);
 }
 
 .find-results:empty {
@@ -46,14 +206,29 @@
 
 .find-results li {
   display: flex;
-  gap: 10px;
+  gap: var(--space-3);
   align-items: baseline;
-  padding: var(--space-0-5) 0;
+  padding: 3px 0;
+  font-size: var(--text-sm);
 }
 
-.find-results li .hp-cell {
+.find-ref {
   flex: none;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
   cursor: pointer;
+}
+
+.find-ref:hover {
+  text-decoration: underline;
 }
 
 .find-results li span {
@@ -61,8 +236,4 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--muted);
-}
-
-.find-dialog [hidden] {
-  display: none !important;
 }
