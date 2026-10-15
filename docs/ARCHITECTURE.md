@@ -25,7 +25,7 @@ optimises for it.
 ├────────────────────────────────────────────────────────┤
 │ packages/core   columnar Table, CSV parser, formulas    │
 ├────────────────────────────────────────────────────────┤
-│ packages/gpu    WGSL codegen + WebGPU runtime           │  (planned)
+│ packages/gpu    WGSL codegen + WebGPU runtime           │  (experimental)
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -92,11 +92,32 @@ The data a user sees is three layers stacked:
   untouched numeric columns of an imported table, the sheet iterates the
   `Float64Array` directly instead of calling `getCell` per row.
 
-### Formula compiler _(planned)_
+### Fills and the formula compiler
 
-- Detect "fill-down" formulas (same relative expression on every row).
-- Compile each to one vectorised kernel instead of N evaluations.
-- Targets: WGSL compute shader (WebGPU) or a WASM loop as fallback.
+- **Fill down** stores one `Fill` per column: a template AST, the row it's
+  relative to (`origin`), and a base-row interval. Lookup order for a cell is
+  explicit edit → newest covering fill → base data.
+- `evaluate(ast, ctx, rowShift)` evaluates a template as if it were filled
+  `rowShift` rows down; `$`-anchored refs don't move.
+- `compileFill` turns the template into a JS loop over `Float64Array`s. It's a
+  fast path under a strict contract: finite output is bit-identical to the
+  interpreter, NaN means "ask the interpreter". See
+  [RESEARCH.md](RESEARCH.md) for how that's guaranteed and tested.
+- Kernels run lazily per 64K-row chunk as rows are read, with an LRU cap
+  (~128MB), so a 100M-row fill costs nothing until it's looked at.
+- Inputs from untouched imported columns are zero-copy `subarray`s.
+- Kernels are only used while the sheet is unsorted (they index rows
+  directly); sorted sheets fall back to the interpreter per cell.
+- `packages/gpu` has a WGSL backend for the same subset. It's f32 only, so it
+  backs the benchmark, not the app.
+
+### Sorting at scale
+
+- Keys are extracted on the main thread: numbers as-is, text replaced by its
+  rank among distinct values (from the dictionary for imported columns).
+- A stable LSD radix sort (`core/radix.ts`) runs in a worker: floats are
+  bit-twiddled into order-preserving uints and bucketed 16 bits at a time,
+  plus one pass on a number/text/blank "kind" byte. No comparator calls.
 
 ## Undo
 
@@ -107,6 +128,10 @@ edited, show the original") is kept distinct from `null` ("edited to empty").
 ## Known limits (for now)
 
 - Clearing / copying is capped at 1M cells (it goes through the sparse overlay).
-- Sorting is capped at 20M rows (runs on the main thread).
-- Selection stats over huge ranges use the slow per-cell path, sliced so the
-  UI stays responsive.
+- Sorting 100M rows needs ~1.7GB free memory (keys + index arrays).
+- Selection stats over edited or generated columns use the per-cell path,
+  sliced so the UI stays responsive.
+- Any edit drops every cached formula result and fill chunk; there's no
+  dependency graph yet.
+- Very long dependency chains (a running total filled down 100K+ rows) recurse
+  once per row in the interpreter and show `#CYCLE!` if they hit the stack limit.

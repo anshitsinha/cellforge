@@ -15,8 +15,10 @@ spreadsheets are built.
 - **Formulas** — `=A1*B1`, `=SUM(C:C)`, `=COUNTIF(B1:B500, "North")`,
   `=IF(D2>100, "big", "small")` and ~25 other functions, with proper error values
   (`#DIV/0!`, `#CYCLE!`, ...).
-- **Sort** by any column. Sorting reorders an index, not the data, so it's quick
-  and undoable.
+- **Fill down** (Ctrl+D) a formula through millions of rows instantly. The fill
+  is stored once and compiled to a typed-array kernel (see below).
+- **Sort** any column, even all 100M rows of the demo (~4s): a radix sort in a
+  Web Worker reorders an index, not the data, so it's undoable.
 - **Select ranges**, see sum / average / count live, **copy/paste** to and from
   Excel or Google Sheets.
 - **Undo / redo** for edits, pastes, clears and sorts.
@@ -32,9 +34,25 @@ spreadsheets are built.
   scrolling through 100M rows costs the same as scrolling through 100.
 - **Edits are a sparse overlay** on top of the immutable imported data, so
   changing a few cells in a huge sheet doesn't copy anything.
-- **Formulas get compiled, not interpreted** _(in progress)_. A formula filled
-  down a column is really a vector operation, so the plan is to compile it to a
-  WebGPU compute shader with a WASM fallback.
+- **Filled-down formulas get compiled.** `=B2*C2*(1-D2)` filled down a column is
+  really one vector operation, so it's compiled into a single loop over typed
+  arrays. The interpreter stays the source of truth: compiled results are
+  **bit-identical** to it (checked by a fuzz test over 250K random formulas),
+  and any row the kernel can't decide falls back to the interpreter.
+
+### Compiled vs interpreted (preliminary)
+
+16M rows, Chromium + NVIDIA Turing, median of 3 — reproduce at `/bench.html`:
+
+| Formula | Interpreter | Compiled JS | Speedup |
+| --- | ---: | ---: | ---: |
+| `=A1*B1` | 27.9 M rows/s | 167.4 M rows/s | 6.0× |
+| `=IF(A1>B1, SQRT(A1*B1), ROUND(A1/B1, 2))` | 3.0 M rows/s | 55.8 M rows/s | 18.4× |
+| `=MAX(A1,B1,C1)-MIN(A1,B1,C1)+A1*0.5` | 2.5 M rows/s | 55.4 M rows/s | 22.2× |
+
+There's also an experimental WebGPU backend. Its compute is very fast, but f32
+precision isn't safe for spreadsheets (up to 32% error from cancellation) — see
+[docs/RESEARCH.md](docs/RESEARCH.md) for the full results and what's next.
 
 More detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -59,6 +77,7 @@ npm run build      # static site in apps/web/dist
 | Ctrl + A | Select all |
 | Type / F2 / double-click | Edit a cell |
 | Delete | Clear selection |
+| Ctrl + D | Fill down |
 | Ctrl + C / X / V | Copy / cut / paste |
 | Ctrl + Z / Ctrl + Y | Undo / redo |
 
@@ -66,10 +85,12 @@ npm run build      # static site in apps/web/dist
 
 ```
 cellforge/
-├── apps/web/          # landing page + the app (Vite, TypeScript)
-├── packages/core/     # columnar table, CSV parser, formula engine
+├── apps/web/          # landing page, the app, /bench.html (Vite, TypeScript)
+├── packages/core/     # columnar table, CSV parser, formula engine + compiler, radix sort
 ├── packages/grid/     # virtualized canvas grid renderer
-└── docs/              # architecture notes, roadmap
+├── packages/gpu/      # WGSL codegen + WebGPU runner (experimental)
+├── bench/             # node micro-benchmarks
+└── docs/              # architecture, roadmap, research notes
 ```
 
 The grid knows nothing about where data comes from, and core knows nothing about
