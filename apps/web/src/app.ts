@@ -488,6 +488,7 @@ function syncFilterButtons() {
 // charts live on the workbook; their windows follow it after every action (so undo works)
 let syncingCharts = false;
 const chartDeps = {
+  focusGrid: () => grid.focus(),
   source: (id: string) => (workbook.has(id) ? workbook.get(id).source : null),
   activeSheet: () => activeId,
   range: () => grid.range,
@@ -1397,7 +1398,6 @@ function recordTrail(action: Action) {
 }
 
 const historyPanel = setupHistoryPanel({
-  root: document.getElementById("history-panel")!,
   workbook: () => workbook,
   activeSheet: () => activeId,
   selection: () => grid.selection,
@@ -1414,7 +1414,6 @@ const historyPanel = setupHistoryPanel({
 });
 
 const inspectPanel = setupInspectPanel({
-  root: document.getElementById("inspect-panel")!,
   workbook: () => workbook,
   activeSheet: () => activeId,
   selection: () => grid.selection,

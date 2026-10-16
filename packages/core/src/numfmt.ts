@@ -228,7 +228,10 @@ function compile(code: string): Compiled {
 /** Round half away from zero to `d` decimals, without binary surprises (1.005 -> 1.01). */
 function roundTo(x: number, d: number): number {
   if (!isFinite(x)) return x;
-  const r = Math.round(Number(`${Math.abs(x)}e${d}`));
+  const text = String(Math.abs(x));
+  // numbers JavaScript writes in exponent form (1e-12, 1e+21): "1e-12e2" would be NaN
+  if (text.includes("e")) return Math.abs(x) < 1 ? (Math.sign(x) * Math.round(Math.abs(x) * 10 ** d)) / 10 ** d : x;
+  const r = Math.round(Number(`${text}e${d}`));
   return Math.sign(x) * Number(`${r}e-${d}`);
 }
 
