@@ -107,10 +107,19 @@ export async function mount(root: HTMLElement) {
   const pct = h("input", { type: "text", inputMode: "decimal", value: "", id: "close-pct" });
   thr.setAttribute("aria-label", "Threshold amount (Settings B2)");
   pct.setAttribute("aria-label", "Threshold percentage (Settings B3)");
+  // typed into Settings!B2 / B3, as if in the cell (Enter, or leaving the box)
   const setting = (row: number, input: HTMLInputElement) => {
-    input.addEventListener("change", async () => {
-      await book.type(settings.id, [{ row, col: 1, input: input.value.trim() || null }]);
+    const apply = async () => {
+      const text = input.value.trim();
+      if (text === fmtSetting(row)) return;
+      await book.type(settings.id, [{ row, col: 1, input: text || null }]);
       changed();
+    };
+    input.addEventListener("change", () => void apply());
+    input.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      void apply();
     });
   };
   setting(1, thr);
@@ -157,10 +166,16 @@ export async function mount(root: HTMLElement) {
         h("p", { class: "sp-title" }, "Data checks", h("span", { textContent: `${pass} of ${results.length} pass · ${ms(took)}` })),
         h("p", { class: "sp-sub", textContent: "The close template's checks, run on the workbook as it stands. Exports ask first while one fails." }),
         list,
-        h("p", { class: "sp-h", textContent: "Flux thresholds (Settings)" }),
-        h("div", { class: "tiles" }, h("div", { class: "tile" }, h("b", { textContent: String(flagged) }), h("span", { textContent: "movements flagged Explain" }))),
-        h("label", { class: "thr", htmlFor: "close-thr" }, "Over", thr, "and", pct),
-        h("p", { class: "sp-sub", textContent: "Both must be exceeded, as the template's Flag formula says. Press Enter to apply." }),
+        h("p", { class: "sp-h", textContent: "Flux thresholds · Settings!B2:B3" }),
+        h("label", { class: "thr", htmlFor: "close-thr" }, h("span", { class: "thr-l", textContent: "Flag a change over" }), thr, "and", pct),
+        h(
+          "p",
+          { class: "flagged" },
+          h("b", { textContent: String(flagged) }),
+          ` movement${flagged === 1 ? "" : "s"} flagged Explain on Flux. `,
+          h("button", { type: "button", class: "link", textContent: "Show", onclick: () => go("Flux", 1, 7) }),
+        ),
+        h("p", { class: "sp-sub", textContent: "A change is flagged when it's over both, as the template's Flag formula says. Type a new value and press Enter." }),
       ),
     );
   };

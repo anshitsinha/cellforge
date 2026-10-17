@@ -13,7 +13,7 @@ import { isoSerial } from "./compute";
 import type { CellStyle, CellValue } from "@cellforge/grid";
 
 export const HEADERS = ["Date", "Reference", "Description", "Amount", "Note"];
-export const WIDTHS = [100, 112, 290, 116, 300];
+export const WIDTHS = [96, 100, 228, 104, 280];
 
 /** The note's look: the app's conditional-format colours for problems, a quiet green for matches. */
 export function toneStyle(tone: Tone): CellStyle {
@@ -165,7 +165,7 @@ export function mount(root: HTMLElement) {
         item("Split payment found", String(c.splits), "ok", split ? () => show(1, split.b) : undefined),
         item("Keying error", String(c.keying), c.keying ? "warn" : "ok", k ? () => show(0, [k.a]) : undefined),
         item("Posted twice", String(c.postedTwice), c.postedTwice ? "warn" : "ok", twice ? () => show(0, twice.a) : undefined),
-        item("Left to explain", `${c.leftA} · ${c.leftB}`, ""),
+        item("Left to explain: book · bank", `${c.leftA} · ${c.leftB}`, ""),
       ),
       k
         ? h(

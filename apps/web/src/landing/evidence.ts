@@ -80,16 +80,22 @@ export async function mount(root: HTMLElement) {
     onSelect: (r) => ready && explain(ids[active], r.top, r.left),
     onEdit: (cell, text) => {
       void book.type(ids[active], [{ row: cell.row, col: cell.col, input: text }]).then(() => {
-        book.show(sheet, ids[active], true);
+        show(ids[active], true);
         explain(ids[active], cell.row, cell.col);
       });
       return false;
     },
   });
-  book.show(sheet, recSheet.id);
+  // on a phone the labels column is narrower, so a figure and its label fit together
+  const narrow = matchMedia("(max-width: 640px)").matches;
+  const show = (id: string, keep = false) => {
+    book.show(sheet, id, keep);
+    if (narrow && id === recSheet.id) sheet.grid.setColumnWidths(new Map([[0, 178], [1, 118]]), "landing-rec-narrow");
+  };
+  show(recSheet.id);
   const tabs = sheetTabs(frame, ["Outstanding", "B-1 · Rec"], (i) => {
     active = i;
-    book.show(sheet, ids[i]);
+    show(ids[i]);
   }, 1);
 
   let error = "";
@@ -111,7 +117,7 @@ export async function mount(root: HTMLElement) {
       error = (e as Error).message;
     }
     renderSigns();
-    book.show(sheet, ids[active], true);
+    show(ids[active], true);
     const r = sheet.range;
     explain(ids[active], r.top, r.left);
   };

@@ -65,8 +65,19 @@ export async function openBook(kind: SampleKind): Promise<Book> {
         }
         return true;
       };
-      n = rows;
-      while (n > 1 && blank(n - 1)) n--;
+      // from the top: the samples' data is one block (with the odd blank line
+      // in it), so a run of blank rows means it's over; cheaper than working
+      // up through 2,000 rows of formulas that show nothing
+      let last = 0;
+      let gap = 0;
+      for (let r = 0; r < rows && gap < 8; r++) {
+        if (blank(r)) gap++;
+        else {
+          last = r;
+          gap = 0;
+        }
+      }
+      n = last + 1;
       used.set(id, n);
     }
     return n;
