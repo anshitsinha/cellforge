@@ -79,55 +79,31 @@
         </div>
 
         <div class="wrap stage-wrap">
-          <figure class="stage">
-            <div class="window">
-              <div class="window-bar" aria-hidden="true">
-                <span class="lights"><i></i><i></i><i></i></span>
-                <span class="window-title">Sample — Bank reconciliation · <b>Cash book</b></span>
-                <span class="window-badge">On this computer</span>
+          <figure class="stage" data-live="hero">
+            <div class="af af-hero">
+              <div class="af-top">
+                <svg class="af-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" class="bm-bg" /><rect x="7" y="7" width="8" height="8" rx="1.5" class="bm-a" /><rect x="17" y="7" width="8" height="8" rx="1.5" class="bm-b" /><rect x="7" y="17" width="8" height="8" rx="1.5" class="bm-b" /><rect x="17" y="17" width="8" height="8" rx="1.5" class="bm-c" /></svg>
+                <div class="af-doc"><b>Sample — Bank reconciliation</b><span class="af-saved">Saved on this computer</span></div>
+                <div class="af-tools"><button type="button" class="af-btn af-run" disabled><span aria-hidden="true">⇄</span> Reconcile</button></div>
               </div>
-              <picture>
-                <source srcset="/shots/hero-dark.webp" media="(prefers-color-scheme: dark)" />
-                <img
-                  src="/shots/hero-light.webp"
-                  width="1800"
-                  height="1090"
-                  alt="cellforge showing a cash book for October 2026: dates, references, descriptions and amounts, with payments in brackets."
-                  fetchpriority="high"
-                />
-              </picture>
-            </div>
-
-            <div class="float float-result" aria-hidden="true">
-              <div class="fr-head">
-                <span class="fr-icon">⇄</span>
-                <div>
-                  <strong>Reconcile two sheets</strong>
-                  <span>Cash book ⇄ Bank statement</span>
-                </div>
+              <div class="af-fx"><span class="af-ref">A1</span><span class="af-fxi" aria-hidden="true">fx</span><span class="af-val">Date</span></div>
+              <div class="af-body">
+                <div class="af-grid"><div class="af-skel" aria-hidden="true"></div></div>
               </div>
-              <div class="fr-meter"><span style="--p: 95.7%"></span></div>
-              <p class="fr-big"><b data-count="95.7" data-dp="1">95.7</b>% matched</p>
-              <dl class="fr-list">
-                <div><dt>Matched lines</dt><dd>121 of 128</dd></div>
-                <div><dt>Split payment found</dt><dd class="ok">1</dd></div>
-                <div><dt>Keying error</dt><dd class="warn">1</dd></div>
-                <div><dt>Posted twice</dt><dd class="warn">1</dd></div>
-                <div><dt>Left to explain</dt><dd>6 · 3</dd></div>
-              </dl>
+              <div class="af-foot">
+                <div class="af-tabs" aria-label="Sheets"><span class="af-tab active">Cash book</span><span class="af-tab">Bank statement</span></div>
+                <div class="af-status"></div>
+              </div>
+              <p class="af-failed" hidden>The live sheet couldn't start in this browser. <a href="/app.html?sample=bank-rec">Open the sample in the app</a>.</p>
             </div>
-
-            <div class="float float-why" aria-hidden="true">
-              <span class="why-tag">Why don't these match?</span>
-              <p><b>INV-20470</b> · Thistle Foods</p>
-              <p class="why-row"><span>Cash book</span><s>4,725.00</s></p>
-              <p class="why-row"><span>Bank</span><b>4,752.00</b></p>
-              <p class="why-note">Two digits swapped. Difference 27.00</p>
-            </div>
-            <figcaption class="sr-only">
-              The bank reconciliation sample: 121 of 128 cash book lines matched to the bank automatically, including a
-              payment split in two; one keying error (4,725.00 entered for 4,752.00) and one payment posted twice are
-              flagged.
+            <aside class="hero-card" aria-label="Reconciliation result" aria-live="polite">
+              <div class="hc-head"><span class="hc-icon" aria-hidden="true">⇄</span><div><strong>Reconcile two sheets</strong><span>Cash book ⇄ Bank statement</span></div></div>
+              <div class="hc-meter"><span class="hc-fill"></span></div>
+              <p class="hc-big"><b>–</b>% matched</p>
+              <p class="hc-foot">Matching in this tab…</p>
+            </aside>
+            <figcaption class="stage-cap">
+              <span class="live-dot" aria-hidden="true"></span><b>Live, not a screenshot.</b> The sample month, reconciled in this tab by the engine the app uses. Scroll it, select some amounts, or change one and watch it match again.
             </figcaption>
           </figure>
         </div>
@@ -161,168 +137,155 @@
             <h2 id="wf-title">Built around the work you close every month.</h2>
             <p class="section-lede">
               The spreadsheet you know, with the tools an analyst actually reaches for: each one is a command, not an
-              afternoon of formulas.
+              afternoon of formulas. Every sheet below is the real app, running on sample data in this page.
             </p>
           </header>
 
           <!-- bank rec -->
-          <article class="feature reveal" aria-labelledby="f-rec">
-            <div class="feature-copy">
-              <p class="tag tag-rec">Bank reconciliation</p>
-              <h3 id="f-rec">Bank to ledger in minutes, not an afternoon of VLOOKUPs.</h3>
+          <article class="feature" aria-labelledby="f-rec">
+            <div class="feature-copy reveal">
+              <div class="feature-lead">
+                <p class="tag tag-rec">Bank reconciliation</p>
+                <h3 id="f-rec">Bank to ledger in minutes, not an afternoon of VLOOKUPs.</h3>
+                <a class="link-arrow" href="/app.html?sample=bank-rec">Reconcile a sample month <span aria-hidden="true">→</span></a>
+              </div>
               <ul class="ticks">
                 <li>Matches by reference, amount and date, with tolerances, similar descriptions and split payments.</li>
                 <li>Flags keying errors (swapped digits, a flipped sign) and duplicate postings, and says why two items don't match.</li>
                 <li>Builds the rec statement, with proposed journals for the items only the bank knows about.</li>
                 <li>Opens bank statements straight from PDF, with every running balance checked.</li>
               </ul>
-              <a class="link-arrow" href="/app.html?sample=bank-rec">Reconcile a sample month <span aria-hidden="true">→</span></a>
             </div>
-            <figure class="feature-visual">
-              <div class="shot shot-bank">
-                <picture>
-                  <source srcset="/shots/bank-dark.webp" media="(prefers-color-scheme: dark)" />
-                  <img src="/shots/bank-light.webp" width="1800" height="1090" loading="lazy" alt="The October bank statement sheet: bank-style descriptions such as BGC MORROW RETAIL and FPO ARDEN OFFICE SUPP." />
-                </picture>
+            <div class="feature-demo" data-live="rec">
+              <div class="af af-rec">
+                <div class="af-top">
+                  <svg class="af-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" class="bm-bg" /><rect x="7" y="7" width="8" height="8" rx="1.5" class="bm-a" /><rect x="17" y="7" width="8" height="8" rx="1.5" class="bm-b" /><rect x="7" y="17" width="8" height="8" rx="1.5" class="bm-b" /><rect x="17" y="17" width="8" height="8" rx="1.5" class="bm-c" /></svg>
+                  <div class="af-doc"><b>Sample — Bank reconciliation</b><span class="af-saved">Saved on this computer</span></div>
+                  <div class="af-tools"></div>
+                </div>
+                <div class="af-fx"><span class="af-ref">A1</span><span class="af-fxi" aria-hidden="true">fx</span><span class="af-val"></span></div>
+                <div class="af-body">
+                  <div class="af-grid"><div class="af-skel" aria-hidden="true"></div></div>
+                  <aside class="af-side" aria-label="Reconciliation results"><div class="side-skel" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></aside>
+                </div>
+                <div class="af-foot">
+                  <div class="af-tabs" aria-label="Sheets"><span class="af-tab active">Cash book</span><span class="af-tab active">Bank statement</span></div>
+                  <div class="af-status"></div>
+                </div>
+                <p class="af-failed" hidden>The live sheet couldn't start in this browser. <a href="/app.html?sample=bank-rec">Open the sample in the app</a>.</p>
               </div>
-              <div class="card card-stmt">
-                <p class="card-title">Bank reconciliation · 31 Oct 2026</p>
-                <table>
-                  <tbody>
-                    <tr><th scope="row">Balance per bank statement</th><td>260,143.49</td></tr>
-                    <tr><th scope="row">Add: deposits in transit</th><td>10,955.40</td></tr>
-                    <tr><th scope="row">Less: outstanding payments</th><td>(5,262.75)</td></tr>
-                    <tr class="sum"><th scope="row">Adjusted bank balance</th><td>265,836.14</td></tr>
-                    <tr><th scope="row">Balance per cash book</th><td>264,967.92</td></tr>
-                    <tr><th scope="row">Bank-only items (fees, interest)</th><td>(338.78)</td></tr>
-                    <tr><th scope="row">Ledger errors</th><td>1,207.00</td></tr>
-                    <tr class="sum"><th scope="row">Adjusted cash book balance</th><td>265,836.14</td></tr>
-                    <tr class="zero"><th scope="row">Difference</th><td>0.00 <span class="pill ok">✓ Agreed</span></td></tr>
-                  </tbody>
-                </table>
-              </div>
-              <figcaption class="sr-only">The sample's reconciliation statement, which agrees with no difference.</figcaption>
-            </figure>
+              <p class="demo-cap"><span class="live-dot" aria-hidden="true"></span>Matched in your browser as this section opened. Pick a result to see the lines behind it, on both sides.</p>
+            </div>
           </article>
 
           <!-- close -->
-          <article class="feature feature-flip reveal" aria-labelledby="f-close">
-            <div class="feature-copy">
-              <p class="tag tag-close">Month-end close</p>
-              <h3 id="f-close">A trial balance that checks itself.</h3>
+          <article class="feature" aria-labelledby="f-close">
+            <div class="feature-copy reveal">
+              <div class="feature-lead">
+                <p class="tag tag-close">Month-end close</p>
+                <h3 id="f-close">A trial balance that checks itself.</h3>
+                <a class="link-arrow" href="/app.html?sample=close">Open a sample close <span aria-hidden="true">→</span></a>
+              </div>
               <ul class="ticks">
                 <li>Map accounts to report lines once; next month the mapping is already there.</li>
                 <li>Flux analysis flags every movement over your thresholds and asks for the explanation.</li>
                 <li>Checks run before anything leaves: debits equal credits, every account mapped, no code twice.</li>
                 <li>Clean up messy ERP exports, with titles, subtotals and page footers, in one step, and repeat it next month as a recipe.</li>
               </ul>
-              <a class="link-arrow" href="/app.html?sample=close">Open a sample close <span aria-hidden="true">→</span></a>
             </div>
-            <figure class="feature-visual">
-              <div class="shot shot-close">
-                <picture>
-                  <source srcset="/shots/close-dark.webp" media="(prefers-color-scheme: dark)" />
-                  <img src="/shots/close-light.webp" width="2770" height="1460" loading="lazy" alt="The Flux sheet comparing October with September by account. Legal fees, marketing, accrued expenses and a new software account are flagged Explain; the new account shows (not mapped)." />
-                </picture>
+            <div class="feature-demo" data-live="close">
+              <div class="af af-close">
+                <div class="af-top">
+                  <svg class="af-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" class="bm-bg" /><rect x="7" y="7" width="8" height="8" rx="1.5" class="bm-a" /><rect x="17" y="7" width="8" height="8" rx="1.5" class="bm-b" /><rect x="7" y="17" width="8" height="8" rx="1.5" class="bm-b" /><rect x="17" y="17" width="8" height="8" rx="1.5" class="bm-c" /></svg>
+                  <div class="af-doc"><b>Sample — Month-end close</b><span class="af-saved">Saved on this computer</span></div>
+                  <div class="af-tools"><button type="button" class="af-btn af-undo" disabled>Undo</button></div>
+                </div>
+                <div class="af-fx"><span class="af-ref">A1</span><span class="af-fxi" aria-hidden="true">fx</span><span class="af-val"></span></div>
+                <div class="af-body">
+                  <div class="af-grid"><div class="af-skel" aria-hidden="true"></div></div>
+                  <aside class="af-side" aria-label="Data checks"><div class="side-skel" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></aside>
+                </div>
+                <div class="af-foot">
+                  <div class="af-tabs" aria-label="Sheets"><span class="af-tab">TB current</span><span class="af-tab">TB prior</span><span class="af-tab">Mapping</span><span class="af-tab">Settings</span><span class="af-tab active">Flux</span></div>
+                  <div class="af-status"></div>
+                </div>
+                <p class="af-failed" hidden>The live sheet couldn't start in this browser. <a href="/app.html?sample=close">Open the sample in the app</a>.</p>
               </div>
-              <div class="card card-checks">
-                <p class="card-title">Data checks</p>
-                <ul>
-                  <li><span class="st ok" aria-hidden="true">✓</span>This month's TB balances</li>
-                  <li><span class="st ok" aria-hidden="true">✓</span>No account code twice</li>
-                  <li><span class="st bad" aria-hidden="true">✕</span>Every account is mapped <em>6420 Software subscriptions</em></li>
-                  <li><span class="st warn" aria-hidden="true">!</span>5 movements to explain</li>
-                </ul>
-              </div>
-              <figcaption class="sr-only">Data checks on the sample: the TB balances, one new account is not mapped, five movements need an explanation.</figcaption>
-            </figure>
+              <p class="demo-cap"><span class="live-dot" aria-hidden="true"></span>The close template's own formulas, conditional formats and checks. Change the threshold, or any balance, and the flags follow.</p>
+            </div>
           </article>
 
           <!-- audit -->
-          <article class="feature reveal" aria-labelledby="f-audit">
-            <div class="feature-copy">
-              <p class="tag tag-audit">Audit tests</p>
-              <h3 id="f-audit">Journal entry testing, without a scripting language.</h3>
+          <article class="feature" aria-labelledby="f-audit">
+            <div class="feature-copy reveal">
+              <div class="feature-lead">
+                <p class="tag tag-audit">Audit tests</p>
+                <h3 id="f-audit">Journal entry testing, without a scripting language.</h3>
+                <a class="link-arrow" href="/app.html?sample=audit">Test a sample journal <span aria-hidden="true">→</span></a>
+              </div>
               <ul class="ticks">
                 <li>Eleven journal entry tests in one pass: unbalanced, duplicate, backdated, weekend, after hours, just below an approval limit, unusual user, keywords and more. Every entry scored and ranked.</li>
                 <li>Benford (first and first-two digits, with MAD and chi-square), duplicates exact, near and fuzzy, sequence gaps, stratification, Pareto and ageing.</li>
                 <li>Random, systematic, stratified and monetary unit samples, with the seed recorded so anyone can pick the same sample again.</li>
               </ul>
-              <a class="link-arrow" href="/app.html?sample=audit">Test a sample journal <span aria-hidden="true">→</span></a>
             </div>
-            <figure class="feature-visual">
-              <div class="shot shot-journal">
-                <picture>
-                  <source srcset="/shots/journal-dark.webp" media="(prefers-color-scheme: dark)" />
-                  <img src="/shots/journal-light.webp" width="2210" height="1090" loading="lazy" alt="The Population sheet: a month of journal lines with entry number, dates, posting time, user, account, description and amount." />
-                </picture>
+            <div class="feature-demo" data-live="audit">
+              <div class="af af-audit">
+                <div class="af-top">
+                  <svg class="af-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" class="bm-bg" /><rect x="7" y="7" width="8" height="8" rx="1.5" class="bm-a" /><rect x="17" y="7" width="8" height="8" rx="1.5" class="bm-b" /><rect x="7" y="17" width="8" height="8" rx="1.5" class="bm-b" /><rect x="17" y="17" width="8" height="8" rx="1.5" class="bm-c" /></svg>
+                  <div class="af-doc"><b>Sample — Audit tests</b><span class="af-saved">Saved on this computer</span></div>
+                  <div class="af-tools"></div>
+                </div>
+                <div class="af-fx"><span class="af-ref">A1</span><span class="af-fxi" aria-hidden="true">fx</span><span class="af-val"></span></div>
+                <div class="af-body">
+                  <div class="af-grid"><div class="af-skel" aria-hidden="true"></div></div>
+                  <aside class="af-side" aria-label="Test results"><div class="side-skel" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></aside>
+                </div>
+                <div class="af-foot">
+                  <div class="af-tabs" aria-label="Sheets"><span class="af-tab active">Population</span></div>
+                  <div class="af-status"></div>
+                </div>
+                <p class="af-failed" hidden>The live sheet couldn't start in this browser. <a href="/app.html?sample=audit">Open the sample in the app</a>.</p>
               </div>
-              <div class="card card-je">
-                <p class="card-title">Journal entry tests <span>758 entries · 1,772 lines</span></p>
-                <table>
-                  <thead><tr><th scope="col">Test</th><th scope="col">Entries</th></tr></thead>
-                  <tbody>
-                    <tr><th scope="row">Entries that don't balance</th><td><span class="bar" style="--w: 1"></span>1</td></tr>
-                    <tr><th scope="row">Duplicate entries</th><td><span class="bar" style="--w: 2"></span>2</td></tr>
-                    <tr><th scope="row">Weekend postings</th><td><span class="bar" style="--w: 3"></span>3</td></tr>
-                    <tr><th scope="row">Posted after hours</th><td><span class="bar" style="--w: 2"></span>2</td></tr>
-                    <tr><th scope="row">Just below the approval limit</th><td><span class="bar" style="--w: 8"></span>8</td></tr>
-                    <tr><th scope="row">Keywords (plug, suspense…)</th><td><span class="bar" style="--w: 6"></span>6</td></tr>
-                  </tbody>
-                </table>
-                <p class="card-foot">Top score: <b>100611</b> and <b>100612</b>, a round 25,000.00 adjustment entered twice.</p>
-              </div>
-              <figcaption class="sr-only">Journal entry test results on the sample, with the highest-scoring entries.</figcaption>
-            </figure>
+              <p class="demo-cap"><span class="live-dot" aria-hidden="true"></span>The eleven tests and Benford, run on the sample journal in this tab. Pick an entry to find it in the population.</p>
+            </div>
           </article>
 
           <!-- evidence -->
-          <article class="feature feature-flip reveal" aria-labelledby="f-evidence">
-            <div class="feature-copy">
-              <p class="tag tag-evidence">Evidence and review</p>
-              <h3 id="f-evidence">Every number explained. Every step signed off.</h3>
+          <article class="feature" aria-labelledby="f-evidence">
+            <div class="feature-copy reveal">
+              <div class="feature-lead">
+                <p class="tag tag-evidence">Evidence and review</p>
+                <h3 id="f-evidence">Every number explained. Every step signed off.</h3>
+                <a class="link-arrow" href="/app.html?sample=bank-rec">See it on the sample rec <span aria-hidden="true">→</span></a>
+              </div>
               <ul class="ticks">
                 <li>Tick marks, review notes, and sign-off as prepared and reviewed, on every sheet.</li>
                 <li>"Explain this number" traces a figure through its formulas to the rows and files it came from.</li>
                 <li>Link a cell to the bank letter or invoice that supports it, and check that they agree.</li>
                 <li>An evidence pack keeps the workbook, the fingerprints of every input and a tamper-evident log of every step, in one file.</li>
               </ul>
-              <a class="link-arrow" href="/app.html?sample=bank-rec">See it on the sample rec <span aria-hidden="true">→</span></a>
             </div>
-            <figure class="feature-visual">
-              <div class="mock mock-evidence" aria-hidden="true">
-                <div class="mock-head">
-                  <span class="wp">B-1</span>
-                  <strong>Rec</strong>
-                  <span class="signs">
-                    <span class="sign ok">✓ Prepared · A. Khan</span>
-                    <span class="sign ok">✓✓ Reviewed · E. Schmidt</span>
-                  </span>
+            <div class="feature-demo" data-live="evidence">
+              <div class="af af-evidence">
+                <div class="af-top">
+                  <svg class="af-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" class="bm-bg" /><rect x="7" y="7" width="8" height="8" rx="1.5" class="bm-a" /><rect x="17" y="7" width="8" height="8" rx="1.5" class="bm-b" /><rect x="7" y="17" width="8" height="8" rx="1.5" class="bm-b" /><rect x="17" y="17" width="8" height="8" rx="1.5" class="bm-c" /></svg>
+                  <div class="af-doc"><b>Sample — Bank reconciliation</b><span class="af-saved">Saved on this computer</span></div>
+                  <div class="af-tools"><span class="af-signs"></span></div>
                 </div>
-                <div class="mock-rows">
-                  <div class="mr"><span>Balance per bank statement</span><b>260,143.49</b><i class="tm tm-agree" title="Agreed to bank letter">⊛</i></div>
-                  <div class="mr"><span>Add: deposits in transit</span><b>10,955.40</b><i class="tm">✓</i></div>
-                  <div class="mr"><span>Less: outstanding payments</span><b>(5,262.75)</b><i class="tm">✓</i></div>
-                  <div class="mr mr-sum"><span>Adjusted bank balance</span><b>265,836.14</b><i class="tm">Σ</i></div>
+                <div class="af-fx"><span class="af-ref">A1</span><span class="af-fxi" aria-hidden="true">fx</span><span class="af-val"></span></div>
+                <div class="af-body">
+                  <div class="af-grid"><div class="af-skel" aria-hidden="true"></div></div>
+                  <aside class="af-side" aria-label="Explain this number"><div class="side-skel" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></aside>
                 </div>
-                <div class="explain">
-                  <p class="explain-title">Explain this number · B3</p>
-                  <ol>
-                    <li><b>260,143.49</b> typed in, agreed to <u>Bank letter Oct.pdf</u>, page 1</li>
-                    <li>Linked document fingerprint <code>sha-256 3f9c…a1e2</code></li>
-                    <li>Checked against the statement's closing balance: agrees</li>
-                  </ol>
+                <div class="af-foot">
+                  <div class="af-tabs" aria-label="Sheets"><span class="af-tab">Outstanding</span><span class="af-tab active">B-1 · Rec</span></div>
+                  <div class="af-status"></div>
                 </div>
-                <div class="pack">
-                  <span class="pack-icon">▣</span>
-                  <div>
-                    <strong>Evidence pack · Bank rec Oct.cellforge</strong>
-                    <span>Workbook · 2 input files fingerprinted · 14 logged steps, hash-chained</span>
-                  </div>
-                </div>
+                <p class="af-failed" hidden>The live sheet couldn't start in this browser. <a href="/app.html?sample=bank-rec">Open the sample in the app</a>.</p>
               </div>
-              <figcaption class="sr-only">An illustration of a signed-off rec sheet with tick marks, an explanation of one figure and an evidence pack summary.</figcaption>
-            </figure>
+              <p class="demo-cap"><span class="live-dot" aria-hidden="true"></span>The sample's rec sheet, with its outstanding items filled in from the match above. Pick any figure to trace it, then sign it off.</p>
+            </div>
           </article>
         </div>
       </section>
@@ -345,17 +308,10 @@
             </ul>
           </div>
           <div class="ai-side reveal">
-            <figure class="ask-shot">
-              <picture>
-                <source srcset="/shots/ask-dark.webp" media="(prefers-color-scheme: dark)" />
-                <img src="/shots/ask-light.webp" width="1184" height="374" loading="lazy" alt="The ask bar with the request 'highlight amounts over 10000 in red' and its plan: highlight cells in Amount (column G) over 10,000 in red, as a conditional format." />
-              </picture>
-              <figcaption><span class="pill">Ctrl + /</span> The ask bar, on the sample journal.</figcaption>
-            </figure>
             <ol class="steps" aria-label="Getting started with the local AI">
               <li>
                 <span class="step-n" aria-hidden="true">1</span>
-                <div><b>Start without a model.</b> The ask bar already understands common requests: sort, filter, highlight, freeze, find duplicates.</div>
+                <div><b>Start without a model.</b> The ask bar already understands common requests: sort, filter, highlight, freeze, find duplicates. Try it below.</div>
               </li>
               <li>
                 <span class="step-n" aria-hidden="true">2</span>
@@ -367,6 +323,25 @@
               </li>
             </ol>
             <p class="fine">Nothing is downloaded until you press Download, which names the site and the size. cellforge never calls an AI service. <a href="https://github.com/anshitsinha/cellforge/blob/main/docs/guide/46-local-ai.md" rel="noopener">How the local AI works</a></p>
+          </div>
+          <div class="ai-demo" data-live="ask">
+            <div class="af af-ask">
+              <div class="af-top">
+                <svg class="af-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" class="bm-bg" /><rect x="7" y="7" width="8" height="8" rx="1.5" class="bm-a" /><rect x="17" y="7" width="8" height="8" rx="1.5" class="bm-b" /><rect x="7" y="17" width="8" height="8" rx="1.5" class="bm-b" /><rect x="17" y="17" width="8" height="8" rx="1.5" class="bm-c" /></svg>
+                <div class="af-doc"><b>Sample — Bank reconciliation</b><span class="af-saved">Saved on this computer</span></div>
+                <div class="af-tools"><button type="button" class="af-btn af-undo" disabled>Undo</button></div>
+              </div>
+              <div class="af-fx"><span class="af-ref">A1</span><span class="af-fxi" aria-hidden="true">fx</span><span class="af-val"></span></div>
+              <div class="af-body">
+                <div class="af-grid"><div class="af-skel" aria-hidden="true"></div></div>
+              </div>
+              <div class="af-foot">
+                <div class="af-tabs" aria-label="Sheets"><span class="af-tab active">Bank statement</span></div>
+                <div class="af-status"></div>
+              </div>
+              <p class="af-failed" hidden>The live sheet couldn't start in this browser. <a href="/app.html?sample=bank-rec">Open the sample in the app</a>.</p>
+            </div>
+            <p class="demo-cap"><span class="live-dot" aria-hidden="true"></span>The ask bar's own parser, with no model and no network: each request becomes the app's actions, described first, then run on the sheet. Requests it doesn't know go to the local model, once you've loaded one in the app.</p>
           </div>
         </div>
       </section>
@@ -395,17 +370,25 @@
               which you can run in your own browser. Sorting 100M rows needs about 1.7 GB of free memory.
             </p>
           </div>
-          <figure class="live reveal">
-            <div class="window">
-              <div class="window-bar">
-                <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
-                <span class="window-title">General ledger · live</span>
-                <span class="window-count" id="demo-label" aria-live="off">line 1 of 100,000,000</span>
-              </div>
-              <div class="live-grid" id="demo-grid" role="img" aria-label="A live cellforge grid scrolling through a 100-million-line general ledger of fictional journal entries."></div>
+          <figure class="live reveal" data-live="scale">
+          <div class="af af-scale">
+            <div class="af-top">
+              <svg class="af-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" class="bm-bg" /><rect x="7" y="7" width="8" height="8" rx="1.5" class="bm-a" /><rect x="17" y="7" width="8" height="8" rx="1.5" class="bm-b" /><rect x="7" y="17" width="8" height="8" rx="1.5" class="bm-b" /><rect x="17" y="17" width="8" height="8" rx="1.5" class="bm-c" /></svg>
+              <div class="af-doc"><b>General ledger</b><span class="af-saved">100,000,000 lines</span></div>
+              <div class="af-tools"></div>
             </div>
+            <div class="af-fx"><span class="af-ref">A1</span><span class="af-fxi" aria-hidden="true">fx</span><span class="af-val"></span></div>
+            <div class="af-body">
+              <div class="af-grid"><div class="af-skel" aria-hidden="true"></div></div>
+            </div>
+            <div class="af-foot">
+              <div class="af-tabs" aria-label="Sheets"><span class="af-tab active">General ledger</span></div>
+              <div class="af-status"></div>
+            </div>
+            <p class="af-failed" hidden>The live sheet couldn't start in this browser. <a href="/app.html?sample=big">Open the sample in the app</a>.</p>
+          </div>
             <figcaption>
-              A real cellforge grid, running in this page, jumping through a fictional 100-million-line ledger.
+              A real cellforge grid in this page, over a fictional 100-million-line ledger. Drag its scroll bar, or jump.
               <a href="/app.html?sample=big">Open it in the app <span aria-hidden="true">→</span></a>
             </figcaption>
           </figure>
@@ -563,7 +546,7 @@
         </nav>
       </div>
       <div class="wrap footer-base">
-        <span>All names and figures in the samples and screenshots are fictional.</span>
+        <span>All names and figures in the samples are fictional.</span>
         <span>Made to run on your own computer.</span>
       </div>
     </footer>

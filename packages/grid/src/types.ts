@@ -60,6 +60,12 @@ export interface GridOptions {
    */
   touch?: boolean;
   /**
+   * When the wheel can't move the grid (it's at the edge, or everything
+   * fits), leave the event alone so the page around it scrolls instead.
+   * For grids embedded in a scrolling page. Default false.
+   */
+  wheelChaining?: boolean;
+  /**
    * Font size for the in-cell editor. iOS Safari zooms the whole page when
    * focusing an input with text smaller than 16px, so use 16 on phones.
    */
