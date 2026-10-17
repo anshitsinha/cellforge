@@ -1,6 +1,5 @@
 import "./home.css";
-import { Grid } from "@cellforge/grid";
-import { SyntheticSource } from "./demo";
+import "./landing/landing.css";
 
 // Motion is opt-in from here: without this class (no JS) everything is
 // simply visible, and with reduced motion the CSS leaves it alone.
@@ -43,84 +42,50 @@ if (reduceMotion || !("IntersectionObserver" in window)) {
   reveals.forEach((el) => io.observe(el));
 }
 
-// ---------------------------------------------------- the live 100M grid --
-// A real cellforge grid over the 100M-line ledger demo: the best proof that
-// the number isn't marketing. Built only when it scrolls near the screen.
-const ROWS = 100_000_000;
-const container = document.getElementById("demo-grid");
-const label = document.getElementById("demo-label");
+// ------------------------------------------------------------ live demos --
+// Every product picture on this page is the real thing: the cellforge grid
+// and engines running on the sample data, in this tab. Each demo's code is
+// fetched only when its section comes near the screen, so the page itself
+// stays small; until then a skeleton holds its place.
+type Demo = { mount(root: HTMLElement): unknown };
+const DEMOS: Record<string, () => Promise<Demo>> = {
+  hero: () => import("./landing/hero"),
+  rec: () => import("./landing/rec"),
+  close: () => import("./landing/close"),
+  audit: () => import("./landing/audit"),
+  evidence: () => import("./landing/evidence"),
+  ask: () => import("./landing/ask"),
+  scale: () => import("./landing/scale"),
+};
 
-function startLiveGrid(el: HTMLElement) {
-  const fmt = new Intl.NumberFormat("en-US");
-  // touch: false - this grid is decoration inside a scrolling page, so a
-  // swipe over it on a phone should scroll the page, not the grid
-  const grid = new Grid(el, new SyntheticSource(ROWS), { defaultColumnWidth: 92, touch: false, label: "General ledger demo" });
-  const show = (row: number) => {
-    if (label) label.textContent = `line ${fmt.format(row + 1)} of ${fmt.format(ROWS)}`;
-  };
-  if (reduceMotion) {
-    // still worth showing how deep it goes: one static jump
-    grid.select(47_500_000, 0);
-    show(47_500_000);
-    return;
+async function start(root: HTMLElement) {
+  const load = DEMOS[root.dataset.live ?? ""];
+  if (!load || root.dataset.state) return;
+  root.dataset.state = "loading";
+  try {
+    const demo = await load();
+    await demo.mount(root);
+    root.dataset.state = "live";
+  } catch (e) {
+    root.dataset.state = "failed";
+    const note = root.querySelector<HTMLElement>(".af-failed");
+    if (note) note.hidden = false;
+    console.error("cellforge demo", root.dataset.live, e);
   }
-
-  // glide down, then "teleport" deeper so it's obvious we're not looping
-  // over the first few hundred rows
-  const JUMPS = [0, 1_250_000, 18_000_000, 47_500_000, 99_999_000];
-  let jump = 0;
-  let row = 0;
-  let paused = false;
-  let visible = true;
-  el.addEventListener("mouseenter", () => (paused = true));
-  el.addEventListener("mouseleave", () => (paused = false));
-  new IntersectionObserver(([e]) => (visible = e.isIntersecting)).observe(el);
-
-  const tick = () => {
-    if (!paused && visible && !document.hidden) {
-      row += 0.06;
-      // stay on the first column, so the grid doesn't scroll sideways
-      grid.select(Math.floor(row), 0);
-      show(Math.floor(row));
-    }
-    requestAnimationFrame(tick);
-  };
-  setInterval(() => {
-    if (paused || !visible || document.hidden) return;
-    jump = (jump + 1) % JUMPS.length;
-    row = JUMPS[jump];
-  }, 4000);
-  requestAnimationFrame(tick);
 }
 
-if (container) {
-  if ("IntersectionObserver" in window) {
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (!entries.some((e) => e.isIntersecting)) return;
-        io.disconnect();
-        startLiveGrid(container);
-      },
-      { rootMargin: "400px 0px" },
-    );
-    io.observe(container);
-  } else startLiveGrid(container);
-}
-
-// ------------------------------------------------------- counting number --
-// the hero's "95.7% matched" counts up once, after the card appears
-const counter = document.querySelector<HTMLElement>("[data-count]");
-if (counter && !reduceMotion) {
-  const target = Number(counter.dataset.count);
-  const dp = Number(counter.dataset.dp ?? 0);
-  const start = performance.now() + 1100;
-  const dur = 1300;
-  const step = (now: number) => {
-    const t = Math.min(1, Math.max(0, (now - start) / dur));
-    const eased = 1 - Math.pow(1 - t, 3);
-    counter.textContent = (target * eased).toFixed(dp);
-    if (t < 1) requestAnimationFrame(step);
-  };
-  counter.textContent = (0).toFixed(dp);
-  requestAnimationFrame(step);
-}
+const lives = document.querySelectorAll<HTMLElement>("[data-live]");
+if ("IntersectionObserver" in window) {
+  const io = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        io.unobserve(e.target);
+        void start(e.target as HTMLElement);
+      }
+    },
+    // start well before it's on screen: the code and the engines take a moment
+    { rootMargin: "900px 0px" },
+  );
+  lives.forEach((el) => io.observe(el));
+} else lives.forEach((el) => void start(el));

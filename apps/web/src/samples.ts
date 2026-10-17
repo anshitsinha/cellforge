@@ -10,12 +10,11 @@
  * (templates.ts) with the sample data filled in. `/app.html?sample=<kind>`
  * does that on start-up (see `sampleFromUrl`).
  */
-import { ActionHistory, BlobStore } from "@cellforge/actions";
-import { setCells, sheetActions, type SheetCtx } from "./actions";
-import { SyntheticSource } from "./demo";
-import { EditableSource } from "./editable";
-import { buildTemplate } from "./templates";
-import { Workbook } from "./workbook";
+// The data generators below are pure, so the landing page can run the real
+// engines on them without loading the app. What builds a workbook (actions,
+// templates, the sheet model) is imported only when a workbook is asked for.
+import type { SheetCtx } from "./actions";
+import type { Workbook } from "./workbook";
 
 export type SampleKind = "bank-rec" | "close" | "audit" | "big";
 
@@ -462,7 +461,8 @@ function rowsBelowHeader(rows: (string | number | null)[][]): Cell[] {
   return rows.flatMap((row, i) => row.map((v, col) => ({ row: i + 1, col, input: v === null ? null : String(v) })));
 }
 
-function driver(wb: Workbook) {
+async function driver(wb: Workbook) {
+  const [{ ActionHistory, BlobStore }, { setCells, sheetActions }] = await Promise.all([import("@cellforge/actions"), import("./actions")]);
   const ctx: SheetCtx = { workbook: wb, activeSheet: wb.sheets[0].id, blobs: new BlobStore(), sortRows: async () => null };
   const h = new ActionHistory(sheetActions(), () => ctx);
   return async (sheet: string, cells: Cell[]) => {
@@ -482,12 +482,14 @@ const note = (text: string): Cell[] => [{ row: 1, col: 0, input: text }];
  */
 export async function sampleWorkbook(kind: SampleKind, seed = 1): Promise<{ workbook: Workbook; active: string; name: string }> {
   if (kind === "big") {
+    const [{ Workbook }, { EditableSource }, { SyntheticSource }] = await Promise.all([import("./workbook"), import("./editable"), import("./demo")]);
     const workbook = new Workbook({ name: "General ledger", source: new EditableSource(new SyntheticSource(BIG_ROWS), 10) });
     workbook.sheets[0].origin = "Sample data: a fictional 100M-line general ledger";
     return { workbook, active: workbook.sheets[0].id, name: "demo — 100M-line general ledger" };
   }
+  const { buildTemplate } = await import("./templates");
   const wb = await buildTemplate(kind === "bank-rec" ? "bankrec" : kind);
-  const put = driver(wb);
+  const put = await driver(wb);
   const intro = `Sample data for ${SAMPLE_COMPANY}, a fictional company, October 2026.`;
   if (kind === "bank-rec") {
     const s = bankRecSample(seed);

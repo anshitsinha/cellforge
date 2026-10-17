@@ -134,6 +134,7 @@ export class Grid {
   private readonly headerHeight: number;
   private readonly defaultColumnWidth: number;
   private readonly touchEnabled: boolean;
+  private readonly wheelChaining: boolean;
   private readonly editorFontSize: number;
   private rowHeaderWidth = 50;
 
@@ -223,6 +224,7 @@ export class Grid {
     this.headerHeight = options.headerHeight ?? 24;
     this.defaultColumnWidth = options.defaultColumnWidth ?? 110;
     this.touchEnabled = options.touch ?? true;
+    this.wheelChaining = options.wheelChaining ?? false;
     this.editorFontSize = options.editorFontSize ?? 13;
 
     this.source = source;
@@ -866,7 +868,6 @@ export class Grid {
   // events
 
   private onWheel = (e: WheelEvent): void => {
-    e.preventDefault();
     // deltaMode 1 = lines (Firefox with a mouse wheel), 2 = pages
     const unit = e.deltaMode === 1 ? this.rowHeight : e.deltaMode === 2 ? this.bodyHeight : 1;
     let dx = e.deltaX * unit;
@@ -876,9 +877,14 @@ export class Grid {
       dx = dy;
       dy = 0;
     }
+    const x = this.scrollX;
+    const y = this.scrollY;
     this.scrollX += dx;
     this.scrollY += dy;
     this.clampScroll();
+    // a grid inside a scrolling page hands the wheel on when it can't move
+    if (this.wheelChaining && this.scrollX === x && this.scrollY === y) return;
+    e.preventDefault();
     this.invalidate();
   };
 
