@@ -74,7 +74,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - [x] Landing page for finance and audit analysts; finance sample data instead of the sales demo
 - [x] Local AI you can find: an AI panel with recommended models, download on request, status everywhere
 - [x] App shell: Ask AI button, menu bar, side rail for the main jobs, start screen, a palette without engine internals
-- [ ] Every tool dialog on the shared components, with better defaults and empty states
+- [x] Every tool dialog on the shared components, with better defaults and empty states
 - [ ] Browser check of every screen in both themes; guides updated
 
 ## Milestones
