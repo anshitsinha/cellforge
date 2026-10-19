@@ -75,6 +75,7 @@ tracker shows this expanded, with the first unticked step as the current one.
 - [x] Local AI you can find: an AI panel with recommended models, download on request, status everywhere
 - [x] App shell: Ask AI button, menu bar, side rail for the main jobs, start screen, a palette without engine internals
 - [x] Every tool dialog on the shared components, with better defaults and empty states
+- [ ] Second review of every screen (done: frame matches the landing page; outputs below the bar) and the fixes it found
 - [ ] Browser check of every screen in both themes; guides updated
 
 ## Milestones
