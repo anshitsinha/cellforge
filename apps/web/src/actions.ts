@@ -19,7 +19,7 @@ import { checkDv, subtractRange, type DvRule } from "./validation";
 import { safeLink } from "./links";
 import type { ScenarioModel } from "./scenarios";
 import type { DocMeta, EvidenceLink } from "./docstore";
-import { allMarks, type MarkDef, type ReviewNote, type SheetReview } from "./review";
+import { allMarks, noteSignOffUndo, type MarkDef, type ReviewNote, type SheetReview } from "./review";
 import { bindStep, type Recipe, type RecipeStep } from "./recipe";
 import { checkRule, describeRule, newRuleId, type CfRule } from "./condformat";
 import { describeCondition, type FilterCondition, type FilterSpec, type FilterView } from "./filter";
@@ -1151,6 +1151,8 @@ export function sheetActions(): ActionRegistry<SheetCtx> {
         const { id } = target(ctx, p.sheet);
         const before = structuredClone(ctx.workbook.review.sheets[id] ?? {});
         ctx.workbook.review.sheets[id] = ctx.blobs.get<SheetReview>(p.state);
+        // undo / redo of a sign-off: say so (the review panel shows a toast)
+        noteSignOffUndo(ctx.workbook.get(id).name, before, ctx.workbook.review.sheets[id]);
         return { type: "review.putSheet", params: { sheet: id, state: ctx.blobs.put(before) } };
       },
     })

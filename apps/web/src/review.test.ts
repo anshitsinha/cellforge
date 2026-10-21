@@ -3,7 +3,8 @@ import { ActionHistory, BlobStore } from "@cellforge/actions";
 import { setCells, sheetActions, type SheetCtx } from "./actions";
 import { BlankSource, EditableSource } from "./editable";
 import { appendLog } from "./evidence";
-import { changedSince } from "./review";
+import { changedSince, onSignOffUndo, type SignOffUndo } from "./review";
+import { signedWhen } from "./reviewui";
 import { Workbook } from "./workbook";
 
 function setup() {
@@ -61,6 +62,61 @@ describe("review mode", () => {
     expect(changedSince(sign, log, "Bank rec")).toBe(0);
     await appendLog(log, { kind: "run", label: "edit", sheet: "Bank rec" });
     expect(changedSince(sign, log, "Bank rec")).toBe(1);
+  });
+
+  it("signing off doesn't count as a change since signing off (the app logs the sign-off itself after it runs)", async () => {
+    const { h, workbook, id } = setup();
+    const log = workbook.evidence.log;
+    // as the app does: run the action, then log it (with the action) a moment later
+    const run = async (a: { type: string; params: Record<string, unknown> }) => {
+      await h.run(a);
+      await appendLog(log, { kind: "run", label: sheetActions().describe(a), sheet: "Bank rec", action: a });
+    };
+    await run(setCells([{ row: 0, col: 0, input: "100" }]));
+    await run({ type: "review.signoff", params: { role: "prepared", by: "PR" } });
+    const prepared = workbook.review.sheets[id].prepared!;
+    expect(changedSince(prepared, log, "Bank rec")).toBe(0);
+    // review work after it isn't a change either
+    await run({ type: "review.mark", params: { range: { top: 0, left: 0, bottom: 0, right: 0 }, mark: "agreed", on: true } });
+    await run({ type: "review.ref", params: { ref: "B-1" } });
+    await appendLog(log, { kind: "undo", label: "tick agreed" });
+    expect(changedSince(prepared, log, "Bank rec")).toBe(0);
+    // an edit is
+    await run(setCells([{ row: 1, col: 0, input: "5" }]));
+    expect(changedSince(prepared, log, "Bank rec")).toBe(1);
+    await appendLog(log, { kind: "undo", label: "edit B2" });
+    expect(changedSince(prepared, log, "Bank rec")).toBe(2);
+  });
+
+  it("an edit logged late (after the sign-off read the log) still counts once, by the sign-off's hash", async () => {
+    const { workbook } = setup();
+    const log = workbook.evidence.log;
+    await appendLog(log, { kind: "run", label: "edit", sheet: "Bank rec" });
+    // signed while the next entry was still being written: logLength says 1, the hash names entry 0
+    const sign = { by: "PR", at: Date.now(), logHash: log[0].hash, logLength: 2 };
+    await appendLog(log, { kind: "run", label: "edit", sheet: "Bank rec" });
+    expect(changedSince(sign, log, "Bank rec")).toBe(1);
+  });
+
+  it("says when undo takes a sign-off away, and when redo puts it back", async () => {
+    const { h } = setup();
+    const heard: SignOffUndo[] = [];
+    const stop = onSignOffUndo((e) => heard.push(e));
+    await h.run({ type: "review.signoff", params: { role: "prepared", by: "PR" } });
+    expect(heard).toEqual([]);
+    await h.undo();
+    await h.redo();
+    stop();
+    expect(heard).toEqual([
+      { sheet: "Bank rec", role: "prepared", by: "PR", removed: true },
+      { sheet: "Bank rec", role: "prepared", by: "PR", removed: false },
+    ]);
+  });
+
+  it("shows sign-off times the same way in every locale", () => {
+    const at = new Date(2026, 10, 17, 1, 44).getTime();
+    expect(signedWhen(at, at)).toBe("17 Nov, 01:44");
+    expect(signedWhen(at, new Date(2027, 0, 2).getTime())).toBe("17 Nov 2026, 01:44");
   });
 
   it("gives sheets workpaper references and saves review state", async () => {

@@ -59,14 +59,67 @@ export function allMarks(review: WorkbookReview): MarkDef[] {
   return [...BUILTIN_MARKS, ...review.marks.filter((m) => !BUILTIN_MARKS.some((b) => b.id === m.id))];
 }
 
-/** Has the sheet changed since this sign-off? (Any logged change on it, or an undo / redo, after.) */
-export function changedSince(sign: SignOff, log: readonly { kind: string; sheet?: string }[], sheetName: string): number {
+/**
+ * What review actions are called in the log (registry.describe): tick marks,
+ * review notes, sign-offs, workpaper references and the custom marks. They
+ * record the review; they don't change the numbers.
+ */
+const REVIEW_LABEL = /^(tick|untick) |^(clear |reopen |delete )?review note$|^remove (prepared|reviewed) sign-off$|^sign off as (prepared|reviewed)$|^(remove )?workpaper ref\b|^custom tick marks$/;
+
+/** Is this log entry review work (a tick, a note, a sign-off, a reference), not a change to the sheet's contents? */
+export function isReviewEntry(e: { kind: string; label?: string; action?: { type: string } }): boolean {
+  if (e.action) return e.action.type.startsWith("review.");
+  return (e.kind === "run" || e.kind === "undo" || e.kind === "redo") && !!e.label && REVIEW_LABEL.test(e.label);
+}
+
+/**
+ * How many changes the sheet has had since this sign-off: logged changes on
+ * it, and undo / redo / recipe runs (which can touch any sheet), after the
+ * entry the sign-off was given at. Review work itself (the sign-off's own log
+ * entry, tick marks, review notes, references) doesn't count.
+ */
+export function changedSince(sign: SignOff, log: readonly { kind: string; sheet?: string; label?: string; hash?: string; action?: { type: string } }[], sheetName: string): number {
+  // the log is written a moment after each action, so find the last entry the sign-off saw by its hash
+  const at = sign.logHash && !/^0+$/.test(sign.logHash) ? log.findIndex((e) => e.hash === sign.logHash) : -1;
+  const from = at >= 0 ? at + 1 : sign.logLength;
   let n = 0;
-  for (const e of log.slice(sign.logLength)) {
-    if (e.kind === "open" || e.kind === "import") continue;
+  for (const e of log.slice(from)) {
+    if (e.kind === "open" || e.kind === "import" || isReviewEntry(e)) continue;
     if (e.sheet === sheetName || e.kind === "undo" || e.kind === "redo" || e.kind === "recipe") n++;
   }
   return n;
+}
+
+/** A sign-off that undo or redo took away or put back. */
+export interface SignOffUndo {
+  sheet: string;
+  role: "prepared" | "reviewed";
+  by: string;
+  /** true: undo took it away; false: redo put it back */
+  removed: boolean;
+}
+
+const signOffUndoListeners = new Set<(e: SignOffUndo) => void>();
+
+/**
+ * Hear about sign-offs that undo / redo took away or put back, so the app can
+ * say so: an attestation shouldn't vanish without a word. Returns a function
+ * that stops listening.
+ */
+export function onSignOffUndo(fn: (e: SignOffUndo) => void): () => void {
+  signOffUndoListeners.add(fn);
+  return () => signOffUndoListeners.delete(fn);
+}
+
+/** Called by the review.putSheet action (which only ever runs as an undo or a redo) with the sheet's state before and after. */
+export function noteSignOffUndo(sheet: string, before: SheetReview, after: SheetReview): void {
+  for (const role of ["prepared", "reviewed"] as const) {
+    const was = before[role];
+    const now = after[role];
+    if (!!was === !!now) continue;
+    const e: SignOffUndo = { sheet, role, by: (was ?? now)!.by, removed: !!was };
+    for (const fn of signOffUndoListeners) fn(e);
+  }
 }
 
 const NAME_KEY = "cellforge.reviewerName";
