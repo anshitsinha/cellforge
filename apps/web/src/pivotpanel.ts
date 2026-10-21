@@ -15,6 +15,7 @@ import { AGG_LABEL, fieldMembers, pivot, type DateGroup, type PivotAgg, type Piv
 import type { ChartSpec, ChartType } from "./charts/model";
 import { pivotChartSpec, savePivot } from "./charts/pivotspec";
 import { namedHeader } from "./cleanup";
+import { dataExtent } from "./usedrange";
 import { EditableSource } from "./editable";
 import "./pivot.css";
 import "./analysis.css";
@@ -77,7 +78,8 @@ function textColumn(name: string, values: (string | null)[]): ColumnData {
  * when the sheet isn't sorted); edited columns are read cell by cell.
  */
 export function readSheetColumns(src: ColumnSource): SheetColumns {
-  const { rows: used, cols } = src.usedRange();
+  // the rows that show data: a template's formula rows that show "" aren't data
+  const { rows: used, cols } = dataExtent(src);
   const named = namedHeader(src as EditableSource);
   const first = named ? 0 : 1;
   const rows = Math.max(0, used - first);

@@ -27,6 +27,7 @@ import {
 } from "@cellforge/core";
 import { namedHeader } from "./cleanup";
 import { EditableSource } from "./editable";
+import { dataExtent } from "./usedrange";
 import "./audittools.css";
 import { columnKind, defaultDuplicateKeys, firstOfKind, formatForKind, guessRoles, type ColumnKind, type ColumnSample } from "./colguess";
 import { activeSheetId, button, el, emptyState, field as tkField, headline, navigator, notice, report, section, type HeadlineOptions } from "./toolkit";
@@ -73,7 +74,8 @@ export interface SheetData {
 }
 
 export function readSheet(src: EditableSource): SheetData {
-  const { rows, cols } = src.usedRange();
+  // the rows that show data: a template's formula rows that show "" aren't data
+  const { rows, cols } = dataExtent(src);
   const named = namedHeader(src);
   const first = named ? 0 : 1;
   const names = Array.from({ length: cols }, (_, c) => {

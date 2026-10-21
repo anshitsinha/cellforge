@@ -170,7 +170,19 @@ export function workbookSource(wb: Workbook): CheckSource & { data(ref: string):
       const d = data(ref);
       if (!d) return null;
       const t = d.data;
-      return { rows: t.rows, cols: t.names.length, names: t.names.map(bareName), get: (r, c) => (t.col(c)[r] ?? null) as CheckValue, numFmt: (c) => t.numFmt(c) };
+      const src = d.sheet.source;
+      return {
+        rows: t.rows,
+        cols: t.names.length,
+        names: t.names.map(bareName),
+        get: (r, c) => (t.col(c)[r] ?? null) as CheckValue,
+        numFmt: (c) => t.numFmt(c),
+        first: t.first,
+        cell: (r, c) => {
+          const v = r < src.rowCount && c < src.colCount ? src.getCell(r, c) : null;
+          return v === undefined || (typeof v === "object" && v !== null) ? null : (v as CheckValue);
+        },
+      };
     },
   };
 }
@@ -327,6 +339,8 @@ export function blankCheck(kind: CheckKind, sheet: string, cols: number): CheckD
       return { ...base, kind, cols: [c] };
     case "formula":
       return { ...base, kind, formula: "" };
+    case "cell":
+      return { ...base, kind, cell: "", op: "=", value: 0, tolerance: 0.005 };
   }
 }
 

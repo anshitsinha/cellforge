@@ -64,11 +64,11 @@ describe("pivot panel: reading the sheet", () => {
     const data = readSheetColumns(src);
     expect(data.names).toEqual(["Vendor", "Amount"]);
     expect(data.first).toBe(1);
-    expect(data.rows).toBe(3); // usedRange keeps the imported blank last row
+    expect(data.rows).toBe(2); // the imported blank last row isn't data
     const v = data.columns[0];
-    expect(v.kind === "string" && [...v.codes].map((c) => v.dict[c - 1])).toEqual(["Acme", "Bolt", undefined]);
+    expect(v.kind === "string" && [...v.codes].map((c) => v.dict[c - 1])).toEqual(["Acme", "Bolt"]);
     const a = data.columns[1];
-    expect(a.kind === "string" && [...a.codes].map((c) => (c ? a.dict[c - 1] : null))).toEqual(["5", "7", null]);
+    expect(a.kind === "string" && [...a.codes].map((c) => (c ? a.dict[c - 1] : null))).toEqual(["5", "7"]);
   });
 
   it("names unnamed columns by letter", () => {
@@ -247,5 +247,32 @@ describe("pivot panel: number format of the values", () => {
     expect(withValueFormat(t, "").numFmts).toEqual(["", "#,##0.00", "0.0%"]);
     const general = { ...t, numFmts: ["", "", "0.0%"] };
     expect(withValueFormat(general, "").numFmts).toEqual(["", "#,##0.00", "0.0%"]);
+  });
+});
+
+describe("pivot panel: template sheets", () => {
+  it("counts only the rows that show data, not the template's 2,000 formula rows", async () => {
+    const { buildTemplate } = await import("./templates");
+    const { sampleWorkbook } = await import("./samples");
+    // the empty template: formulas fill Flux down 2,000 rows, two of them show data
+    const wb = await buildTemplate("close");
+    const tb = wb.byName("TB current")!.source;
+    tb.setCell(1, 0, 1000);
+    tb.setCell(1, 2, 500);
+    tb.setCell(2, 0, 4000);
+    tb.setCell(2, 3, 500);
+    const flux = readSheetColumns(wb.byName("Flux")!.source);
+    expect(flux.rows).toBe(2);
+    // the sample: a pivot of Flux by report line has no "(blank)" group
+    const s = await sampleWorkbook("close");
+    const data = readSheetColumns(s.workbook.byName("Flux")!.source);
+    const tbRows = s.workbook.byName("TB current")!.source;
+    let accounts = 0;
+    for (let r = 1; r < tbRows.rowCount; r++) if (tbRows.getCell(r, 0) !== null) accounts++;
+    expect(data.rows).toBe(accounts);
+    const t = pivotTable(pivot(data.columns, { rows: [2], cols: [], values: [{ field: 3, agg: "sum" }] }), data);
+    const labels = t.rows.map((x) => x.cells[0]);
+    expect(labels).not.toContain("(blank)");
+    expect(labels).toContain("(not mapped)");
   });
 });

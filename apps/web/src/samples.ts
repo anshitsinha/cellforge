@@ -471,7 +471,16 @@ async function driver(wb: Workbook) {
   };
 }
 
-const note = (text: string): Cell[] => [{ row: 1, col: 0, input: text }];
+/** The cover sheet's second line (the first points at the guide). */
+const note = (text: string): Cell[] => [{ row: 2, col: 0, input: text }];
+
+/** A reference that is only digits (a cheque number, "20452") stays text, so it isn't shown as 20,452. */
+const refText = (ref: string): string => (/^\d+$/.test(ref) ? `'${ref}` : ref);
+
+/** Spare rows under a sample's data: room to add a few lines without the sheet being 2,000 rows of nothing. */
+const SPARE_ROWS = 40;
+
+const FIRST_SHEET: Record<Exclude<SampleKind, "big">, string> = { "bank-rec": "Cash book", close: "Flux", audit: "Population" };
 
 /**
  * A ready-to-use workbook for a sample: the matching template with the
@@ -485,35 +494,48 @@ export async function sampleWorkbook(kind: SampleKind, seed = 1): Promise<{ work
     const [{ Workbook }, { EditableSource }, { SyntheticSource }] = await Promise.all([import("./workbook"), import("./editable"), import("./demo")]);
     const workbook = new Workbook({ name: "General ledger", source: new EditableSource(new SyntheticSource(BIG_ROWS), 10) });
     workbook.sheets[0].origin = "Sample data: a fictional 100M-line general ledger";
-    return { workbook, active: workbook.sheets[0].id, name: "demo — 100M-line general ledger" };
+    return { workbook, active: workbook.sheets[0].id, name: "Sample — 100M-line general ledger" };
   }
   const { buildTemplate } = await import("./templates");
-  const wb = await buildTemplate(kind === "bank-rec" ? "bankrec" : kind);
-  const put = await driver(wb);
   const intro = `Sample data for ${SAMPLE_COMPANY}, a fictional company, October 2026.`;
+  // each sample's template is sized to its data (plus a little room), not to 2,000 empty rows
   if (kind === "bank-rec") {
     const s = bankRecSample(seed);
-    const lines = (list: CashLine[]) => rowsBelowHeader(list.map((l) => [l.date, l.reference, l.description, fixed(Math.round(l.amount * 100)), null]));
+    const wb = await buildTemplate("bankrec", { rows: Math.max(s.ledger.length, s.bank.length) + 1 + SPARE_ROWS });
+    const put = await driver(wb);
+    const lines = (list: CashLine[]) => rowsBelowHeader(list.map((l) => [l.date, refText(l.reference), l.description, fixed(Math.round(l.amount * 100)), null]));
     await put("Cash book", lines(s.ledger));
     await put("Bank statement", lines(s.bank));
     await put("Rec", [{ row: 2, col: 1, input: fixed(Math.round(s.bankClosing * 100)) }]);
-    await put("Start here", note(`${intro} Step 1 is done: the cash book and the bank statement are filled in, and the statement's closing balance is on "Rec".`));
-  } else if (kind === "close") {
+    await put("Start here", note(`${intro} The cash book, statement and closing balance are in.`));
+    return finish(wb, kind);
+  }
+  if (kind === "close") {
     const s = closeSample(seed);
+    const wb = await buildTemplate("close", { rows: Math.max(s.current.length, s.prior.length, s.mapping.length) + 1 + SPARE_ROWS });
+    const put = await driver(wb);
     const tb = (list: TbLine[]) => rowsBelowHeader(list.map((l) => [l.code, l.name, l.debit ? l.debit.toFixed(2) : null, l.credit ? l.credit.toFixed(2) : null]));
     await put("TB current", tb(s.current));
     await put("TB prior", tb(s.prior));
     await put("Mapping", rowsBelowHeader(s.mapping.map((m) => [m.code, m.line, m.type])));
-    await put("Start here", note(`${intro} Steps 1 to 3 are done: both trial balances and the mapping are filled in. Look at "Flux", then run "Data checks…".`));
-  } else {
-    const s = auditSample(seed);
-    await put("Population", rowsBelowHeader(s.lines.map((l) => [l.entry, l.date, l.posted, l.user, l.account, l.description, l.amount.toFixed(2), l.reference])));
-    await put("Results", [{ row: 8, col: 1, input: `Sample journal, ${s.period} (fictional)` }]);
-    await put("Start here", note(`${intro} Step 1 is done: the journal is on "Population". Approval limit: 10,000.00.`));
+    await put("Start here", note(`${intro} Both trial balances and the mapping are in.`));
+    return finish(wb, kind);
   }
+  const s = auditSample(seed);
+  const wb = await buildTemplate("audit", { rows: s.lines.length + 1 + SPARE_ROWS });
+  const put = await driver(wb);
+  await put("Population", rowsBelowHeader(s.lines.map((l) => [l.entry, l.date, l.posted, l.user, l.account, l.description, l.amount.toFixed(2), l.reference])));
+  await put("Results", [{ row: 8, col: 1, input: "Sample journal (fictional)" }]);
+  await put("Start here", note(`${intro} The journal is on Population; approval limit 10,000.00.`));
+  return finish(wb, kind);
+}
+
+function finish(wb: Workbook, kind: Exclude<SampleKind, "big">): { workbook: Workbook; active: string; name: string } {
   // filling in the sample isn't the user's work
   wb.evidence = { log: [], inputs: [] };
   const title = SAMPLES.find((x) => x.kind === kind)!.title;
   for (const sh of wb.sheets) sh.origin = `Sample data (fictional): ${title}`;
-  return { workbook: wb, active: wb.sheets[0].id, name: `Sample — ${title}` };
+  // open on the sheet the work starts on; the guide panel explains the steps
+  const first = wb.byName(FIRST_SHEET[kind]) ?? wb.sheets[0];
+  return { workbook: wb, active: first.id, name: `Sample — ${title}` };
 }
