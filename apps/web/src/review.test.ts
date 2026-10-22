@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ActionHistory, BlobStore } from "@cellforge/actions";
+import { ActionHistory, BlobStore, type Action } from "@cellforge/actions";
 import { setCells, sheetActions, type SheetCtx } from "./actions";
 import { BlankSource, EditableSource } from "./editable";
 import { appendLog } from "./evidence";
@@ -68,7 +68,7 @@ describe("review mode", () => {
     const { h, workbook, id } = setup();
     const log = workbook.evidence.log;
     // as the app does: run the action, then log it (with the action) a moment later
-    const run = async (a: { type: string; params: Record<string, unknown> }) => {
+    const run = async (a: Action) => {
       await h.run(a);
       await appendLog(log, { kind: "run", label: sheetActions().describe(a), sheet: "Bank rec", action: a });
     };
