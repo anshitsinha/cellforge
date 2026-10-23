@@ -7,7 +7,9 @@ import type { Action } from "@cellforge/actions";
 import { buildTb, formatValue, readTb, Table, TB_ROLES, type ColumnData, type TbResult, type TbRole } from "@cellforge/core";
 import { namedHeader, sheetText } from "./cleanup";
 import { EditableSource } from "./editable";
-import { headline, report, toolDialog } from "./toolkit";
+import "./openitems.css";
+import { el, headline, notice, plural, report, section, toolDialog } from "./toolkit";
+import { renderTable } from "./ui/table";
 
 export interface TbDeps {
   source: () => EditableSource;
@@ -62,104 +64,136 @@ export function tbColumns(tb: TbResult): { columns: ColumnData[]; numFmts: strin
   return { columns, numFmts };
 }
 
+/** A first value as it reads: numbers formatted (414,756.36), text as it is. Pure. */
+export function sampleText(v: string): string {
+  const t = v.trim();
+  if (/^-?\d+(\.\d+)?$/.test(t)) return formatValue(Number(t), t.includes(".") ? "#,##0.00;(#,##0.00)" : "0").text;
+  return t;
+}
+
+/** Debits (positive lines) and credits (negative lines) of a TB, each as a positive total. Pure. */
+export function tbSides(tb: Pick<TbResult, "lines">): { debits: number; credits: number } {
+  let dr = 0;
+  let cr = 0;
+  for (const l of tb.lines) {
+    if (l.current > 0) dr += l.current;
+    else cr -= l.current;
+  }
+  return { debits: Math.round(dr * 100) / 100, credits: Math.round(cr * 100) / 100 };
+}
+
+type TbLineRow = TbResult["lines"][number];
+
 export function openTbMapper(d: TbDeps): void {
   const src = d.source();
   const shift = namedHeader(src) ? 1 : 0;
   const read = readTb(sheetText(src));
   const roles = [...read.roles];
 
-  const dlg = toolDialog({ title: "Map as a trial balance", subtitle: "Make a standard TB sheet: code, name, current, prior and movement", size: "lg", closeLabel: "Cancel", className: "tk-legacy", onClose: () => d.focusGrid() });
-  const back = { remove: () => dlg.close() };
+  const dlg = toolDialog({ title: "Map as a trial balance", subtitle: `${d.sheetName()} as a standard TB sheet: code, name, current, prior and movement`, size: "lg", closeLabel: "Cancel", className: "tb-dialog", onClose: () => d.focusGrid() });
   const body = dlg.body;
-  const intro = document.createElement("p");
-  intro.className = "tk-muted";
-  intro.textContent = "Say what each column is; the guesses are filled in. Debits come out positive and credits negative.";
-  const mapTable = document.createElement("table");
-  mapTable.className = "data-table";
-  const result = document.createElement("div");
-  body.append(intro, mapTable, result);
 
-  mapTable.innerHTML = "<tr><th>Column</th><th>Is</th><th>First values</th></tr>";
-  read.header.forEach((name, c) => {
-    const tr = document.createElement("tr");
-    const tdName = document.createElement("td");
-    tdName.textContent = name;
-    const tdRole = document.createElement("td");
-    const sel = document.createElement("select");
+  // what each column is: one row per column, with its first values
+  const map = el("table", { className: "data-table data-table--dense tb-map" });
+  const head = map.createTHead().insertRow();
+  for (const h of ["Column", "Is", "First values"]) head.append(el("th", { scope: "col", textContent: h }));
+  const tbody = map.createTBody();
+  read.header.forEach((header, c) => {
+    const name = header || `Column ${c + 1}`;
+    const sample = read.rows
+      .slice(0, 3)
+      .map((r) => sampleText(r[c] ?? ""))
+      .filter(Boolean)
+      .join(" · ");
+    const tr = tbody.insertRow();
+    const sel = el("select");
     sel.setAttribute("aria-label", `What ${name} is`);
-    for (const r of TB_ROLES) sel.append(new Option(ROLE_LABEL[r], r, false, r === roles[c]));
+    for (const role of TB_ROLES) sel.append(new Option(ROLE_LABEL[role], role, false, role === roles[c]));
     sel.addEventListener("change", () => {
       roles[c] = sel.value as TbRole;
+      tr.classList.toggle("tb-map--unused", sel.value === "ignore");
       update();
     });
-    tdRole.append(sel);
-    const tdSample = document.createElement("td");
-    tdSample.className = "hp-muted";
-    tdSample.textContent = read.rows
-      .slice(0, 3)
-      .map((r) => r[c])
-      .filter(Boolean)
-      .join(", ");
-    tr.append(tdName, tdRole, tdSample);
-    mapTable.append(tr);
+    tr.classList.toggle("tb-map--unused", roles[c] === "ignore");
+    tr.append(el("td", { className: "tb-map__name", textContent: name }), el("td", {}, sel), el("td", { className: "tb-map__sample", textContent: sample }));
   });
+  const result = el("div", { className: "tb-result" });
+  result.setAttribute("aria-live", "polite");
+  body.append(section("Columns", el("p", { className: "tk-muted", textContent: "The guesses are filled in. Debits come out positive and credits negative." }), el("div", { className: "table-wrap" }, map)), section("Result", result));
 
   let tb: TbResult | null = null;
-  const okBtn = document.createElement("button");
-  const update = () => {
-    result.replaceChildren();
-    const p = (text: string, cls?: string) => {
-      const el = document.createElement("p");
-      el.textContent = text;
-      if (cls) el.className = cls;
-      result.append(el);
-      return el;
-    };
+  const make = dlg.button(
+    "Make the trial balance sheet",
+    () => {
+      if (!tb) return;
+      dlg.close();
+      const { columns, numFmts } = tbColumns(tb);
+      const source = new EditableSource(new Table(columns), 5);
+      const name = `${d.sheetName()} TB`.slice(0, 31);
+      const lines = tb.lines.length;
+      void d.run({ type: "sheet.insert", params: { name, source: d.putBlob(source), numFmts } }).then(() => report(d.status, `Trial balance: ${plural(lines, "account")}`));
+    },
+    { kind: "primary", disabled: true },
+  );
+
+  function update() {
     const hasMoney = roles.some((r) => r === "debit" || r === "credit" || r === "balance");
     const hasLabel = roles.some((r) => r === "code" || r === "name" || r === "code+name");
     if (!hasMoney || !hasLabel) {
       tb = null;
-      p("Pick at least an account (code or name) and a debit, credit or balance column.", "cleanup-warn");
-      okBtn.disabled = true;
+      make.disabled = true;
+      result.replaceChildren(notice("Pick at least an account (code or name) and a debit, credit or balance column.", "info"));
       return;
     }
-    tb = buildTb(read.rows, roles);
-    okBtn.disabled = !tb.lines.length;
-    p(`${tb.lines.length} accounts.` + (tb.skipped.length ? ` ${tb.skipped.length} rows left out (totals and headings).` : ""));
-    result.append(headline({ value: tb.balances ? "Balances" : money(tb.totalCurrent), unit: tb.balances ? `debits equal credits · ${tb.lines.length} accounts` : "debits minus credits", tone: tb.balances ? "match" : "mismatch" }));
-    if (tb.priorBalances !== null) p(tb.priorBalances ? "Prior period balances too." : `Prior period doesn't balance: ${money(tb.totalPrior ?? 0)}.`, tb.priorBalances ? undefined : "cleanup-warn");
-    if (tb.duplicates.length) p(`Account codes used more than once: ${tb.duplicates.slice(0, 8).join(", ")}${tb.duplicates.length > 8 ? "…" : ""}`, "cleanup-warn");
-    if (tb.bad.length) {
-      const el = p("Not numbers: ", "cleanup-warn");
-      for (const b of tb.bad.slice(0, 5)) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "hp-cell";
+    const t = buildTb(read.rows, roles);
+    tb = t;
+    make.disabled = !t.lines.length;
+    const { debits, credits } = tbSides(t);
+    const kids: Node[] = [
+      headline({
+        value: money(t.totalCurrent),
+        unit: "debits less credits",
+        tone: t.balances ? "match" : "mismatch",
+        caption: t.balances ? `It balances: debits equal credits across ${plural(t.lines.length, "account")}.` : `It doesn't balance: debits and credits differ by ${money(t.totalCurrent)}.`,
+        lines: [
+          { label: "Accounts", value: t.lines.length.toLocaleString("en-US") },
+          { label: "Debits", value: money(debits) },
+          { label: "Credits", value: money(credits) },
+          ...(t.priorBalances !== null ? [{ label: "Prior period", value: t.priorBalances ? "Balances" : `Out by ${money(t.totalPrior ?? 0)}`, tone: t.priorBalances ? ("match" as const) : ("mismatch" as const) }] : []),
+          ...(t.skipped.length ? [{ label: "Rows left out (totals, headings)", value: t.skipped.length.toLocaleString("en-US") }] : []),
+        ],
+      }),
+    ];
+    if (t.duplicates.length) kids.push(notice(`Account codes used more than once: ${t.duplicates.slice(0, 8).join(", ")}${t.duplicates.length > 8 ? "…" : ""}`, "warning"));
+    if (t.bad.length) {
+      const links = el("span");
+      links.append(`${plural(t.bad.length, "value")} in the number columns ${t.bad.length === 1 ? "is not a number" : "are not numbers"}: `);
+      for (const b of t.bad.slice(0, 5)) {
         const row = read.sourceRows[b.row] - shift;
-        btn.textContent = `"${b.value}"`;
-        btn.title = "Show it in the sheet";
+        const btn = el("button", { type: "button", className: "tk-kv__link", textContent: `"${b.value}"`, title: "Show it in the sheet" });
         btn.addEventListener("click", () => {
-          back.remove();
+          dlg.close();
           d.goTo(row, b.col);
         });
-        el.append(btn, " ");
+        links.append(btn, " ");
       }
+      kids.push(notice(links, "warning"));
     }
-  };
-
-  okBtn.remove();
-  const make = dlg.button("Make the trial balance sheet", () => {
-    if (!tb) return;
-    dlg.close();
-    const { columns, numFmts } = tbColumns(tb);
-    const source = new EditableSource(new Table(columns), 5);
-    const name = `${d.sheetName()} TB`.slice(0, 31);
-    const lines = tb.lines.length;
-    void d.run({ type: "sheet.insert", params: { name, source: d.putBlob(source), numFmts } }).then(() => report(d.status, `Trial balance: ${lines} accounts`));
-  }, { kind: "primary" });
-  const sync = new MutationObserver(() => (make.disabled = okBtn.disabled));
-  sync.observe(okBtn, { attributes: true });
+    const prior = t.totalPrior !== null;
+    const preview = renderTable<TbLineRow>({
+      columns: [
+        { key: "code", label: "Code" },
+        { key: "name", label: "Name" },
+        { key: "current", label: "Current", format: "amount" },
+        ...(prior ? [{ key: "prior", label: "Prior", format: "amount" as const }, { key: "move", label: "Movement", format: "amount" as const, value: (l: TbLineRow) => Math.round((l.current - (l.prior ?? 0)) * 100) / 100 }] : []),
+      ],
+      rows: t.lines,
+      dense: true,
+      maxHeight: "30vh",
+    });
+    kids.push(section(`The TB sheet (${plural(t.lines.length, "account")})`, preview.element));
+    result.replaceChildren(...kids);
+  }
   update();
-  make.disabled = okBtn.disabled;
   make.focus();
 }

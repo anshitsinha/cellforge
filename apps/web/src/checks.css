@@ -308,3 +308,47 @@
   justify-content: flex-end;
   gap: var(--space-2);
 }
+
+/* Categorise on the kit: rules beside the preview */
+.ck-cat-main {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(240px, 2fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.ck-cat-main > .cf-section {
+  margin: 0;
+  min-width: 0;
+}
+
+.ck-cat-dialog .ck-rule-table th {
+  white-space: nowrap;
+}
+
+.ck-cat-dialog .ck-col-on,
+.ck-cat-dialog .ck-col-del {
+  width: 32px;
+}
+
+.ck-cat-dialog .ck-col-num {
+  width: 90px;
+}
+
+.ck-cat-dialog .ck-col-pr {
+  width: 70px;
+}
+
+.ck-cat-dialog .ck-col-match {
+  width: 130px;
+}
+
+.ck-cat-dialog .ck-row {
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 900px) {
+  .ck-cat-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

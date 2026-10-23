@@ -69,3 +69,38 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Map as a trial balance (tbdialog.ts) */
+.tb-map td {
+  vertical-align: middle;
+}
+
+.tb-map select {
+  width: 100%;
+  min-width: 180px;
+}
+
+.tb-map__name {
+  font-weight: var(--weight-medium);
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+
+.tb-map__sample {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tb-map--unused .tb-map__name,
+.tb-map--unused .tb-map__sample {
+  opacity: 0.6;
+}
+
+.tb-result {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.tb-result .cf-section {
+  margin: 0;
+}
