@@ -1,16 +1,38 @@
-/* Bank rec statement, roll-forward, open items, statement recs (openitemsdialog.ts); builds on recon.css */
-.palette.openitems-dialog .import-options small {
-  display: block;
-  color: var(--muted);
+/* Bank rec statement, roll-forward, open items, statement recs (openitemsdialog.ts); the side cards come from recon.css */
+.oi-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-3) var(--space-4);
 }
 
-.openitems-summary {
-  width: auto;
-  min-width: min(520px, 100%);
+.oi-fields input,
+.oi-fields select {
+  width: 100%;
 }
 
-.openitems-summary td.openitems-num {
+.oi-fields input[inputmode="decimal"] {
   text-align: right;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+}
+
+.oi-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin-top: var(--space-3);
+}
+
+.oi-result {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.oi-result .cf-section {
+  margin: 0;
+}
+
+.oi-result tr.oi-strong td {
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+  border-top: 1px solid var(--border-default);
 }
