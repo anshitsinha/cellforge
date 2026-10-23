@@ -6,7 +6,7 @@ import type { Workbook } from "./workbook";
 import { changedSince } from "./review";
 import { documentBytes, type DocBytes } from "./docstore";
 import "./evidence.css";
-import { count, el, headline, notice, plural, report, section } from "./toolkit";
+import { button, count, el, headline, notice, plural, report, section } from "./toolkit";
 import { openDialog } from "./ui/dialog";
 import { renderTable } from "./ui/table";
 
@@ -88,12 +88,29 @@ export async function packSummary(wb: Workbook): Promise<{ entries: number; ok: 
   };
 }
 
+/** The pack's file name: the workbook's name and today's local date ("Sample — Bank reconciliation evidence 2026-11-17.zip"). Pure. */
+export function packFileName(name: string, now = new Date()): string {
+  const d = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const safe = name.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim() || "Workbook";
+  return `${safe} evidence ${d}.zip`;
+}
+
+/** The workbook's name as the window shows it ("… · cellforge"), else the name given. */
+function workbookName(given: string): string {
+  const t = typeof document === "undefined" ? "" : document.title.replace(/ · cellforge$/, "");
+  return t && t !== "cellforge" ? t : given;
+}
+
 /** Show what goes in the pack, then save it (a .zip download) when asked. */
-export async function saveEvidencePack(wb: Workbook, name: string, status: (t: string) => void, docs: DocBytes | null = null): Promise<void> {
+export async function saveEvidencePack(wb: Workbook, sheetOrName: string, status: (t: string) => void, docs: DocBytes | null = null): Promise<void> {
   const s = await packSummary(wb);
-  const fileName = `${name} evidence ${new Date().toISOString().slice(0, 10)}.zip`;
+  const name = workbookName(sheetOrName);
+  const fileName = packFileName(name);
+  const copy = button("Copy", () => void navigator.clipboard?.writeText(s.head).then(() => (copy.textContent = "Copied")), "ghost", "copy");
+  copy.classList.add("btn-sm");
+  copy.setAttribute("aria-label", "Copy the full hash");
   const lines = [
-    { label: "Change log", value: `${count(s.entries)} entries` },
+    { label: "Change log", value: plural(s.entries, "entry", "entries") },
     { label: "Input files fingerprinted", value: count(s.inputs) },
     { label: "Supporting documents", value: count(s.documents) },
     { label: "Recipes (repeatable steps)", value: count(s.recipes) },
@@ -108,7 +125,7 @@ export async function saveEvidencePack(wb: Workbook, name: string, status: (t: s
       caption: s.ok ? "Every change since the workbook was opened is in the log, each entry chained to the one before by SHA-256. Anyone can check the pack later with Verify an evidence pack." : `The log doesn't check out: ${s.reason}.`,
       lines,
     }),
-    el("div", { className: "ev-hash" }, el("span", { className: "tk-muted", textContent: "Last hash" }), el("code", { textContent: s.head })),
+    el("div", { className: "ev-hash" }, el("span", { className: "tk-muted", textContent: "Last hash" }), el("code", { textContent: `${s.head.slice(0, 16)}…`, title: s.head }), copy),
     el("p", { className: "tk-muted", textContent: `The pack (${fileName}) holds the workbook, a readable SUMMARY.md with the sign-offs, log.json, inputs.json, recipes.json${s.documents ? " and the documents" : ""}. It's made on this computer; nothing is uploaded.` }),
   ];
   if (s.openNotes) body.splice(1, 0, notice(`${plural(s.openNotes, "review note")} still open. The pack lists them; you may want to clear them first.`, "warning"));

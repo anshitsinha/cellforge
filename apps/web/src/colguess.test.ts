@@ -84,3 +84,11 @@ describe("column guessing", () => {
     expect(firstOfKind([ledger[2]], ["date"])).toBe(-1);
   });
 });
+
+describe("reference columns that mix codes and bare numbers", () => {
+  it("stay references (so 20452 isn't shown as 20,452)", async () => {
+    const { columnKind } = await import("./colguess");
+    expect(columnKind({ name: "Reference", values: ["INV-20452", 20453, "PAY-4410", 104501, "", "INV-20455"] })).toBe("reference");
+    expect(columnKind({ name: "Notes", values: ["INV-20452", 20453, "paid late", 104501, "see file", "x"] })).toBe("text");
+  });
+});

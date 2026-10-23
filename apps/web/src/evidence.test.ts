@@ -70,3 +70,11 @@ describe("evidence packs", () => {
     expect(bad.message).toMatch(/changed/);
   });
 });
+
+describe("evidence pack file name", () => {
+  it("uses the workbook's name and the local date", async () => {
+    const { packFileName } = await import("./evidencepack");
+    expect(packFileName("Sample — Bank reconciliation", new Date(2026, 10, 17, 0, 30))).toBe("Sample — Bank reconciliation evidence 2026-11-17.zip");
+    expect(packFileName("a/b:c", new Date(2026, 0, 2))).toBe("a b c evidence 2026-01-02.zip");
+  });
+});
