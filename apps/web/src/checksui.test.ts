@@ -216,3 +216,13 @@ describe("starter checks", () => {
     expect(dc[0]).toMatchObject({ label: "Debits equal credits", def: { kind: "totalsEqual", col: 1, otherCol: 2 } });
   });
 });
+
+describe("data checks: failing rows in plain words", () => {
+  it("shows values as people read them and says why", async () => {
+    const { failureValue, failureWhy } = await import("./checksui");
+    expect([failureValue(null), failureValue(" "), failureValue(true), failureValue(1234), failureValue(-4824.43), failureValue("abc")]).toEqual(["(blank)", "(blank)", "TRUE", "1,234", "(4,824.43)", "abc"]);
+    expect(failureWhy("formula", "formula isn't TRUE")).toBe("The rule isn't met on this row");
+    expect(failureWhy("type", "number stored as text")).toBe("Number stored as text");
+    expect(failureWhy("notBlank", undefined)).toBe("Blank");
+  });
+});

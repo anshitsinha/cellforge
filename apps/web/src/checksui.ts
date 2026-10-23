@@ -21,6 +21,7 @@ import { columnLetter, type CellRange } from "@cellforge/grid";
 import {
   categorise,
   categoryRuleProblem,
+  checkAmount,
   CHECK_KIND_LABEL,
   checkProblem,
   checksAllPass,
@@ -48,7 +49,9 @@ import "./checks.css";
 import { guessRoles, profileColumns, type ColumnSample } from "./colguess";
 import { emptyState, headline, report } from "./toolkit";
 import { openDialog } from "./ui/dialog";
+import { icon, iconButton } from "./ui/icons";
 import { closeSidePanel, openSidePanel } from "./ui/sidepanel";
+import { renderTable } from "./ui/table";
 
 // ------------------------------------------------------------------ store --
 
@@ -559,7 +562,34 @@ export interface ChecksDeps {
   focusGrid: () => void;
 }
 
-const STATUS_MARK: Record<CheckResult["status"] | "none", string> = { pass: "✓", fail: "✗", warn: "!", none: "–" };
+const STATUS_ICON: Record<CheckResult["status"], "success" | "error" | "warning"> = { pass: "success", fail: "error", warn: "warning" };
+
+/** A failing value as a person reads it: 1,234.50, (12.00), "(blank)", TRUE. Pure. */
+export function failureValue(v: CheckValue): string {
+  if (v === null || (typeof v === "string" && !v.trim())) return "(blank)";
+  if (typeof v === "boolean") return v ? "TRUE" : "FALSE";
+  if (typeof v === "number") return Number.isInteger(v) ? v.toLocaleString("en-US") : checkAmount(v);
+  return v;
+}
+
+/** Why a row failed, in plain words. Pure. */
+export function failureWhy(kind: CheckKind, note: string | undefined): string {
+  if (note === "formula isn't TRUE") return "The rule isn't met on this row";
+  if (note) return note[0].toUpperCase() + note.slice(1);
+  switch (kind) {
+    case "notBlank":
+      return "Blank";
+    case "pattern":
+      return "Doesn't match the pattern";
+    case "unique":
+      return "Repeated";
+    default:
+      return "Fails the check";
+  }
+}
+
+/** Rows shown under a failing check before "Show all". */
+export const FAILURES_SHOWN = 5;
 
 /** The "Data checks" panel: the list of checks, add / edit / delete / reorder, Run checks. */
 export function openChecks(d: ChecksDeps): void {
@@ -625,49 +655,45 @@ export function openChecks(d: ChecksDeps): void {
     checks.forEach((c, i) => {
       const r = lastResults.get(c.id);
       const off = c.enabled === false;
-      const st = off ? "none" : (r?.status ?? "none");
+      // a pass over no rows isn't a pass yet
+      const empty = !!r && r.status === "pass" && r.checked === 0 && c.kind !== "totalsEqual" && c.kind !== "rowCount";
+      const st = off || !r || empty ? "none" : r.status;
       const li = el("li", `ck-item ck-${st}${off ? " ck-off" : ""}`);
-      const mark = el("span", "ck-mark", STATUS_MARK[st]);
-      mark.setAttribute("aria-label", off ? "off" : r ? r.status : "not run");
+      const mark = el("span", "ck-mark");
+      if (st === "none") mark.textContent = "–";
+      else mark.append(icon(STATUS_ICON[st], { size: 16 }));
+      mark.setAttribute("role", "img");
+      mark.setAttribute("aria-label", off ? "Off" : !r ? "Not run" : empty ? "Nothing to check yet" : r.status === "pass" ? "Passes" : r.status === "fail" ? "Fails" : "Warning");
       const sheet = findSheet(wb, c.sheet);
       const names = sheet ? readSheet(sheet.source).names.map(bareName) : undefined;
       const title = el("span", "ck-name", c.name?.trim() || describeCheck(c, names));
       const where = el("span", "ck-where", `${sheet?.name ?? `(missing sheet ${c.sheet})`} · ${CHECK_KIND_LABEL[c.kind]}${c.severity === "warn" ? " · warning only" : ""}`);
-      const msg = el("span", "ck-msg", off ? "Off" : r ? `${r.message}${r.failed && r.checked ? ` (${r.failed.toLocaleString("en-US")} of ${r.checked.toLocaleString("en-US")})` : ""}` : "Not run yet");
-      const on = el("input");
-      on.type = "checkbox";
-      on.checked = !off;
-      on.title = "Run this check";
-      on.setAttribute("aria-label", "Run this check");
-      on.addEventListener("change", () => {
+      const msg = el("span", "ck-msg", off ? "Off" : r ? `${r.message}${r.failed && r.checked > 1 ? ` (${r.failed.toLocaleString("en-US")} of ${r.checked.toLocaleString("en-US")})` : ""}` : "Not run yet");
+      const onBox = el("input");
+      onBox.type = "checkbox";
+      onBox.checked = !off;
+      onBox.addEventListener("change", () => {
         const next = structuredClone(checks);
-        next[i].enabled = on.checked ? undefined : false;
-        if (on.checked) delete next[i].enabled;
-        save(next, on.checked ? "turn a check on" : "turn a check off");
+        if (onBox.checked) delete next[i].enabled;
+        else next[i].enabled = false;
+        save(next, onBox.checked ? "turn a check on" : "turn a check off");
       });
+      const on = el("label", "ck-on");
+      on.title = "Run this check with the others";
+      on.append(onBox, "On");
       const edit = button("Edit", "Edit this check");
+      edit.className = "btn-ghost btn-sm";
+      edit.setAttribute("aria-label", `Edit "${title.textContent}"`);
       edit.addEventListener("click", () => openEditor(c, i));
-      const up = button("↑", "Move up");
+      const up = iconButton("chevron-up", "Move up", { size: "sm", onClick: () => save(moveItem(checks, i, -1), "reorder checks") });
       up.disabled = i === 0;
-      up.addEventListener("click", () => save(moveItem(checks, i, -1), "reorder checks"));
-      const down = button("↓", "Move down");
+      const down = iconButton("chevron-down", "Move down", { size: "sm", onClick: () => save(moveItem(checks, i, 1), "reorder checks") });
       down.disabled = i === checks.length - 1;
-      down.addEventListener("click", () => save(moveItem(checks, i, 1), "reorder checks"));
-      const del = button("✕", "Delete this check");
-      del.addEventListener("click", () => save(checks.filter((_, k) => k !== i), "delete a check"));
+      const del = iconButton("trash", "Delete this check", { size: "sm", onClick: () => save(checks.filter((_, k) => k !== i), "delete a check") });
+      del.classList.add("ck-del");
       const head = row("ck-head", mark, row("ck-text", title, where, msg), row("ck-buttons", on, edit, up, down, del));
       li.append(head);
-      if (r && r.failures.length && !off) {
-        const more = button(expanded.has(c.id) ? "Hide failing rows" : `Show failing rows${r.failed > r.failures.length ? ` (first ${r.failures.length})` : ""}`);
-        more.className = "ck-more";
-        more.addEventListener("click", () => {
-          if (expanded.has(c.id)) expanded.delete(c.id);
-          else expanded.add(c.id);
-          render();
-        });
-        li.append(more);
-        if (expanded.has(c.id)) li.append(failureList(wb, r));
-      }
+      if (r && r.failures.length && !off) li.append(failureTable(wb, r, c.kind, expanded.has(c.id)));
       list.append(li);
     });
     const results = checks.filter((c) => c.enabled !== false).map((c) => lastResults.get(c.id));
@@ -687,26 +713,50 @@ export function openChecks(d: ChecksDeps): void {
     }
   }
 
-  function failureList(wb: Workbook, r: CheckResult): HTMLElement {
-    const ul = el("ul", "ck-failures");
-    for (const f of r.failures) {
-      const cell = failureCell(wb, r, f);
-      const ref = cell ? `${columnLetter(cell.col)}${cell.row + 1}` : "";
-      const value = f.value === null ? "(blank)" : String(f.value);
-      const text = f.row < 0 ? `${f.note ?? "result"}: ${value}` : `Row ${cell ? cell.row + 1 : f.row + 1}${ref ? ` (${ref})` : ""}: ${value}${f.note ? ` · ${f.note}` : ""}`;
-      const li = el("li");
-      if (cell) {
-        const a = button(text, `Go to ${ref}`);
-        a.className = "ck-link";
-        a.addEventListener("click", () => {
-          close();
-          d.goTo(cell.sheetId, cell.row, cell.col);
-        });
-        li.append(a);
-      } else li.textContent = text;
-      ul.append(li);
+  /** The failing rows as a small table (cell, value, why); a row takes you to the cell. */
+  function failureTable(wb: Workbook, r: CheckResult, kind: CheckKind, all: boolean): HTMLElement {
+    type Row = { cell: string; value: string; why: string; at: ReturnType<typeof failureCell> };
+    const rows: Row[] = r.failures.map((f) => {
+      const at = failureCell(wb, r, f);
+      const cell = at ? `${columnLetter(at.col)}${at.row + 1}` : f.row < 0 ? "Total" : `Row ${f.row + 1}`;
+      return { cell, value: failureValue(f.value), why: failureWhy(kind, f.note), at };
+    });
+    const shown = all ? rows : rows.slice(0, FAILURES_SHOWN);
+    const t = renderTable<Row>({
+      columns: [
+        { key: "cell", label: "Cell", width: "4.5em" },
+        { key: "value", label: "Value", align: "right" },
+        { key: "why", label: "Why" },
+      ],
+      rows: shown,
+      dense: true,
+      onRowClick: (x) => {
+        if (x.at) d.goTo(x.at.sheetId, x.at.row, x.at.col);
+      },
+    });
+    t.table.setAttribute("aria-label", `Failing rows of "${r.name}"`);
+    const box = el("div", "ck-failures");
+    box.append(t.element);
+    const notListed = r.failed - r.failures.length;
+    if (!all && rows.length > FAILURES_SHOWN) {
+      const more = button(`Show all ${rows.length.toLocaleString("en-US")}`);
+      more.className = "btn-ghost btn-sm ck-more";
+      more.addEventListener("click", () => {
+        expanded.add(r.id);
+        render();
+      });
+      box.append(more);
+    } else if (all && rows.length > FAILURES_SHOWN) {
+      const less = button("Show fewer");
+      less.className = "btn-ghost btn-sm ck-more";
+      less.addEventListener("click", () => {
+        expanded.delete(r.id);
+        render();
+      });
+      box.append(less);
     }
-    return ul;
+    if (notListed > 0 && (all || rows.length <= FAILURES_SHOWN)) box.append(el("p", "ck-more-note", `and ${notListed.toLocaleString("en-US")} more not listed`));
+    return box;
   }
 
   function openEditor(existing: CheckDef | null, index: number) {
@@ -893,6 +943,29 @@ export function openChecks(d: ChecksDeps): void {
           );
           break;
         }
+        case "cell": {
+          const at = input(dr.cell, "text", "e.g. B14");
+          at.addEventListener("input", () => (dr.cell = at.value.trim().toUpperCase()));
+          const op = select(
+            [
+              ["=", "is"],
+              ["<>", "is not"],
+              [">=", "is at least"],
+              ["<=", "is at most"],
+              [">", "is over"],
+              ["<", "is under"],
+            ],
+            dr.op ?? "=",
+          );
+          op.addEventListener("change", () => (dr.op = op.value as typeof dr.op));
+          fields.push(
+            field("Cell", at, "One cell on the sheet, such as the rec's difference."),
+            field("Its value", op),
+            numField("Value", () => dr.value, (n) => (dr.value = n ?? 0)),
+            numField("Tolerance", () => dr.tolerance, (n) => (dr.tolerance = n), "0.005 allows rounding to the cent."),
+          );
+          break;
+        }
         case "formula": {
           const data = findSheet(wb, dr.sheet) ? readSheet(findSheet(wb, dr.sheet)!.source) : null;
           const f = input(dr.formula, "text", `e.g. =C${(data?.first ?? 1) + 1}+D${(data?.first ?? 1) + 1}>0`);
@@ -921,6 +994,7 @@ export function openChecks(d: ChecksDeps): void {
       const box = el("fieldset", "ck-form");
       box.append(el("legend", "", existing ? "Edit check" : "New check"), row("ck-fields", ...fields), warn, row("numfmt-actions", cancel, ok));
       editor.append(box);
+      box.scrollIntoView?.({ block: "nearest" });
       (kind as HTMLElement).focus();
     };
     draw();
@@ -930,7 +1004,6 @@ export function openChecks(d: ChecksDeps): void {
   runBtn.addEventListener("click", () => {
     const results = runWorkbookChecks(d.workbook());
     const fails = results.filter((r) => r.status === "fail");
-    for (const r of fails) expanded.add(r.id);
     render();
     report(d.status, results.length ? (fails.length ? `${fails.length} of ${results.length} checks fail` : `All ${results.length} checks pass`) : "No checks to run", fails.length ? "warning" : "success");
   });
