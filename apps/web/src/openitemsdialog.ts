@@ -339,10 +339,13 @@ export interface OutstandingRow {
   amount: number;
 }
 
+/** An error's note, short enough for a cell: "posted twice", "ledger 4,725.00, bank 4,752.00". */
+const shortNote = (it: RecItem): string => (it.duplicate ? "posted twice" : (/ledger [^,]+, bank [^:]+/.exec(it.note)?.[0] ?? it.note));
+
 const describeItem = (it: RecItem, a: RecRecord[], b: RecRecord[], withNote: boolean): string => {
   const first = it.a.length ? a[it.a[0]] : b[it.b[0]];
   const base = [first?.key ?? "", first?.text ?? ""].filter(Boolean).join(" ");
-  return withNote && it.note ? `${base}${base ? ": " : ""}${it.note}` : base || it.note;
+  return withNote && it.note ? `${base}${base ? ": " : ""}${shortNote(it)}` : base || it.note;
 };
 
 /**
@@ -611,7 +614,7 @@ export function openOpenItems(kind: OpenItemsKind, d: OpenItemsDeps): void {
     const side = readSide(src, maps[k]);
     return { ...side, extra: readExtra(src, side.records, extraCol[k]) };
   };
-  const amountText = (n: number | null | undefined) => (n === null || n === undefined ? "" : n.toFixed(2));
+  const amountText = (n: number | null | undefined) => (n === null || n === undefined ? "" : n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
   const tol = input("0", "Amount tolerance");
   const win = input(kind === "statementrec" ? "7" : kind === "bankstatement" ? "3" : "", "Date window in days", "numeric", "any date");
   const settings = el("div", { className: "oi-fields" });
@@ -669,7 +672,8 @@ export function openOpenItems(kind: OpenItemsKind, d: OpenItemsDeps): void {
 
   const result = el("div", { className: "oi-result" });
   result.setAttribute("aria-live", "polite");
-  body.append(section("Sheets and columns", sides), section(kind === "bankstatement" ? "Balances and settings" : "Settings", settings, checks.childElementCount ? checks : null), section("Result", result));
+  // settings on the left, the result beside them, so the figure that matters is in view
+  body.append(section("Sheets and columns", sides), el("div", { className: "oi-lower" }, section(kind === "bankstatement" ? "Balances and settings" : "Settings", settings, checks.childElementCount ? checks : null), section("Result", result)));
 
   // ---- footer: one primary action
   const fill = targets?.outstanding ? dlg.button(`Fill ${targets.outstanding.name}${targets.rec ? ` and ${targets.rec.name}` : ""}`, () => fillTemplate(), { kind: "primary", disabled: true, title: "Put each reconciling item on the Outstanding sheet with its kind, so the Rec sheet ties" }) : null;
@@ -739,7 +743,7 @@ export function openOpenItems(kind: OpenItemsKind, d: OpenItemsDeps): void {
         const t = renderTable<OutstandingRow>({
           columns: [
             { key: "kind", label: "Kind" },
-            { key: "date", label: "Date", format: "date", width: "7em" },
+            { key: "date", label: "Date", format: "date", width: "6.5em" },
             { key: "description", label: "Description" },
             { key: "amount", label: "Amount", format: "amount", width: "8em" },
           ],
@@ -747,6 +751,7 @@ export function openOpenItems(kind: OpenItemsKind, d: OpenItemsDeps): void {
           dense: true,
           maxHeight: "32vh",
         });
+        t.table.classList.add("oi-items");
         kids.push(section(targets?.outstanding ? `Reconciling items (for ${targets.outstanding.name})` : "Reconciling items", t.element));
       }
       if (targets?.outstanding && fill) {

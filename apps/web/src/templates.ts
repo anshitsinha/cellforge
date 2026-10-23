@@ -107,7 +107,7 @@ class Builder {
  */
 async function coverSheet(b: Builder, title: string, lines: [string, string]): Promise<void> {
   await b.cells(block(0, 0, [[title], [lines[0]], [lines[1]]]));
-  await b.do(styled(0, 0, 0, 0, ROLE_STYLES.title), styled(1, 0, 2, 0, { wrap: true }), ...widths([760]));
+  await b.do(styled(0, 0, 0, 0, ROLE_STYLES.title), { type: "rows.height", params: { at: 0, height: 34 } }, styled(1, 0, 2, 0, { wrap: true }), ...widths([760]));
 }
 
 async function legend(b: Builder): Promise<void> {
@@ -221,6 +221,7 @@ async function bankRecTemplate(size: TemplateSize): Promise<Workbook> {
   );
   await b.do(
     styled(0, 0, 0, 0, ROLE_STYLES.title),
+    { type: "rows.height", params: { at: 0, height: 34 } },
     styled(2, 1, 13, 1, { numFmt: MONEY }),
     styled(6, 0, 6, 1, { bold: true }),
     styled(11, 0, 11, 1, { bold: true }),

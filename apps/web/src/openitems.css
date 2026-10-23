@@ -36,3 +36,36 @@
   color: var(--text-strong);
   border-top: 1px solid var(--border-default);
 }
+
+.oi-lower {
+  display: grid;
+  grid-template-columns: minmax(260px, 2fr) minmax(0, 3fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.oi-lower > .cf-section {
+  margin: 0;
+  min-width: 0;
+}
+
+.oi-lower .oi-fields {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  align-items: start;
+}
+
+.oi-fields input,
+.oi-fields select {
+  height: var(--control-h);
+}
+
+.oi-items td:nth-child(2),
+.oi-result td.num {
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .oi-lower {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
