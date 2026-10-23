@@ -28,6 +28,7 @@
 import "./ui.css";
 import { labelIconButtons, nextFocus } from "../a11y";
 import { icon, iconButton, type IconName } from "./icons";
+import { selectWantsEscape, trackSelectPickers } from "./selectpicker";
 
 export type DialogSize = "sm" | "md" | "lg" | "xl";
 export type ButtonKind = "primary" | "secondary" | "ghost" | "danger";
@@ -112,6 +113,23 @@ const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([typ
 
 function focusables(root: HTMLElement): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => !el.closest("[hidden]") && el.getClientRects().length > 0);
+}
+
+/**
+ * Where focus starts in a dialog body: the first field that isn't a
+ * dropdown (a focused select takes arrow keys and can hide Esc); when the
+ * body has only dropdowns, the dialog itself (labelled by its title), so
+ * nothing changes by accident; null when the body has nothing to focus.
+ */
+export function pickFirstFocus<T>(list: readonly T[], isSelect: (el: T) => boolean): T | "dialog" | null {
+  const field = list.find((el) => !isSelect(el));
+  if (field !== undefined) return field;
+  return list.length ? "dialog" : null;
+}
+
+function firstFocus(body: HTMLElement): HTMLElement | null {
+  const pick = pickFirstFocus(focusables(body), (el) => el instanceof HTMLSelectElement);
+  return pick === "dialog" ? body.closest<HTMLElement>(".cf-dialog") : pick;
 }
 
 let ids = 0;
@@ -291,7 +309,8 @@ export function openDialog(opts: DialogOptions): DialogHandle {
         list[next].focus();
       }
     } else if (e.key === "Escape" && dismissible && !e.defaultPrevented) {
-      if (e.target instanceof HTMLSelectElement) return;
+      // an open dropdown takes its own Esc; a closed one with focus doesn't block closing
+      if (selectWantsEscape(e.target)) return;
       e.stopPropagation();
       handle.close("dismiss");
     }
@@ -316,13 +335,14 @@ export function openDialog(opts: DialogOptions): DialogHandle {
 
   document.body.append(back);
   labelIconButtons(box);
+  trackSelectPickers();
 
   // first focus
   let target: HTMLElement | null = null;
   if (opts.initialFocus instanceof HTMLElement) target = opts.initialFocus;
   else if (opts.initialFocus === "primary") target = footer.querySelector(".btn-primary, .btn-danger");
   else if (typeof opts.initialFocus === "string") target = box.querySelector(opts.initialFocus);
-  target ??= focusables(body)[0] ?? footer.querySelector<HTMLElement>(".btn-primary:not(:disabled), .btn-danger:not(:disabled)") ?? box;
+  target ??= firstFocus(body) ?? footer.querySelector<HTMLElement>(".btn-primary:not(:disabled), .btn-danger:not(:disabled)") ?? box;
   target.focus();
 
   return handle;

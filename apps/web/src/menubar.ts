@@ -11,6 +11,7 @@
  */
 import { COMMAND_GROUPS, type AppCommand, type CommandGroup } from "./commands";
 import { icon } from "./ui/icons";
+import { isModalOpen } from "./ui/modalgate";
 
 // ---------------------------------------------------------------- model --
 
@@ -438,7 +439,7 @@ export function setupMenuBar(root: HTMLElement, d: MenuBarDeps): { focus: () => 
         return;
       }
       altAlone = false;
-      if (e.key === "F10" && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+      if (e.key === "F10" && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && !isModalOpen()) {
         e.preventDefault();
         if (root.contains(document.activeElement)) d.focusGrid();
         else focus();
@@ -451,7 +452,7 @@ export function setupMenuBar(root: HTMLElement, d: MenuBarDeps): { focus: () => 
     (e) => {
       if (e.key !== "Alt" || !altAlone) return;
       altAlone = false;
-      if (document.querySelector(".cf-backdrop, .palette-backdrop")) return; // a dialog is open
+      if (isModalOpen()) return; // a dialog owns the keyboard
       e.preventDefault();
       if (root.contains(document.activeElement)) d.focusGrid();
       else focus();

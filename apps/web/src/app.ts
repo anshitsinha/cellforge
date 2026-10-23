@@ -42,6 +42,7 @@ import { chartSpecs, closeChart, openChart, refreshCharts } from "./charts/panel
 import { registerFindActions } from "./findreplace";
 import { delocalizeFormula, jsonToColumns, localizeFormula, readParquet, Table } from "@cellforge/core";
 import { installA11y } from "./a11y";
+import { installModalGate } from "./ui/modalgate";
 import { startLocale } from "./locale";
 import { setupPalette } from "./palette";
 import { setupHistoryPanel, type TrailEntry } from "./historypanel";
@@ -115,6 +116,8 @@ const coarsePointer = matchMedia("(pointer: coarse)").matches;
 // the number format and separators people expect where they are, and keyboard / screen reader support in dialogs
 startLocale();
 installA11y();
+// one modal at a time: global shortcuts wait while a dialog is open
+installModalGate();
 const grid = new Grid(
   sheet,
   source,

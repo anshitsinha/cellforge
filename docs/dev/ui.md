@@ -126,8 +126,13 @@ const result = await d.closed;        // "Add result sheet" (or the action's id)
   the footer while it runs; a thrown error shows in the footer and keeps
   the dialog open (`d.setError(msg)` does the same by hand).
 - Focus is trapped, starts at `initialFocus` (element, selector or
-  `"primary"`), else the first field, else the primary button, and returns
-  to where it was. `role="dialog"` (or `"alertdialog"`), `aria-modal`,
+  `"primary"`), else the first field that isn't a dropdown (the dialog
+  itself when it only has dropdowns), else the primary button, and returns
+  to where it was. Esc closes the dialog even when a closed dropdown has
+  focus; only an open picker keeps its Esc (`ui/selectpicker.ts`).
+- One modal at a time (`ui/modalgate.ts`): while a dialog, the palette or
+  the ask bar is open, the app's global shortcuts (Ctrl+K, Ctrl+/, F1, F10,
+  Ctrl+F, …) do nothing, and the palette and ask bar refuse to open over it. `role="dialog"` (or `"alertdialog"`), `aria-modal`,
   `aria-labelledby` the title, `aria-describedby` the subtitle.
 - Handle: `element`, `body`, `footer`, `button(idOrLabel)`, `setTitle`,
   `setError`, `setBusy`, `close(result?)`, `closed`.

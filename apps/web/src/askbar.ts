@@ -9,6 +9,7 @@
  * AI's state, and offers to set it up (`ai`).
  */
 import "./askbar.css";
+import { isModalOpen } from "./ui/modalgate";
 import type { Action } from "@cellforge/actions";
 import {
   type AskContext,
@@ -184,6 +185,8 @@ export function setupAskBar(d: AskBarDeps): { open: (text?: string) => void; clo
       root.querySelector<HTMLInputElement>(".askbar-input")?.focus();
       return;
     }
+    // never over another dialog (see ui/modalgate.ts)
+    if (isModalOpen()) return;
     root = document.createElement("div");
     root.className = "palette-backdrop askbar-backdrop";
     root.innerHTML = `
@@ -442,7 +445,7 @@ export function setupAskBar(d: AskBarDeps): { open: (text?: string) => void; clo
         clearTimeout(timer);
         refresh();
         void doIt();
-      } else if (e.key === "Escape") {
+      } else if (e.key === "Escape" || ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "/" || e.code === "Slash"))) {
         e.preventDefault();
         close();
       }

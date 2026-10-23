@@ -2,6 +2,7 @@ import type { Action, JsonSchema } from "@cellforge/actions";
 import { type CellRange, columnLetter } from "@cellforge/grid";
 import { columnIndex } from "@cellforge/core";
 import { iconSvg } from "./ui/icons";
+import { isModalOpen } from "./ui/modalgate";
 
 /**
  * The command palette (Ctrl+K): one search box over everything cellforge
@@ -232,7 +233,8 @@ export function setupPalette(d: PaletteDeps): { open: (query?: string) => void; 
   }
 
   function open(initialQuery = "") {
-    if (root) return;
+    // never over another dialog (see ui/modalgate.ts)
+    if (root || isModalOpen()) return;
     root = document.createElement("div");
     root.className = "palette-backdrop cf-palette-backdrop";
     root.innerHTML = `
@@ -388,7 +390,7 @@ export function setupPalette(d: PaletteDeps): { open: (query?: string) => void; 
       } else if (e.key === "Enter") {
         e.preventDefault();
         choose(sel);
-      } else if (e.key === "Escape") {
+      } else if (e.key === "Escape" || ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k")) {
         e.preventDefault();
         close();
       }
