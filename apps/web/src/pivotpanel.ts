@@ -127,7 +127,8 @@ function readColumn(src: ColumnSource, c: number, name: string, first: number, r
     if (v !== null && typeof v !== "number") numbers = false;
     vals[i] = v as string | number | null;
   }
-  if (numbers) return { kind: "number", name, values: Float64Array.from(vals, (v) => (v === null ? NaN : (v as number))) };
+  // an empty column is text (a "#" on a blank Explanation column would mislead)
+  if (numbers && vals.some((v) => v !== null)) return { kind: "number", name, values: Float64Array.from(vals, (v) => (v === null ? NaN : (v as number))) };
   return textColumn(
     name,
     vals.map((v) => (v === null ? null : typeof v === "number" ? formatValue(v, fmt).text : v)),

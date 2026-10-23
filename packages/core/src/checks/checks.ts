@@ -186,7 +186,7 @@ export function cellCheckPasses(v: number, op: CellCheckOp, target: number, tole
 
 const isBlank = (v: CheckValue) => v === null || (typeof v === "string" && v.trim() === "");
 const textOf = (v: CheckValue) => (v === null ? "" : typeof v === "boolean" ? (v ? "TRUE" : "FALSE") : String(v));
-const fmtNum = (n: number) => (Number.isInteger(n) ? n.toLocaleString("en-US") : n.toLocaleString("en-US", { maximumFractionDigits: 6 }));
+const fmtNum = (x: number) => ((n) => (Number.isInteger(n) ? n.toLocaleString("en-US") : n.toLocaleString("en-US", { maximumFractionDigits: 6 })))(Object.is(Math.round(x * 1e6) / 1e6, -0) ? 0 : x);
 const plural = (n: number, one: string, many = one + "s") => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
 
 /** The key a value is compared by: normalised text (numbers by their digits). */
