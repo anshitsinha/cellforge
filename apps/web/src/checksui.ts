@@ -86,6 +86,8 @@ export function bindChecksStore(b: Partial<ChecksStore> & { workbook?: () => Wor
 }
 
 export const getChecks = (): CheckDef[] => store.getChecks();
+/** The workbook the app bound (bindChecksStore), for tools that only know their sheet. */
+export const currentWorkbook = (): Workbook | null => boundWorkbook?.() ?? null;
 export function setChecks(checks: CheckDef[]): void {
   store.setChecks(checks);
   notify();

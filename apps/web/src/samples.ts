@@ -13,6 +13,7 @@
 // The data generators below are pure, so the landing page can run the real
 // engines on them without loading the app. What builds a workbook (actions,
 // templates, the sheet model) is imported only when a workbook is asked for.
+import type { Action } from "@cellforge/actions";
 import type { SheetCtx } from "./actions";
 import type { Workbook } from "./workbook";
 
@@ -471,6 +472,27 @@ async function driver(wb: Workbook) {
   };
 }
 
+/**
+ * The 100M ledger's look: amounts as 1,234.50 / (1,234.50), dates and codes
+ * on the right like numbers, and columns wide enough for the names. Each
+ * format is one whole-column entry, so it costs nothing at 100M rows.
+ */
+async function formatLedger(wb: Workbook): Promise<void> {
+  const run = await actionRunner(wb);
+  const n = wb.sheets[0].source.rowCount;
+  const col = (c: number, style: Record<string, unknown>): Action => ({ type: "format.set", params: { range: { top: 0, left: c, bottom: n - 1, right: c }, style } });
+  for (const a of [col(1, { align: "right" }), col(4, { numFmt: "#,##0.00;(#,##0.00)" }), col(5, { numFmt: "#,##0.00;(#,##0.00)" })]) await run(a);
+  for (const [at, width] of [84, 94, 76, 180, 110, 110, 320, 90].entries()) await run({ type: "cols.width", params: { at, width } });
+  wb.evidence = { log: [], inputs: [] };
+}
+
+async function actionRunner(wb: Workbook): Promise<(a: Action) => Promise<unknown>> {
+  const [{ ActionHistory, BlobStore }, { sheetActions }] = await Promise.all([import("@cellforge/actions"), import("./actions")]);
+  const ctx: SheetCtx = { workbook: wb, activeSheet: wb.sheets[0].id, blobs: new BlobStore(), sortRows: async () => null };
+  const h = new ActionHistory(sheetActions(), () => ctx);
+  return (a) => h.run(a, "system");
+}
+
 /** The cover sheet's second line (the first points at the guide). */
 const note = (text: string): Cell[] => [{ row: 2, col: 0, input: text }];
 
@@ -494,6 +516,7 @@ export async function sampleWorkbook(kind: SampleKind, seed = 1): Promise<{ work
     const [{ Workbook }, { EditableSource }, { SyntheticSource }] = await Promise.all([import("./workbook"), import("./editable"), import("./demo")]);
     const workbook = new Workbook({ name: "General ledger", source: new EditableSource(new SyntheticSource(BIG_ROWS), 10) });
     workbook.sheets[0].origin = "Sample data: a fictional 100M-line general ledger";
+    await formatLedger(workbook);
     return { workbook, active: workbook.sheets[0].id, name: "Sample — 100M-line general ledger" };
   }
   const { buildTemplate } = await import("./templates");
