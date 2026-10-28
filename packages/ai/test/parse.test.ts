@@ -26,6 +26,12 @@ describe("parse: phrasings to actions", () => {
       expect(actionsOf(r)).toEqual([]);
       return;
     }
+    if ("figure" in want) {
+      expect(r.figure).toMatchObject(want.figure);
+      expect(r.figure?.sheet).toBe(want.figure.sheet);
+      expect(actionsOf(r)).toEqual([]);
+      return;
+    }
     expect(actionsOf(r)).toEqual(want.actions);
     // whatever the parser makes must pass the schema and context checks
     for (const a of actionsOf(r)) expect(validateAction(a, CATALOG, salesContext())).toEqual([]);
@@ -102,5 +108,18 @@ describe("helpers", () => {
     expect(findColumn(sheet, "H")).toEqual({ ok: true, col: 7, exact: true });
     expect(findColumn(sheet, "Q")).toEqual({ ok: false, reason: "outside", candidates: [] });
     expect(findColumn(sheet, "xyz123")).toEqual({ ok: false, reason: "unknown", candidates: [] });
+  });
+});
+
+describe("parse: single figures", () => {
+  it("gives the formula and a label, and changes nothing", () => {
+    const r = parse("what is the total amount", salesContext())!;
+    expect(r.figure).toEqual({ fn: "SUM", col: 2, range: { top: 1, left: 2, bottom: 199, right: 2 }, label: "Total of Amount (column C)", formula: "=SUM(C2:C200)" });
+    expect(actionsOf(r)).toEqual([]);
+    expect(r.explanation).toMatch(/nothing on the sheet changes/i);
+  });
+  it("says which rows a journal flag will highlight", () => {
+    const r = parse("flag weekend postings over 10,000", salesContext())!;
+    expect(r.explanation).toMatch(/Saturday or Sunday.*Amount \(column C\) over 10,000/);
   });
 });

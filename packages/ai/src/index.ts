@@ -13,7 +13,7 @@ export {
   normalizeName,
   rangeRef,
 } from "./context";
-export { EXAMPLES, type ParseResult, actionsOf, normalizeRequest, parse } from "./parse";
+export { EXAMPLES, type Figure, type ParseResult, actionsOf, normalizeRequest, parse } from "./parse";
 export { type CatalogEntry, checkAgainstContext, describeProblems, validateAction } from "./validate";
 export { actionGbnf, actionSchema, toGbnf } from "./grammar";
 export { type LoopDeps, type Model, type Status, type Step, type Transcript, buildPrompt, describeContext, runRequest } from "./loop";

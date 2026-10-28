@@ -17,11 +17,16 @@ const col = (c: number) => R([1, c, 199, c]); // a column's data cells on Sales
 const whole = (c: number) => [0, c, 199, c];
 const RED = { fill: "#ffc7ce", color: "#9c0006" };
 const cf = (rule: Record<string, unknown>, ranges: unknown[], format = RED) => A("format.conditionalAdd", { rule: { ...rule, ranges, format } });
+const YELLOW = { fill: "#ffeb9c", color: "#9c5700" };
+const rows = R([1, 0, 199, 7]); // every data row of Sales
+const flag = (formula: string, format = RED) => cf({ kind: "formula", formula }, [rows], format);
+const fig = (fn: string, c: number, sheet?: string) => ({ figure: sheet ? { fn, col: c, sheet } : { fn, col: c } });
 
 export type Expect =
   | { actions: unknown[] }
   | { ask: RegExp }
   | { command: string }
+  | { figure: { fn: string; col: number; sheet?: string } }
   | null;
 
 /** the table; a bare string starts a category */
@@ -82,6 +87,29 @@ const table: (string | [string, Expect])[] = [
   ["average amount by categry", { command: "pivot" }],
   ["count by status", { command: "pivot" }],
   ["sum of profit by region", { ask: /can't find a column called "profit"/ }],
+  ["total amount by customer name", { command: "pivot" }],
+  "single figures",
+  ["total of amount", fig("SUM", 2)],
+  ["sum of amount", fig("SUM", 2)],
+  ["what is the total amount", fig("SUM", 2)],
+  ["What's the total of the amounts?", fig("SUM", 2)],
+  ["add up the amounts", fig("SUM", 2)],
+  ["what's the average amount", fig("AVERAGE", 2)],
+  ["highest amount", fig("MAX", 2)],
+  ["smallest amount", fig("MIN", 2)],
+  ["count of invoice numbers", fig("COUNTA", 4)],
+  ["total of amt on the Imported sheet", fig("SUM", 1, "s2")],
+  ["what is the total", { ask: /which column/i }],
+  ["total of profit", { ask: /can't find a column called "profit"/ }],
+  "journal flags",
+  ["flag weekend postings over 10,000", { actions: [flag("=AND(ISNUMBER($B2),WEEKDAY($B2,2)>5,ABS($C2)>10000)")] }],
+  ["highlight weekend entries", { actions: [flag("=AND(ISNUMBER($B2),WEEKDAY($B2,2)>5)")] }],
+  ["flag postings on weekends over 10k in yellow", { actions: [flag("=AND(ISNUMBER($B2),WEEKDAY($B2,2)>5,ABS($C2)>10000)", YELLOW)] }],
+  ["show weekend transactions of at least 500", { actions: [flag("=AND(ISNUMBER($B2),WEEKDAY($B2,2)>5,ABS($C2)>=500)")] }],
+  ["flag round amounts", { actions: [flag("=AND(ISNUMBER($C2),$C2<>0,MOD(ABS($C2),1000)=0)")] }],
+  ["find round number payments over 5000", { actions: [flag("=AND(ISNUMBER($C2),$C2<>0,MOD(ABS($C2),1000)=0,ABS($C2)>5000)")] }],
+  ["flag weekend postings over lots", { ask: /what number/i }],
+  ["flag weekend postings on sheet Imported", { ask: /which column holds the dates/i }],
   "text styles",
   ["make column B bold", { actions: [fmt(whole(1), { bold: true })] }],
   ["bold the header row", { actions: [fmt([0, 0, 0, 7], { bold: true })] }],

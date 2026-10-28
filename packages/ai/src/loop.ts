@@ -13,7 +13,7 @@
 import type { Action, JsonSchema } from "@cellforge/actions";
 import { type AskContext, activeSheet, colCount, columnLetter } from "./context";
 import { actionSchema } from "./grammar";
-import { type ParseResult, actionsOf, parse } from "./parse";
+import { type Figure, type ParseResult, actionsOf, parse } from "./parse";
 import { type CatalogEntry, describeProblems, validateAction } from "./validate";
 
 /** A language model behind constrained decoding: it answers with text that matches the grammar. */
@@ -59,6 +59,8 @@ export type Status =
   | "ask"
   /** run a palette command instead (see `command`) */
   | "command"
+  /** a figure to show, not a change (see `figure`) */
+  | "figure"
   /** nothing understood it and there is no model */
   | "unknown"
   /** the model never produced a working action */
@@ -73,6 +75,7 @@ export interface Transcript {
   explanation?: string;
   missing?: string[];
   command?: string;
+  figure?: Figure;
   /** what went wrong last, in plain English */
   problems?: string[];
 }
@@ -158,6 +161,7 @@ export async function runRequest(request: string, deps: LoopDeps): Promise<Trans
     steps.push({ kind: "parsed", result: parsed });
     if (parsed.missing.length) return { request, status: "ask", steps, actions: [], missing: parsed.missing };
     if (parsed.command) return { request, status: "command", steps, actions: [], command: parsed.command, explanation: parsed.explanation };
+    if (parsed.figure) return { request, status: "figure", steps, actions: [], figure: parsed.figure, explanation: parsed.explanation };
     const actions = actionsOf(parsed);
     for (const a of actions) problems.push(...validateAction(a, catalog, ctx));
     if (!problems.length) {

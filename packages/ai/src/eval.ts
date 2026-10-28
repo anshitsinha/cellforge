@@ -9,11 +9,20 @@
 import type { Action } from "@cellforge/actions";
 import type { AskContext } from "./context";
 import { type Model, runRequest } from "./loop";
-import { actionsOf, parse } from "./parse";
+import { type Figure, actionsOf, parse } from "./parse";
 import type { CatalogEntry } from "./validate";
 
 /** What a request should become: actions, a question back (matching the pattern), a command, or nothing. */
-export type Expected = { actions: unknown[] } | { ask: RegExp } | { command: string } | null;
+export type Expected = { actions: unknown[] } | { ask: RegExp } | { command: string } | { figure: FigureKey } | null;
+
+/** What identifies a figure answer: the function, the column and the sheet. */
+export interface FigureKey {
+  fn: string;
+  col: number;
+  sheet?: string;
+}
+
+const figureKey = (f: Figure): FigureKey => (f.sheet ? { fn: f.fn, col: f.col, sheet: f.sheet } : { fn: f.fn, col: f.col });
 
 export interface EvalCase {
   category: string;
@@ -22,7 +31,7 @@ export interface EvalCase {
 }
 
 /** What an answerer came back with. */
-export type Answer = { actions: unknown[] } | { ask: string } | { command: string } | null;
+export type Answer = { actions: unknown[] } | { ask: string } | { command: string } | { figure: FigureKey } | null;
 
 export type Answerer = (text: string) => Answer | Promise<Answer>;
 
@@ -60,6 +69,7 @@ export function answerMatches(want: Expected, got: Answer): boolean {
   if (got === null) return false;
   if ("ask" in want) return "ask" in got && want.ask.test(got.ask);
   if ("command" in want) return "command" in got && got.command === want.command;
+  if ("figure" in want) return "figure" in got && deepEqual(got.figure, want.figure);
   return "actions" in got && deepEqual(got.actions, want.actions);
 }
 
@@ -117,6 +127,7 @@ export function parserAnswerer(context: () => AskContext): Answerer {
     if (!r) return null;
     if (r.missing.length) return { ask: r.missing.join(" ") };
     if (r.command) return { command: r.command };
+    if (r.figure) return { figure: figureKey(r.figure) };
     return { actions: actionsOf(r) };
   };
 }
@@ -142,6 +153,7 @@ export function loopAnswerer(opts: { context: () => AskContext; catalog: () => r
     });
     if (t.status === "ask") return { ask: (t.missing ?? []).join(" ") };
     if (t.status === "command") return { command: t.command ?? "" };
+    if (t.status === "figure" && t.figure) return { figure: figureKey(t.figure) };
     if (t.status === "done") return { actions: ran };
     return null;
   };

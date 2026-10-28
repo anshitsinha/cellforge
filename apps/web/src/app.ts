@@ -24,7 +24,9 @@ import { bindSqlStore, registerSqlActions } from "./sqlpanel";
 import { bindChecksStore, gateExport, registerCheckActions } from "./checksui";
 import { RecipeRecorder, unbindAction, usedMemory } from "./recipe";
 import { openLineage } from "./lineagepanel";
-import { askContext, setupAskBar } from "./askbar";
+import { aggregateFigure, askContext, setupAskBar, type FigureView } from "./askbar";
+import type { Figure } from "@cellforge/ai";
+import { formatCell } from "./ui/table";
 import { registerReportActions } from "./reports/actions";
 import { openAskGuide } from "./askguide";
 import { aiStatus, currentModel, onAiStatus } from "./localmodel";
@@ -1532,7 +1534,39 @@ const askBar = setupAskBar({
   // the local model, when one is loaded; one kept from last time loads in the background on first use
   model: () => currentModel(),
   ai: { status: aiStatus, subscribe: (cb) => onAiStatus(() => cb()), setup: () => openAiPanel(aiPanelDeps()) },
+  figure: (f) => figureView(f),
+  dataRows: (id) => (workbook.has(id) ? dataRows(workbook.get(id).source) : 0),
 });
+
+/** Most rows the ask bar adds up on the spot; past that, Insert the formula and let the engine do it. */
+const FIGURE_MAX_ROWS = 2_000_000;
+
+/** "Total of Amount": the value now, and an Insert into the selected cell when it is free. */
+function figureView(f: Figure): FigureView | null {
+  const id = f.sheet ?? activeId;
+  if (!workbook.has(id)) return null;
+  const sheetObj = workbook.get(id);
+  const src = sheetObj.source;
+  const last = Math.min(f.range.bottom, dataRows(src) - 1);
+  let value = "…";
+  if (last - f.range.top + 1 > FIGURE_MAX_ROWS) value = "Too many rows to add up here";
+  else {
+    function* cells() {
+      for (let r = f.range.top; r <= last; r++) yield src.getCell(r, f.col);
+    }
+    const v = aggregateFigure(f.fn, cells());
+    value = v === null ? "No numbers" : formatCell(v, f.fn === "COUNTA" ? "integer" : "amount");
+  }
+  const { row, col } = grid.selection;
+  const ref = `${columnLetter(col)}${row + 1}`;
+  const inside = id === activeId && col === f.col && row >= f.range.top && row <= f.range.bottom;
+  const free = source.getEditText(row, col) === "";
+  const quoted = /^[A-Za-z_][\w.]*$/.test(sheetObj.name) ? sheetObj.name : `'${sheetObj.name.replace(/'/g, "''")}'`;
+  const formula = id === activeId ? f.formula : f.formula.replace(/^=(\w+)\((.*)\)$/, (_m, fn: string, r: string) => `=${fn}(${quoted}!${r})`);
+  const insert = !inside && free ? { action: { type: "cells.set", params: { cells: [{ row, col, input: formula }] } } as Action, ref } : null;
+  const why = inside ? `${ref} is inside the column being added up; select an empty cell elsewhere to insert the formula.` : free ? undefined : `${ref} isn't empty; select an empty cell to insert the formula there.`;
+  return { value, sheetName: sheetObj.name, insert, why };
+}
 
 /** What the AI panel needs from the app (also for the shell's "Ask AI" button). */
 function aiPanelDeps(): AiPanelDeps {
@@ -1746,7 +1780,8 @@ void menubar;
   ai.prepend(icon("ai"));
   const dot = ai.querySelector<HTMLElement>(".ai-dot")!;
   const chip = ai.querySelector<HTMLElement>(".ai-chip")!;
-  ai.addEventListener("click", () => toggleAiPanel(aiPanelDeps()));
+  // always the ask bar, input focused; its chip says whether the private AI is set up
+  ai.addEventListener("click", () => askBar.open());
   const paint = () => {
     const b = aiBadge();
     dot.dataset.state = b.dot;

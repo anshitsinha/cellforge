@@ -15,6 +15,7 @@ import {
   type AskContext,
   type CatalogEntry,
   EXAMPLES,
+  type Figure,
   type Model,
   type SheetInfo,
   actionsOf,
@@ -41,6 +42,21 @@ export interface AskBarDeps {
   model?: () => Model | null;
   /** the local AI's state, so the bar can say what it can do and offer to set it up */
   ai?: AskBarAi;
+  /** work out a figure ("total of amount"): its value, and where Insert would put its formula */
+  figure?: (f: Figure) => FigureView | null;
+  /** rows that hold data on a sheet, for the plan card ("1,772 rows") */
+  dataRows?: (sheetId: string) => number;
+}
+
+export interface FigureView {
+  /** the value, formatted ("1,234,567.89") */
+  value: string;
+  /** the sheet it was worked out on */
+  sheetName: string;
+  /** the action that writes the formula into the selected cell, or null when that cell isn't free */
+  insert: { action: Action; ref: string } | null;
+  /** why Insert isn't offered */
+  why?: string;
 }
 
 export interface AskBarAi {
@@ -137,7 +153,8 @@ export function suggestCommands(text: string, commands: readonly Command[], max 
     return { c, score: score + Math.max(0, fuzzyScore(text, c.title)) * 0.01 };
   });
   return scored
-    .filter((x) => x.score >= 2)
+    // a real shared word (or prefix), not just a close spelling
+    .filter((x) => x.score >= 3)
     .sort((a, b) => b.score - a.score)
     .slice(0, max)
     .map((x) => x.c);
@@ -147,6 +164,7 @@ export type Plan =
   | { kind: "empty" }
   | { kind: "ready"; actions: Action[]; explanation: string; confidence: number }
   | { kind: "command"; command: Command | null; id: string; explanation: string }
+  | { kind: "figure"; figure: Figure; explanation: string }
   | { kind: "ask"; questions: string[] }
   | { kind: "problems"; explanation: string; problems: string[] }
   | { kind: "unknown"; suggestions: Command[]; canAskModel: boolean };
@@ -159,11 +177,109 @@ export function planFor(text: string, d: Pick<AskBarDeps, "catalog" | "context" 
   if (!r) return { kind: "unknown", suggestions: suggestCommands(text, d.commands()), canAskModel: !!d.model?.() };
   if (r.missing.length) return { kind: "ask", questions: r.missing };
   if (r.command) return { kind: "command", id: r.command, command: d.commands().find((c) => c.id === r.command) ?? null, explanation: r.explanation };
+  if (r.figure) return { kind: "figure", figure: r.figure, explanation: r.explanation };
   const actions = actionsOf(r);
   const catalog = d.catalog();
   const problems = actions.flatMap((a) => validateAction(a, catalog, ctx));
   if (problems.length) return { kind: "problems", explanation: r.explanation, problems };
   return { kind: "ready", actions, explanation: r.explanation, confidence: r.confidence };
+}
+
+/** Work out a figure from a column's values (blanks and text are skipped, except by COUNTA). */
+export function aggregateFigure(fn: Figure["fn"], values: Iterable<unknown>): number | null {
+  let n = 0;
+  let count = 0;
+  let sum = 0;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const v of values) {
+    if (v === null || v === undefined || v === "") continue;
+    count++;
+    if (typeof v !== "number" || !Number.isFinite(v)) continue;
+    n++;
+    sum += v;
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  switch (fn) {
+    case "COUNTA":
+      return count;
+    case "SUM":
+      return Number(sum.toPrecision(15));
+    case "AVERAGE":
+      return n ? Number((sum / n).toPrecision(15)) : null;
+    case "MIN":
+      return n ? min : null;
+    case "MAX":
+      return n ? max : null;
+  }
+}
+
+/**
+ * What Enter does. A change is never made on the first Enter: the first one
+ * shows its plan card ("confirm"), and a second Enter on the same text runs
+ * it. Opening a tool, undo and redo run at once. A figure is already
+ * answered, so Enter does nothing more.
+ */
+export function enterAction(plan: Plan, confirmedText: string | null, text: string): "run" | "confirm" | "none" {
+  switch (plan.kind) {
+    case "ready":
+      return confirmedText === text ? "run" : "confirm";
+    case "unknown":
+      if (!plan.canAskModel) return "none";
+      return confirmedText === text ? "run" : "confirm";
+    case "command":
+      return plan.command ? "run" : "none";
+    default:
+      return "none";
+  }
+}
+
+/** The plan card's facts: "On Population · 1,772 rows · You can undo it (Ctrl+Z)". */
+export function planMeta(actions: readonly Action[], ctx: AskContext, dataRows?: (sheetId: string) => number): string {
+  const ids = new Set(actions.map((a) => String((a.params as { sheet?: unknown }).sheet ?? ctx.activeSheet)));
+  const parts: string[] = [];
+  if (ids.size === 1) {
+    const id = [...ids][0];
+    const sheet = ctx.sheets.find((x) => x.id === id);
+    if (sheet) parts.push(`On ${sheet.name}`);
+    const n = dataRows?.(id);
+    const header = sheet && sheet.headerRow >= 0 ? 1 : 0;
+    if (n !== undefined && n - header > 0 && actions.some((a) => /^rows\.|^filter\.|^format\.conditional/.test(a.type))) {
+      const rows = n - header;
+      parts.push(`${new Intl.NumberFormat().format(rows)} row${rows === 1 ? "" : "s"}`);
+    }
+  }
+  parts.push("You can undo it (Ctrl+Z)");
+  return parts.join(" · ");
+}
+
+/** Examples that share a word with what was typed come first. */
+export function rankExamples(text: string, examples: readonly string[]): string[] {
+  const words = new Set(text.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !STOP.has(w)));
+  if (!words.size) return [...examples];
+  const score = (x: string) => x.toLowerCase().split(/[^a-z0-9]+/).filter((w) => words.has(w) || [...words].some((v) => v.length >= 4 && (w.startsWith(v) || v.startsWith(w)) && w.length >= 4)).length;
+  return examples.map((x, i) => ({ x, i, s: score(x) })).sort((a, b) => b.s - a.s || a.i - b.i).map((e) => e.x);
+}
+
+/** The small status chip in the bar: what answers your request now. */
+export function aiChip(state: string | undefined): { text: string; setup: boolean } | null {
+  switch (state) {
+    case undefined:
+      return null;
+    case "ready":
+      return { text: "Private AI · ready", setup: false };
+    case "loading":
+    case "downloading":
+      return { text: "Private AI · getting ready", setup: false };
+    case "stored":
+      return { text: "Private AI · loads when needed", setup: false };
+    case "error":
+    case "paused":
+      return { text: "Rules only · Private AI needs attention", setup: true };
+    default:
+      return { text: "Rules only · Set up private AI", setup: true };
+  }
 }
 
 // ------------------------------------------------------------------ UI --
@@ -191,7 +307,10 @@ export function setupAskBar(d: AskBarDeps): { open: (text?: string) => void; clo
     root.className = "palette-backdrop askbar-backdrop";
     root.innerHTML = `
       <div class="palette askbar" role="dialog" aria-label="Ask or do">
-        <input type="text" class="palette-input askbar-input" placeholder="Ask or do…" spellcheck="false" autocomplete="off" aria-describedby="askbar-body" />
+        <div class="askbar-inputrow">
+          <input type="text" class="palette-input askbar-input" placeholder="Ask or do… e.g. total of amount" spellcheck="false" autocomplete="off" aria-describedby="askbar-body" aria-label="Ask or do" />
+          <button type="button" class="askbar-chip" hidden></button>
+        </div>
         <div class="askbar-body" id="askbar-body" aria-live="polite"></div>
         <div class="askbar-buttons">
           <button type="button" data-act="cancel">Cancel</button>
@@ -206,6 +325,23 @@ export function setupAskBar(d: AskBarDeps): { open: (text?: string) => void; clo
     const cancelBtn = root.querySelector<HTMLButtonElement>("[data-act=cancel]")!;
     let plan: Plan = { kind: "empty" };
     let busy = false;
+    // the text whose plan card the user has seen after pressing Enter once
+    let confirmed: string | null = null;
+    let figureView: FigureView | null = null;
+    const chip = root.querySelector<HTMLButtonElement>(".askbar-chip")!;
+    const paintChip = () => {
+      const c = aiChip(d.ai?.status().state);
+      chip.hidden = !c;
+      if (!c) return;
+      chip.textContent = c.text;
+      chip.classList.toggle("is-setup", c.setup);
+      chip.title = c.setup ? "Set up a private AI model that runs on this computer" : "Manage the local AI";
+    };
+    chip.addEventListener("click", () => {
+      close();
+      d.ai?.setup();
+    });
+    paintChip();
 
     const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string) => {
       const e = document.createElement(tag);
@@ -307,11 +443,44 @@ export function setupAskBar(d: AskBarDeps): { open: (text?: string) => void; clo
           if (box) body.append(box);
           break;
         }
-        case "ready":
-          body.append(el("p", "askbar-explain", plan.explanation));
+        case "ready": {
+          const card = el("div", "askbar-plan");
+          card.append(el("p", "askbar-plan__kicker", "Plan"), el("p", "askbar-explain", plan.explanation));
+          let meta = "";
+          try {
+            meta = planMeta(plan.actions, d.context(), d.dataRows);
+          } catch {
+            meta = "You can undo it (Ctrl+Z)";
+          }
+          card.append(el("p", "askbar-plan__meta", meta));
+          body.append(card);
           if (plan.confidence < 0.8) body.append(el("p", "askbar-muted", "I'm not completely sure this is what you meant, so check it before you press Do it."));
+          body.append(el("p", "askbar-hint", confirmed === input.value ? "Press Enter again or Do it to make the change." : "Nothing has changed yet. Press Enter or Do it to make the change."));
           doBtn.disabled = false;
           break;
+        }
+        case "figure": {
+          figureView = null;
+          try {
+            figureView = d.figure?.(plan.figure) ?? null;
+          } catch {
+            figureView = null;
+          }
+          const card = el("div", "askbar-figure");
+          card.append(el("p", "askbar-figure__label", plan.figure.label), el("p", "askbar-figure__value", figureView?.value ?? "…"));
+          const formula = el("p", "askbar-figure__formula");
+          formula.append(el("code", "", plan.figure.formula), ` on ${figureView?.sheetName ?? "this sheet"}`);
+          card.append(formula);
+          body.append(card);
+          if (figureView?.insert) {
+            doBtn.disabled = false;
+            doBtn.textContent = `Insert in ${figureView.insert.ref}`;
+          } else {
+            doBtn.textContent = "Insert";
+            body.append(el("p", "askbar-muted", figureView?.why ?? "Select an empty cell to insert the formula there."));
+          }
+          break;
+        }
         case "command":
           body.append(el("p", "askbar-explain", plan.explanation));
           if (plan.command) {
@@ -356,7 +525,7 @@ export function setupAskBar(d: AskBarDeps): { open: (text?: string) => void; clo
                   ? "I don't know that phrasing, and the local AI isn't ready yet, so for now I understand requests like these:"
                   : "I don't know how to do that yet. No AI model is loaded, so I understand requests like these:",
               ),
-              exampleList(examples(6)),
+              exampleList(rankExamples(input.value, examples(12)).slice(0, 6)),
             );
           }
           if (plan.suggestions.length) {
@@ -413,6 +582,13 @@ export function setupAskBar(d: AskBarDeps): { open: (text?: string) => void; clo
             }
           }
           close();
+        } else if (plan.kind === "figure" && figureView?.insert) {
+          const ok = await d.run(figureView.insert.action);
+          if (ok === false) {
+            fail("the app refused it; see the status bar.");
+            return;
+          }
+          close();
         } else if (plan.kind === "command" && plan.command) {
           const c = plan.command;
           close();
@@ -444,7 +620,13 @@ export function setupAskBar(d: AskBarDeps): { open: (text?: string) => void; clo
         e.preventDefault();
         clearTimeout(timer);
         refresh();
-        void doIt();
+        // a change shows its plan first; the second Enter makes it
+        const what = enterAction(plan, confirmed, input.value);
+        if (what === "run") void doIt();
+        else if (what === "confirm") {
+          confirmed = input.value;
+          render();
+        }
       } else if (e.key === "Escape" || ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "/" || e.code === "Slash"))) {
         e.preventDefault();
         close();
@@ -465,6 +647,7 @@ export function setupAskBar(d: AskBarDeps): { open: (text?: string) => void; clo
         const st = d.ai!.status().state;
         if (st === lastState || busy || root !== backdrop) return;
         lastState = st;
+        paintChip();
         if (plan.kind === "empty" || plan.kind === "unknown") refresh();
       }) ?? null;
   }
