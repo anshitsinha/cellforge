@@ -49,6 +49,9 @@ import { setupHistoryPanel, type TrailEntry } from "./historypanel";
 import { AutoSaver, fromFile, OpfsStore, packWorkbook, toFile, unpackWorkbook, type JournalEntry } from "./persist";
 import { sheetNameProblem, Workbook } from "./workbook";
 import { extractKeys, sortInWorker } from "./sort";
+import { dataExtent, dataRows } from "./usedrange";
+import { sortedMessage, type SortKeyInfo } from "./sorttext";
+import { toast } from "./ui/toast";
 import { formatBytes, importCsv } from "./importer";
 import { confirmDialog } from "./ui/confirm";
 import { openDialog } from "./ui/dialog";
@@ -130,7 +133,10 @@ mountSidePanelHost(sheet);
 
 /** The sheet's size, quietly, on the left of the status bar. */
 function updateStatus() {
-  statusLeft.textContent = !sheetIsBlank(source) ? `${rowFormat.format(source.rowCount)} row${source.rowCount === 1 ? "" : "s"} · ${source.colCount} column${source.colCount === 1 ? "" : "s"}` : "";
+  // the rows and columns that show data, not the sheet's allocated size
+  // (a template's 2,000 formula rows that show "" aren't data)
+  const { rows, cols } = sheetIsBlank(source) ? { rows: 0, cols: 0 } : dataExtent(source);
+  statusLeft.textContent = rows ? `${rowFormat.format(rows)} row${rows === 1 ? "" : "s"} · ${cols} column${cols === 1 ? "" : "s"}` : "";
 }
 
 function syncFormulaBar() {
@@ -408,12 +414,31 @@ const recipeFilesDeps = () => ({
 const recorder = new RecipeRecorder();
 
 /** Run a user action; problems are reported in the status bar, not thrown. */
+const SORTS = new Set(["rows.sort", "rows.sortBy"]);
+
+/** A sort ends on its result ("Sorted 1,772 rows by Amount, largest first · Undo"), never on its progress toast. */
+function reportSort(action: Action, applied: boolean) {
+  notify.endProgress();
+  if (!applied) return;
+  const p = action.params as { col?: number; descending?: boolean; keys?: { col: number; descending?: boolean }[]; hasHeader?: boolean; sheet?: string };
+  const src = p.sheet && workbook.has(p.sheet) ? workbook.get(p.sheet).source : source;
+  const keys = p.keys ?? (p.col !== undefined ? [{ col: p.col, descending: p.descending }] : []);
+  const header = p.hasHeader ? 1 : 0;
+  const info: SortKeyInfo[] = keys.map((k) => ({
+    name: src.getColumnName(k.col) ?? (header ? String(src.getCell(0, k.col) ?? "") || columnLetter(k.col) : columnLetter(k.col)),
+    descending: !!k.descending,
+    numeric: typeof src.getCell(header, k.col) === "number",
+  }));
+  toast({ kind: "success", text: sortedMessage(Math.max(0, dataRows(src) - header), info), action: { label: "Undo", run: () => void undo() } });
+}
+
 async function run(action: Action) {
   try {
     const sheetName = workbook.has(activeId) ? workbook.get(activeId).name : "";
     const mem0 = usedMemory();
     const t0 = performance.now();
     const applied = await history.run(action);
+    if (SORTS.has(action.type)) reportSort(action, !!applied);
     if (applied) {
       journal({ op: "run", action });
       recordTrail(action);
@@ -660,9 +685,8 @@ async function sortBy(descending: boolean) {
   const started = performance.now();
   const applied = await run({ type: "rows.sort", params: { col, descending } });
   if (!applied) return; // cancelled by a newer sort, or failed
-  notify(`Sorted ${rowFormat.format(source.rowCount)} rows by ${name} in ${(
-    (performance.now() - started) / 1000
-  ).toFixed(2)}s`);
+  // run() has said what was sorted; the timing goes to the status bar
+  setInfo(`Sorted by ${name} in ${((performance.now() - started) / 1000).toFixed(2)}s`);
 }
 
 
