@@ -227,7 +227,10 @@ chart, pivot, table, reconcile, check, audit, shield (evidence), signoff
 (review), report, settings, help, close, chevron-up/down/left/right,
 arrow-left, plus, more, play, document, database (sql), scale (scenario),
 history, info, success, warning, error, trash, copy, formula, calendar,
-sidebar.
+sidebar, wand (clean up), list-check (checks), checkbox (tick boxes),
+dropdown (validation), merge (variants), decimal-more, decimal-less.
+Never use `check` as a command icon in a menu: it reads as "this option is
+on".
 
 ```ts
 import { icon, iconButton, iconSvg } from "./ui/icons";

@@ -46,7 +46,8 @@ export const MENUS: { name: string; groups: CommandGroup[] }[] = [
   { name: "View", groups: ["View"] },
   { name: "Insert", groups: ["Insert"] },
   { name: "Format", groups: ["Format"] },
-  { name: "Data", groups: ["Data", "Analyse"] },
+  { name: "Data", groups: ["Data"] },
+  { name: "Analyse", groups: ["Analyse"] },
   { name: "Reconcile", groups: ["Reconcile"] },
   { name: "Audit", groups: ["Audit"] },
   { name: "Review", groups: ["Evidence & review"] },
@@ -107,6 +108,30 @@ export function buildMenuModel(commands: readonly AppCommand[]): Menu[] {
 }
 
 // ------------------------------------------------------------- dropdown --
+
+const EDGE = 8;
+
+/**
+ * Where a menu goes. A drop-down hangs under its anchor and never rises
+ * over it (it would cover the menu bar); when it is taller than the room
+ * below, it gets a max height and scrolls inside. A submenu sits beside its
+ * item, flips left at the right edge, and moves up only as far as it must.
+ */
+export function placeMenu(o: { anchor: { left: number; right: number; top: number; bottom: number }; width: number; height: number; side: boolean; alignEnd: boolean; viewW: number; viewH: number }): { left: number; top: number; maxHeight: number | null } {
+  const a = o.anchor;
+  let left = o.side ? a.right - 4 : o.alignEnd ? a.right - o.width : a.left;
+  if (o.side && left + o.width > o.viewW - EDGE) left = a.left - o.width + 4;
+  left = Math.max(EDGE, Math.min(left, o.viewW - o.width - EDGE));
+  if (!o.side) {
+    const top = a.bottom + 4;
+    const room = o.viewH - top - EDGE;
+    return { left, top, maxHeight: o.height > room ? Math.max(120, room) : null };
+  }
+  const room = o.viewH - 2 * EDGE;
+  const height = Math.min(o.height, room);
+  const top = Math.max(EDGE, Math.min(a.top - 5, o.viewH - height - EDGE));
+  return { left, top, maxHeight: o.height > room ? room : null };
+}
 
 let openDrop: { el: HTMLElement; close: (focusAnchor: boolean) => void } | null = null;
 
@@ -309,13 +334,11 @@ export function openDropdown(o: DropdownOptions): HTMLElement {
   // place it: under the anchor, or to its right for a submenu; kept on screen
   const a = o.anchor.getBoundingClientRect();
   const r = menu.getBoundingClientRect();
-  let left = o.side ? a.right - 4 : o.align === "end" ? a.right - r.width : a.left;
-  let top = o.side ? a.top - 5 : a.bottom + 4;
-  if (o.side && left + r.width > innerWidth - 8) left = a.left - r.width + 4;
-  left = Math.max(8, Math.min(left, innerWidth - r.width - 8));
-  top = Math.max(8, Math.min(top, innerHeight - r.height - 8));
-  menu.style.left = `${left}px`;
-  menu.style.top = `${top}px`;
+  const place = placeMenu({ anchor: a, width: r.width, height: r.height, side: !!o.side, alignEnd: o.align === "end", viewW: innerWidth, viewH: innerHeight });
+  menu.style.left = `${place.left}px`;
+  menu.style.top = `${place.top}px`;
+  // taller than the room below the bar: scroll inside, never cover the bar
+  if (place.maxHeight !== null) menu.style.maxHeight = `${place.maxHeight}px`;
 
   o.anchor.setAttribute("aria-expanded", "true");
   o.anchor.classList.add("is-open");
