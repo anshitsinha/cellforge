@@ -43,8 +43,6 @@ export function formatName(code: string | null | undefined): { name: string; cus
   if (c === "@") return { name: "Text", custom: false };
   const sections = c.split(";");
   const first = bare(sections[0]);
-  const neg = sections[1] !== undefined ? bare(sections[1]) : "";
-  const negWord = /\(.*0.*\)/.test(neg) ? ", (negatives)" : /\[Red\]/i.test(sections[1] ?? "") ? ", red negatives" : "";
   // accounting: the _( padding and the * fill
   if (/_\(|_\)|\*\s/.test(c) && /0/.test(first)) return { name: `Accounting, ${dp(places(first))}`, custom: false };
   if (/%/.test(first)) return { name: `Percent, ${dp(places(first))}`, custom: false };
@@ -62,9 +60,9 @@ export function formatName(code: string | null | undefined): { name: string; cus
   const currency = /[$£€¥₹]/.exec(sections[0]);
   if (/0/.test(first)) {
     const scale = /0,,(?![#0])/.test(first) ? " millions" : /0,(?![#0])/.test(first) ? " thousands" : "";
-    if (currency) return { name: `Currency (${currency[0]})${scale}, ${dp(places(first))}${negWord}`, custom: false };
+    if (currency) return { name: `Currency (${currency[0]})${scale}, ${dp(places(first))}`, custom: false };
     if (scale) return { name: `Number in${scale}`, custom: false };
-    return { name: `Number, ${dp(places(first))}${/#,##/.test(first) ? "" : ", no separator"}${negWord}`, custom: false };
+    return { name: `Number, ${dp(places(first))}${/#,##/.test(first) ? "" : ", no separator"}`, custom: false };
   }
   return { name: "Custom", custom: true };
 }

@@ -24,7 +24,7 @@ import { bindSqlStore, registerSqlActions } from "./sqlpanel";
 import { bindChecksStore, gateExport, registerCheckActions } from "./checksui";
 import { RecipeRecorder, unbindAction, usedMemory } from "./recipe";
 import { openLineage } from "./lineagepanel";
-import { aggregateFigure, askContext, setupAskBar, type FigureView } from "./askbar";
+import { aggregateFigure, askContext, setupAskBar, sheetInfo, type FigureView } from "./askbar";
 import type { Figure } from "@cellforge/ai";
 import { formatCell } from "./ui/table";
 import { registerReportActions } from "./reports/actions";
@@ -137,7 +137,11 @@ mountSidePanelHost(sheet);
 function updateStatus() {
   // the rows and columns that show data, not the sheet's allocated size
   // (a template's 2,000 formula rows that show "" aren't data)
-  const { rows, cols } = sheetIsBlank(source) ? { rows: 0, cols: 0 } : dataExtent(source);
+  const ext = sheetIsBlank(source) ? { rows: 0, cols: 0 } : dataExtent(source);
+  // a header row isn't a data row: a 128-line cash book says 128 rows, like the reconciliation
+  const header = ext.rows > 1 && sheetInfo("", "", source).headerRow === 0 ? 1 : 0;
+  const rows = ext.rows - header;
+  const cols = ext.cols;
   statusLeft.textContent = rows ? `${rowFormat.format(rows)} row${rows === 1 ? "" : "s"} · ${cols} column${cols === 1 ? "" : "s"}` : "";
 }
 

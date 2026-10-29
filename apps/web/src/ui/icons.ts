@@ -63,8 +63,8 @@ const PATHS = {
   checkbox: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
   dropdown: '<rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M7 12h5"/><path d="m15 11 2 2 2-2"/>',
   merge: '<path d="M7 3v4c0 3 5 4 5 7v7"/><path d="M17 3v4c0 3-5 4-5 7"/><path d="m9 18 3 3 3-3"/>',
-  "decimal-more": '<text x="12" y="11" text-anchor="middle" font-size="9.5" font-weight="600" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">.00</text><path d="M5 17h13"/><path d="m15.5 14 3 3-3 3"/>',
-  "decimal-less": '<text x="12" y="11" text-anchor="middle" font-size="9.5" font-weight="600" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">.0</text><path d="M19 17H6"/><path d="m8.5 14-3 3 3 3"/>',
+  "decimal-more": '<text x="12" y="11.5" text-anchor="middle" font-size="11" font-weight="600" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">.00</text><path d="M5 17h13"/><path d="m15.5 14 3 3-3 3"/>',
+  "decimal-less": '<text x="12" y="11.5" text-anchor="middle" font-size="11" font-weight="600" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">.0</text><path d="M19 17H6"/><path d="m8.5 14-3 3 3 3"/>',
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof PATHS;
