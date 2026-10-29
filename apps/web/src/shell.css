@@ -61,7 +61,9 @@
 }
 
 .topbar__doc {
-  flex: 1 1 auto;
+  /* basis 0: the menu bar's width is the room left, not its contents, so
+     the More overflow (menubar.ts) can't feed back into the layout */
+  flex: 1 1 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -154,6 +156,14 @@
 
 .cf-menubar__item:focus-visible {
   outline-offset: -2px;
+}
+
+.cf-menubar__item[hidden] {
+  display: none;
+}
+
+.cf-menubar__more {
+  color: var(--text-muted);
 }
 
 /* --- actions */
@@ -1432,10 +1442,6 @@ body.is-start .bottombar {
     padding: 0 10px;
   }
 
-  .cf-menubar {
-    mask-image: linear-gradient(to right, #000 85%, transparent);
-    padding-right: var(--space-6);
-  }
 
   .status-bar #status-left {
     display: none;
@@ -1575,4 +1581,23 @@ body.is-start .bottombar {
 .cf-recent__meta {
   color: var(--text-muted);
   font-size: var(--text-xs);
+}
+
+@media (max-width: 720px) {
+  .file-name__prefix {
+    display: none;
+  }
+}
+
+/* the format bar scrolls sideways on narrow screens; a fade marks the side with more */
+.format-bar.can-right {
+  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+}
+
+.format-bar.can-left {
+  mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent);
+}
+
+.format-bar.can-left.can-right {
+  mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
 }

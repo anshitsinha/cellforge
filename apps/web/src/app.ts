@@ -147,6 +147,20 @@ function markFormula() {
 }
 formulaInput.addEventListener("input", markFormula);
 
+/** The workbook's name in the top bar; "Sample — " is dropped on a phone (shell.css). */
+function showFileName(name: string) {
+  const m = /^(Sample\s+[—–-]\s+)(.+)$/.exec(name);
+  fileName.title = name;
+  if (!m) {
+    fileName.textContent = name;
+    return;
+  }
+  const pre = document.createElement("span");
+  pre.className = "file-name__prefix";
+  pre.textContent = m[1];
+  fileName.replaceChildren(pre, m[2]);
+}
+
 function syncFormulaBar() {
   const { row, col } = grid.selection;
   cellRef.textContent = `${columnLetter(col)}${row + 1}`;
@@ -1220,7 +1234,7 @@ sheet.addEventListener("contextmenu", (e) => {
   cellMenu = menu;
 });
 
-fileName.textContent = currentName;
+showFileName(currentName);
 statusRight.textContent = infoText;
 syncFormulaBar();
 updateStatus();
@@ -1945,7 +1959,7 @@ function loadWorkbook(next: Workbook, active: string, name: string) {
   history.clear();
   blobs.clear();
   grid.setSource(source);
-  fileName.textContent = name;
+  showFileName(name);
   document.title = name === "Untitled" ? "cellforge" : `${name} · cellforge`;
   startScreen.hide();
   refresh();

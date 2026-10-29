@@ -372,6 +372,29 @@ export function menuButton(button: HTMLButtonElement, items: () => MenuEntry[], 
 
 // --------------------------------------------------------------- menubar --
 
+/**
+ * How many menus fit in the bar, left to right, when the rest go under a
+ * "More" button. All of them when they fit; none (one "Menu" button) when
+ * fewer than `minShown` would.
+ */
+export function fitMenus(widths: readonly number[], available: number, moreWidth: number, minShown = 3): number {
+  const total = widths.reduce((a, b) => a + b, 0);
+  if (total <= available) return widths.length;
+  let used = moreWidth;
+  let n = 0;
+  while (n < widths.length && used + widths[n] <= available) used += widths[n++];
+  return n < minShown ? 0 : n;
+}
+
+/** The overflow menu: each hidden menu as a submenu (its own submenus flattened in). */
+export function overflowEntries(menus: readonly Menu[]): MenuEntry[] {
+  return menus.map((m) => ({
+    kind: "submenu" as const,
+    title: m.name,
+    items: m.items.flatMap((e) => (e.kind === "item" ? [e] : e.kind === "submenu" ? e.items : [])),
+  }));
+}
+
 export interface MenuBarDeps {
   commands: () => AppCommand[];
   focusGrid: () => void;
@@ -383,29 +406,47 @@ export function setupMenuBar(root: HTMLElement, d: MenuBarDeps): { focus: () => 
   const tops: HTMLButtonElement[] = [];
   let active = -1; // the menu showing, if any
 
+  // the "More" button (last in tops) holds the menus that don't fit
+  const MORE = MENUS.length;
+  let shown = MENUS.length;
+  const visible = (i: number) => !tops[i].hidden;
+  const step = (i: number, dir: 1 | -1) => {
+    const n = tops.length;
+    let j = i;
+    for (let k = 0; k < n; k++) {
+      j = (((j + dir) % n) + n) % n;
+      if (visible(j)) return j;
+    }
+    return i;
+  };
+
   const open = (i: number, focusFirst: boolean) => {
     const model = buildMenuModel(d.commands());
-    const m = model[i];
+    const items = i === MORE ? overflowEntries(model.slice(shown)) : model[i].items;
     active = i;
     openDropdown({
       anchor: tops[i],
-      items: m.items,
+      items,
       focusFirst,
       className: "cf-menu--bar",
       onDone: (how) => {
         if (active === i) active = -1;
-        if (how === "right") open((i + 1) % tops.length, true);
-        else if (how === "left") open((i - 1 + tops.length) % tops.length, true);
+        if (how === "right") open(step(i, 1), true);
+        else if (how === "left") open(step(i, -1), true);
         else if (how === "dismiss" && root.contains(document.activeElement)) tops[i].focus();
       },
     });
   };
 
-  MENUS.forEach((m, i) => {
+  [...MENUS.map((m) => m.name), "More"].forEach((name, i) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "cf-menubar__item";
-    b.textContent = m.name;
+    b.className = i === MORE ? "cf-menubar__item cf-menubar__more" : "cf-menubar__item";
+    b.textContent = name;
+    if (i === MORE) {
+      b.hidden = true;
+      b.setAttribute("aria-label", "More menus");
+    }
     b.setAttribute("role", "menuitem");
     b.setAttribute("aria-haspopup", "menu");
     b.setAttribute("aria-expanded", "false");
@@ -423,20 +464,20 @@ export function setupMenuBar(root: HTMLElement, d: MenuBarDeps): { focus: () => 
     });
     b.addEventListener("keydown", (e) => {
       const go = (j: number) => {
-        const n = tops.length;
-        const t = tops[((j % n) + n) % n];
+        const t = tops[j];
         tops.forEach((x) => (x.tabIndex = x === t ? 0 : -1));
         t.focus();
       };
-      if (e.key === "ArrowRight") go(i + 1);
-      else if (e.key === "ArrowLeft") go(i - 1);
-      else if (e.key === "Home") go(0);
-      else if (e.key === "End") go(tops.length - 1);
+      if (e.key === "ArrowRight") go(step(i, 1));
+      else if (e.key === "ArrowLeft") go(step(i, -1));
+      else if (e.key === "Home") go(step(tops.length - 1, 1));
+      else if (e.key === "End") go(step(0, -1));
       else if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") open(i, true);
       else if (e.key === "Escape") d.focusGrid();
       else if (e.key.length === 1 && /\w/.test(e.key) && !e.ctrlKey && !e.altKey && !e.metaKey) {
-        const j = MENUS.findIndex((x) => x.name.toLowerCase().startsWith(e.key.toLowerCase()));
-        if (j < 0) return;
+        const found = MENUS.findIndex((x) => x.name.toLowerCase().startsWith(e.key.toLowerCase()));
+        if (found < 0) return;
+        const j = visible(found) ? found : MORE;
         go(j);
         open(j, true);
       } else return;
@@ -446,9 +487,33 @@ export function setupMenuBar(root: HTMLElement, d: MenuBarDeps): { focus: () => 
     root.append(b);
   });
 
+  // fit the bar to its width: menus that don't fit go under More (or all
+  // under one "Menu" button on a phone)
+  const widths: number[] = [];
+  const layout = () => {
+    if (!root.isConnected || !root.clientWidth) return;
+    if (!widths.length || widths.some((w) => !w)) {
+      for (const b of tops) b.hidden = false;
+      tops.forEach((b, i) => (widths[i] = b.offsetWidth));
+    }
+    const menuWidths = widths.slice(0, MORE);
+    const next = fitMenus(menuWidths, root.clientWidth, Math.max(widths[MORE] || 56, 56));
+    shown = next;
+    tops.forEach((b, i) => (b.hidden = i === MORE ? next === MORE : i >= next));
+    tops[MORE].textContent = next === 0 ? "Menu" : "More";
+    tops[MORE].setAttribute("aria-label", next === 0 ? "Menus" : "More menus");
+    // keep a focusable entry point when the one with tabIndex 0 is hidden
+    if (!tops.some((b) => !b.hidden && b.tabIndex === 0)) {
+      tops.forEach((b) => (b.tabIndex = -1));
+      (tops.find((b) => !b.hidden) ?? tops[MORE]).tabIndex = 0;
+    }
+  };
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => layout()).observe(root);
+  requestAnimationFrame(layout);
+
   const focus = () => {
     closeMenus();
-    const t = tops.find((x) => x.tabIndex === 0) ?? tops[0];
+    const t = tops.find((x) => x.tabIndex === 0 && !x.hidden) ?? tops.find((x) => !x.hidden) ?? tops[0];
     t.focus();
   };
 

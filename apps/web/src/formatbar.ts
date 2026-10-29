@@ -116,6 +116,21 @@ export function setupFormatBar(d: FormatBarDeps): { sync: () => void } {
     <button type="button" id="fmt-clear" title="Clear formatting (Ctrl+\\)">${ICONS.clear}</button>
   `;
 
+  // narrow screens: the bar scrolls sideways; fade the edge that has more
+  const edges = () => {
+    const max = root.scrollWidth - root.clientWidth;
+    root.classList.toggle("can-left", root.scrollLeft > 2);
+    root.classList.toggle("can-right", max - root.scrollLeft > 2);
+  };
+  root.addEventListener("scroll", edges, { passive: true });
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(edges).observe(root);
+  // a vertical wheel scrolls the bar sideways
+  root.addEventListener("wheel", (e) => {
+    if (root.scrollWidth <= root.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    root.scrollLeft += e.deltaY;
+    e.preventDefault();
+  }, { passive: false });
+
   const $ = <T extends HTMLElement>(sel: string) => root.querySelector(sel) as T;
   const size = $<HTMLSelectElement>("#fmt-size");
   const color = $<HTMLInputElement>("#fmt-color");

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildCommands, COMMAND_GROUPS, devMode, GROUP_ICONS, sheetContext, sheetIsBlank, suggestedCommandIds, type AppCommand, type CommandDeps } from "./commands";
-import { buildMenuModel, MENUS, menuEntries, type MenuEntry, placeMenu } from "./menubar";
+import { buildMenuModel, fitMenus, MENUS, menuEntries, overflowEntries, type MenuEntry, placeMenu } from "./menubar";
 import { commandScore, paletteView, WEAK_MATCH } from "./palette";
 import { classifyMessage, createNotifier } from "./messages";
 import { ICON_NAMES } from "./ui/icons";
@@ -237,5 +237,24 @@ describe("menu placement", () => {
     const p = placeMenu({ anchor: { left: 1200, right: 1430, top: 800, bottom: 830 }, width: 240, height: 200, side: true, alignEnd: false, viewW: 1440, viewH: 900 });
     expect(p.left).toBe(1200 - 240 + 4);
     expect(p.top).toBe(900 - 200 - 8);
+  });
+});
+
+describe("menu bar overflow", () => {
+  const w = [40, 40, 44, 48, 56, 44, 60, 72, 48, 58, 60, 28, 46];
+  it("shows every menu when they fit", () => {
+    expect(fitMenus(w, 2000, 56)).toBe(w.length);
+  });
+  it("puts the menus that don't fit under More", () => {
+    expect(fitMenus(w, 300, 56)).toBe(5); // 56 + 40+40+44+48+56 = 284
+  });
+  it("uses one Menu button when only a couple would fit (phones)", () => {
+    expect(fitMenus(w, 150, 56)).toBe(0);
+  });
+  it("lists hidden menus as submenus with their own submenus flattened", () => {
+    const menus = buildMenuModel(commands);
+    const more = overflowEntries(menus.slice(-2));
+    expect(more.map((e) => e.kind === "submenu" && e.title)).toEqual(["AI", "Help"]);
+    for (const e of more) if (e.kind === "submenu") for (const it of e.items) expect(it.kind).toBe("item");
   });
 });
