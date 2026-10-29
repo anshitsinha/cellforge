@@ -492,8 +492,8 @@ th.num {
   margin: 4px 6px;
 }
 
-/* colour pickers: a letter or bucket with the current colour underneath */
-.swatch {
+/* colour pickers: a letter or bucket with a 14x3 bar of the current colour under it */
+.fmt-swatch {
   position: relative;
   display: inline-grid;
   place-items: center;
@@ -504,37 +504,54 @@ th.num {
   flex-shrink: 0;
 }
 
-.swatch:hover {
+.fmt-swatch:hover {
   background: var(--surface-3);
 }
 
-.swatch input {
+.fmt-swatch input {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
   opacity: 0;
   cursor: pointer;
 }
 
-.swatch i {
+.fmt-swatch:focus-within {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: -2px;
+}
+
+.fmt-swatch i {
   position: absolute;
-  left: 7px;
-  right: 7px;
+  left: 50%;
   bottom: 4px;
+  width: 14px;
   height: 3px;
+  margin-left: -7px;
   border-radius: 1px;
+  box-shadow: inset 0 0 0 0.5px var(--border-default);
+  pointer-events: none;
 }
 
-.swatch-a {
+.fmt-swatch__a {
   font-weight: var(--weight-bold);
-  margin-top: -4px;
+  line-height: 1;
+  margin-top: -5px;
 }
 
-.swatch-fill {
+.fmt-swatch__fill {
   width: 12px;
   height: 10px;
-  margin-top: -4px;
+  margin-top: -5px;
   border: 1.5px solid currentColor;
   border-radius: 2px;
+}
+
+.format-bar .fmt-dec svg {
+  display: block;
 }
 
 .cleanup-cols {
@@ -1109,10 +1126,6 @@ th.num {
   white-space: pre;
 }
 
-.format-bar sup {
-  font-size: 9px;
-}
-
 .sheet.painting,
 .sheet.painting canvas {
   cursor: copy !important; /* the canvas sets its own cursor inline */
@@ -1156,10 +1169,16 @@ th.num {
   box-shadow: none;
   padding: 0 var(--space-1);
   font: inherit;
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--text-md);
+  font-variant-numeric: tabular-nums;
   color: inherit;
   background: transparent;
+}
+
+/* a formula (starts with =) in the code font; plain values in the UI font */
+#formula-input.is-formula {
+  font-family: var(--font-mono);
 }
 
 .sheet {

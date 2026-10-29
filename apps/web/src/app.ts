@@ -141,10 +141,17 @@ function updateStatus() {
   statusLeft.textContent = rows ? `${rowFormat.format(rows)} row${rows === 1 ? "" : "s"} · ${cols} column${cols === 1 ? "" : "s"}` : "";
 }
 
+/** Monospace only for a formula; values read in the UI font, as in Sheets and Excel. */
+function markFormula() {
+  formulaInput.classList.toggle("is-formula", formulaInput.value.trimStart().startsWith("="));
+}
+formulaInput.addEventListener("input", markFormula);
+
 function syncFormulaBar() {
   const { row, col } = grid.selection;
   cellRef.textContent = `${columnLetter(col)}${row + 1}`;
   formulaInput.value = localizeFormula(source.getEditText(row, col));
+  markFormula();
 }
 
 // --- status bar (right side) ----------------------------------------------------
@@ -969,7 +976,10 @@ formulaInput.addEventListener("keydown", (e) => {
 
 // mirror what's being typed in the cell editor into the formula bar
 sheet.addEventListener("input", (e) => {
-  if (e.target instanceof HTMLInputElement) formulaInput.value = e.target.value;
+  if (e.target instanceof HTMLInputElement) {
+    formulaInput.value = e.target.value;
+    markFormula();
+  }
 });
 
 function workbookEdited() {
