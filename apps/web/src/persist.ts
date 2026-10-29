@@ -450,3 +450,171 @@ export class AutoSaver {
     return { ...restored, journal };
   }
 }
+
+// ---------------------------------------------------------------------------
+// recent workbooks: starting something new keeps the current one
+//
+// The workbook you're working on autosaves into the "autosave" folder. When
+// you start another (new, a sample, a template, a file, a recent one), the
+// current one is first copied into its own folder ("recent-<id>") and listed
+// in Recent, so nothing is ever thrown away silently. Opening a recent
+// workbook moves it back to "autosave" and takes it off the list.
+
+export interface RecentEntry {
+  id: string;
+  name: string;
+  /** when it was put away (ms since 1970) */
+  savedAt: number;
+  sheets: number;
+  /** the sheet names, for the card ("Cash book, Bank statement, Rec") */
+  sheetNames?: string[];
+}
+
+/** How many workbooks Recent keeps; older ones are deleted. */
+export const MAX_RECENT = 8;
+
+/** Add an entry at the top (newest first); returns the list and the ids that fell off the end. */
+export function addRecent(list: readonly RecentEntry[], entry: RecentEntry, max = MAX_RECENT): { list: RecentEntry[]; dropped: string[] } {
+  const next = [entry, ...list.filter((e) => e.id !== entry.id)];
+  return { list: next.slice(0, max), dropped: next.slice(max).map((e) => e.id) };
+}
+
+export function removeRecent(list: readonly RecentEntry[], id: string): RecentEntry[] {
+  return list.filter((e) => e.id !== id);
+}
+
+/** "just now", "5 min ago", "3 h ago", "yesterday", "4 days ago", or the date. */
+export function timeAgo(then: number, now = Date.now(), locale?: string): string {
+  const s = Math.max(0, Math.round((now - then) / 1000));
+  if (s < 60) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} h ago`;
+  const d = Math.round(h / 24);
+  if (d === 1) return "yesterday";
+  if (d < 7) return `${d} days ago`;
+  return new Date(then).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** The card's second line: "3 sheets · 5 min ago". */
+export function recentDetail(e: RecentEntry, now = Date.now()): string {
+  return `${e.sheets} sheet${e.sheets === 1 ? "" : "s"} · ${timeAgo(e.savedAt, now)}`;
+}
+
+/** Parse a stored index, keeping only well-formed entries. */
+export function readRecentIndex(text: string | null | undefined): RecentEntry[] {
+  if (!text) return [];
+  try {
+    const v = JSON.parse(text) as unknown;
+    if (!Array.isArray(v)) return [];
+    return v.filter((e): e is RecentEntry => !!e && typeof e === "object" && typeof (e as RecentEntry).id === "string" && typeof (e as RecentEntry).name === "string" && typeof (e as RecentEntry).savedAt === "number");
+  } catch {
+    return [];
+  }
+}
+
+/** Where recent workbooks live: a folder per workbook and one index. */
+export interface RecentHome {
+  folder(name: string): Promise<Store | null>;
+  removeFolder(name: string): Promise<void>;
+}
+
+/** The browser's private file system as a RecentHome. */
+export const opfsHome: RecentHome = {
+  folder: (name) => OpfsStore.open(name),
+  async removeFolder(name) {
+    try {
+      const root = await navigator.storage.getDirectory();
+      await root.removeEntry(name, { recursive: true });
+    } catch {
+      // already gone
+    }
+  },
+};
+
+const INDEX_FOLDER = "recent";
+const INDEX_FILE = "index.json";
+const slot = (id: string) => `recent-${id}`;
+
+export class RecentWorkbooks {
+  private cache: RecentEntry[] = [];
+  private queue: Promise<unknown> = Promise.resolve();
+
+  constructor(private readonly home: RecentHome, private readonly newId: () => string = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`) {}
+
+  private run<T>(job: () => Promise<T>): Promise<T> {
+    const next = this.queue.then(job, job);
+    this.queue = next.catch(() => undefined);
+    return next;
+  }
+
+  /** The list as last read or written (newest first). */
+  get entries(): readonly RecentEntry[] {
+    return this.cache;
+  }
+
+  async load(): Promise<RecentEntry[]> {
+    return this.run(async () => {
+      const store = await this.home.folder(INDEX_FOLDER);
+      this.cache = readRecentIndex((await store?.read(INDEX_FILE)) as string | null);
+      return this.cache;
+    });
+  }
+
+  private async save(list: RecentEntry[]): Promise<void> {
+    this.cache = list;
+    const store = await this.home.folder(INDEX_FOLDER);
+    await store?.write(INDEX_FILE, JSON.stringify(list));
+  }
+
+  /** Put a workbook away in its own folder and list it first. Null where there is no storage. */
+  park(wb: Workbook, active: string, name: string, now = Date.now()): Promise<RecentEntry | null> {
+    // capture synchronously: the caller replaces the workbook right after
+    const packed = packWorkbook(wb, active, name);
+    const entry: RecentEntry = { id: this.newId(), name, savedAt: now, sheets: wb.sheets.length, sheetNames: wb.sheets.map((s) => s.name).slice(0, 6) };
+    return this.run(async () => {
+      const store = await this.home.folder(slot(entry.id));
+      if (!store) return null;
+      for (const [file, data] of packed.files) await store.write(file, data);
+      await store.write(META, JSON.stringify(packed.meta));
+      await store.write(JOURNAL, "");
+      const { list, dropped } = addRecent(this.cache, entry);
+      await this.save(list);
+      for (const id of dropped) await this.home.removeFolder(slot(id));
+      return entry;
+    });
+  }
+
+  /** Take a workbook back out: load it and remove it from the list (it becomes the one you're working on). */
+  take(id: string): Promise<{ workbook: Workbook; active: string; name: string; journal: JournalEntry[] } | null> {
+    return this.run(async () => {
+      const store = await this.home.folder(slot(id));
+      const got = store ? await AutoSaver.load(store) : null;
+      if (got) {
+        await this.save(removeRecent(this.cache, id));
+        await this.home.removeFolder(slot(id));
+      }
+      return got;
+    });
+  }
+
+  /** Forget one (and delete its files). */
+  forget(id: string): Promise<void> {
+    return this.run(async () => {
+      await this.save(removeRecent(this.cache, id));
+      await this.home.removeFolder(slot(id));
+    });
+  }
+
+  /** Delete every recent workbook (Clear data on this computer). */
+  clear(): Promise<number> {
+    return this.run(async () => {
+      const n = this.cache.length;
+      for (const e of this.cache) await this.home.removeFolder(slot(e.id));
+      await this.home.removeFolder(INDEX_FOLDER);
+      this.cache = [];
+      return n;
+    });
+  }
+}

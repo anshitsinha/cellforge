@@ -13,6 +13,7 @@
  * change a title only together with the guide pages that mention it.
  */
 import type { Action, ActionRegistry } from "@cellforge/actions";
+import { recentDetail, type RecentEntry } from "./persist";
 import { type CellRange, type Grid, columnLetter } from "@cellforge/grid";
 import type { Command } from "./palette";
 import type { EditableSource } from "./editable";
@@ -118,6 +119,9 @@ export interface CommandDeps {
 
   // file
   newWorkbook: () => void;
+  /** workbooks put away in this browser (persist.ts), newest first */
+  recent: () => readonly RecentEntry[];
+  openRecent: (id: string) => void;
   showStartScreen: () => void;
   openFile: () => void;
   saveFile: (saveAs?: boolean) => Promise<void>;
@@ -211,6 +215,7 @@ export function buildCommands(d: CommandDeps): AppCommand[] {
     { group: "File", section: "new", id: "new", title: "New workbook", description: "Start again from the start screen: a blank sheet, a workflow or sample data", icon: "plus", hint: "blank start screen", run: d.showStartScreen },
     { group: "File", section: "new", id: "template", title: "New from a template (monthly close, bank rec, audit tests)…", description: "A ready-made workbook laid out for a common job", icon: "document", hint: "template starter new workbook monthly close bank reconciliation audit tests", run: d.startTemplate },
     { group: "File", section: "open", id: "open", title: "Open…", keys: "Ctrl O", description: "A .cellforge workbook, Excel, CSV, JSON, Parquet or a PDF bank statement", icon: "open", hint: "import csv file cellforge excel xlsx", run: d.openFile },
+    ...(d.recent() ?? []).map((r): Def => ({ group: "File", section: "open", submenu: "Open recent", id: `recent:${r.id}`, title: `Open recent: ${r.name}`, description: `Kept in this browser · ${recentDetail(r)}`, icon: "history", hint: `recent workbook reopen ${r.name}`, run: () => d.openRecent(r.id) })),
     { group: "File", section: "open", id: "statement", title: "Import a bank statement (PDF or CSV)…", description: "Read a statement's transactions onto a new sheet", icon: "upload", hint: "bank statement pdf transactions balance reconcile import", run: () => void pickStatement().then((f) => f && importStatement(f, d.statementDeps())) },
     ...[false, true].map((folder): Def => ({
       group: "File",

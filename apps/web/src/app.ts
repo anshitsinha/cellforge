@@ -48,7 +48,7 @@ import { installModalGate } from "./ui/modalgate";
 import { startLocale } from "./locale";
 import { setupPalette } from "./palette";
 import { setupHistoryPanel, type TrailEntry } from "./historypanel";
-import { AutoSaver, fromFile, OpfsStore, packWorkbook, toFile, unpackWorkbook, type JournalEntry } from "./persist";
+import { AutoSaver, fromFile, OpfsStore, opfsHome, packWorkbook, RecentWorkbooks, toFile, unpackWorkbook, type JournalEntry } from "./persist";
 import { sheetNameProblem, Workbook } from "./workbook";
 import { extractKeys, sortInWorker } from "./sort";
 import { dataExtent, dataRows } from "./usedrange";
@@ -1234,6 +1234,9 @@ grid.focus();
 
 const saveState = document.getElementById("save-state")!;
 let saver: AutoSaver | null = null;
+// Recent: starting another workbook puts the current one away here first (persist.ts)
+const recent = new RecentWorkbooks(opfsHome);
+let recentReady = false;
 let replaying = false;
 // how many journal entries an undo / redo can still be expressed against;
 // past that (undoing something from before the last snapshot) we snapshot
@@ -1320,6 +1323,13 @@ async function startAutosave() {
     return;
   }
   saver = new AutoSaver(store);
+  try {
+    await recent.load();
+    recentReady = true;
+    refreshRecent();
+  } catch {
+    recentReady = false;
+  }
   if (startWithDemo || startSample) return void snapshotNow();
   try {
     const last = await AutoSaver.load(store);
@@ -1333,7 +1343,8 @@ async function startAutosave() {
     }
     replaying = false;
     refresh();
-    notify("Picked up where you left off.");
+    // only when there was something to pick up
+    if (!isEmptyWorkbook()) notify("Picked up where you left off.");
     void snapshotNow();
   } catch (e) {
     replaying = false;
@@ -1603,7 +1614,8 @@ async function saveProtected() {
 
 async function clearLocal() {
   if (!(await confirmClear())) return grid.focus();
-  const n = (await clearLocalData(saver?.store ?? (await OpfsStore.open()))) + (await clearLocalData(docStore));
+  const n = (await clearLocalData(saver?.store ?? (await OpfsStore.open()))) + (await clearLocalData(docStore)) + (await recent.clear().catch(() => 0));
+  refreshRecent();
   notify(`Cleared ${n} stored item${n === 1 ? "" : "s"}. Reload the page to start fresh.`);
 }
 
@@ -1691,6 +1703,8 @@ const commandDeps: CommandDeps = {
   canUndo: () => history.canUndo,
   canRedo: () => history.canRedo,
   newWorkbook: () => void newWorkbook(),
+  recent: () => recent.entries,
+  openRecent: (id) => void openRecent(id),
   showStartScreen: () => startScreen.show(),
   openFile: () => openFilePicker(),
   saveFile: (saveAs) => saveFile(saveAs),
@@ -1848,6 +1862,8 @@ const startScreen = setupStartScreen(startHost, {
     grid.focus();
   },
   openAi: () => openAiPanel(aiPanelDeps()),
+  recent: () => recent.entries,
+  openRecent: (id) => void openRecent(id),
   aiBadge,
   onAiStatus: (cb) => onAiStatus(() => cb()),
 });
@@ -1863,7 +1879,56 @@ function loadSource(next: EditableSource, name: string) {
 /** The file being opened, fingerprinted into the workbook it becomes. */
 let openingFile: File | null = null;
 
+/**
+ * Put the workbook on screen away in Recent before another replaces it, so
+ * starting something new never loses work. Nothing to keep: a blank,
+ * untouched workbook, or while autosave is replaying.
+ */
+function parkCurrent() {
+  if (!recentReady || replaying || isEmptyWorkbook()) return;
+  const was = currentName;
+  recent.park(workbook, activeId, currentName).then(
+    (e) => {
+      refreshRecent();
+      if (e) toast({ kind: "info", text: `“${was}” is kept in Recent.`, action: { label: "Open it", run: () => void openRecent(e.id) } });
+    },
+    (err) => notify.error(`Couldn't keep “${was}” in Recent: ${(err as Error).message}`),
+  );
+}
+
+/** Open a workbook from Recent (the one on screen goes to Recent in its place). */
+async function openRecent(id: string) {
+  const got = await recent.take(id);
+  if (!got) {
+    notify.error("That workbook is no longer kept in this browser.");
+    refreshRecent();
+    return;
+  }
+  fileHandle = null;
+  loadWorkbook(got.workbook, got.active, got.name);
+  replaying = true;
+  try {
+    for (const e of got.journal) {
+      if (e.op === "run") await history.run(e.action);
+      else if (e.op === "undo") await history.undo();
+      else await history.redo();
+    }
+  } finally {
+    replaying = false;
+  }
+  refresh();
+  refreshRecent();
+  void snapshotNow();
+  notify(`Opened “${got.name}” from Recent.`);
+}
+
+/** Recent changed: the start screen and File > Open recent show it. */
+function refreshRecent() {
+  startScreen.refreshRecent();
+}
+
 function loadWorkbook(next: Workbook, active: string, name: string) {
+  parkCurrent();
   trail.clear();
   workbook = next;
   recorder.clear();
@@ -1889,7 +1954,7 @@ function loadWorkbook(next: Workbook, active: string, name: string) {
 
 /** Start over: a blank workbook (asks first when there's work to lose). */
 async function newWorkbook(): Promise<boolean> {
-  if (workbookEdited() && !(await confirmDialog({ title: "Start a new workbook?", text: "Your changes to this workbook will be discarded.", confirm: "Discard and start new", danger: true }))) return false;
+  if (workbookEdited() && !recentReady && !(await confirmDialog({ title: "Start a new workbook?", text: "Autosave isn't available in this tab, so your changes to this workbook will be lost. Save it first (Ctrl+S) to keep it.", confirm: "Discard and start new", danger: true }))) return false;
   fileHandle = null;
   loadSource(new EditableSource(new BlankSource()), "Untitled");
   return true;
@@ -1897,7 +1962,7 @@ async function newWorkbook(): Promise<boolean> {
 
 /** Open one of the finance samples (samples.ts). */
 async function openSample(kind: SampleKind) {
-  if (workbookEdited() && !(await confirmDialog({ title: "Open the sample?", text: "Your changes to this workbook will be discarded.", confirm: "Discard and open sample", danger: true }))) return;
+  if (workbookEdited() && !recentReady && !(await confirmDialog({ title: "Open the sample?", text: "Autosave isn't available in this tab, so your changes to this workbook will be lost. Save it first (Ctrl+S) to keep it.", confirm: "Discard and open sample", danger: true }))) return;
   notify("Opening the sample…");
   const s = await sampleWorkbook(kind);
   fileHandle = null;
@@ -1910,7 +1975,7 @@ async function openSample(kind: SampleKind) {
 async function startTemplate(kind?: TemplateKind) {
   const k = kind ?? (await pickTemplate());
   if (!k) return grid.focus();
-  if (workbookEdited() && !(await confirmDialog({ title: "Start from the template?", text: "Your changes to this workbook will be discarded.", confirm: "Discard and start", danger: true }))) return;
+  if (workbookEdited() && !recentReady && !(await confirmDialog({ title: "Start from the template?", text: "Autosave isn't available in this tab, so your changes to this workbook will be lost. Save it first (Ctrl+S) to keep it.", confirm: "Discard and start", danger: true }))) return;
   notify("Building the template…");
   const wb = await buildTemplate(k);
   fileHandle = null;

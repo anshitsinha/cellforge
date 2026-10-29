@@ -708,14 +708,14 @@
 .cf-start__inner {
   max-width: 1120px;
   margin: 0 auto;
-  padding: 56px var(--space-8) var(--space-8);
+  padding: 36px var(--space-8) var(--space-8);
 }
 
 .cf-start__head {
   display: grid;
   justify-items: center;
-  gap: var(--space-4);
-  margin-bottom: 40px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
   text-align: center;
 }
 
@@ -995,7 +995,7 @@
 .cf-start__foot {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: var(--space-4);
   margin-top: var(--space-8);
   padding-top: var(--space-5);
@@ -1501,4 +1501,78 @@ body.is-start .bottombar {
   width: auto;
   min-width: 80px;
   white-space: nowrap;
+}
+
+/* --- start screen: Recent (workbooks kept in this browser) ---------------- */
+.cf-start__recent {
+  margin-top: var(--space-6);
+}
+
+.cf-start__recent[hidden] {
+  display: none;
+}
+
+.cf-start__recent h2 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.cf-start__recent-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cf-recent {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: auto;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-0);
+  box-shadow: var(--shadow-1);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cf-recent:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-1);
+}
+
+.cf-recent__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent-default);
+}
+
+.cf-recent__text {
+  display: grid;
+  min-width: 0;
+}
+
+.cf-recent__name {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cf-recent__meta {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
 }
