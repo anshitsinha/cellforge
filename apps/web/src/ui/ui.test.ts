@@ -214,3 +214,14 @@ describe("icons", () => {
     }
   });
 });
+
+describe("toast placement", () => {
+  it("centres under the grid, left of an open side panel", async () => {
+    const { toastAnchor } = await import("./toast");
+    expect(toastAnchor(1440, null, false)).toEqual({ centre: 720, top: false });
+    expect(toastAnchor(1440, 1000, false)).toEqual({ centre: 500, top: false });
+    // a phone: the panel covers the sheet, stay centred
+    expect(toastAnchor(390, 0, false).centre).toBe(195);
+    expect(toastAnchor(1440, null, true).top).toBe(true);
+  });
+});

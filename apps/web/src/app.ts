@@ -658,6 +658,8 @@ async function undo() {
       journal({ op: "undo" });
       recorder.undo(label);
       logEvidence({ kind: "undo", label });
+      // say what went, with the way back
+      toast({ kind: "info", text: `Undid ${label}`, action: { label: "Redo", run: () => void redo() } });
     }
     refresh();
   } catch (e) {
@@ -1055,6 +1057,7 @@ async function deleteCols() {
   const top = grid.range.top;
   grid.spliceColumns(left, count, 0); // move widths with the data
   if (await run({ type: "cols.delete", params: { at: left, count } })) {
+    toast({ kind: "info", text: `Deleted ${count} column${count === 1 ? "" : "s"}`, action: { label: "Undo", run: () => void undo() } });
     const col = Math.min(left, source.colCount - 1);
     grid.selectRange({ top, left: col, bottom: top, right: col });
   } else {
@@ -1078,6 +1081,7 @@ async function insertRows(below: boolean) {
 async function deleteRows() {
   const { top, count } = selectedRows();
   if (await run({ type: "rows.delete", params: { at: top, count } })) {
+    toast({ kind: "info", text: `Deleted ${rowFormat.format(count)} row${count === 1 ? "" : "s"}`, action: { label: "Undo", run: () => void undo() } });
     const row = Math.min(top, source.rowCount - 1);
     grid.selectRange({ top: row, left: grid.range.left, bottom: row, right: grid.range.left });
   }

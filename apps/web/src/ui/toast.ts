@@ -112,6 +112,27 @@ export class ToastQueue {
   }
 }
 
+/**
+ * Where the stack sits. Centred under the grid, not the window: with a side
+ * panel open it centres on the area left of the panel (so it never covers
+ * the panel's footer); with a modal dialog open it moves to the top (so it
+ * never covers the dialog's buttons). On a phone a panel covers the sheet,
+ * so the stack stays centred.
+ */
+export function toastAnchor(viewW: number, panelLeft: number | null, dialogOpen: boolean): { centre: number; top: boolean } {
+  const usable = panelLeft !== null && panelLeft > 320 && panelLeft < viewW ? panelLeft : viewW;
+  return { centre: Math.round(usable / 2), top: dialogOpen };
+}
+
+function place(root: HTMLElement): void {
+  const panel = document.querySelector<HTMLElement>(".cf-sidepanel");
+  const r = panel && panel.offsetParent ? panel.getBoundingClientRect() : null;
+  const dialog = !!document.querySelector(".cf-backdrop:not(.is-closing), .palette-backdrop [aria-modal=true]");
+  const a = toastAnchor(innerWidth, r && r.width ? r.left : null, dialog);
+  root.style.left = `${a.centre}px`;
+  root.classList.toggle("cf-toasts--top", a.top);
+}
+
 // ------------------------------------------------------------------ DOM ----
 
 const queue = new ToastQueue();
@@ -228,6 +249,7 @@ function render(item: ToastItem): HTMLElement {
 export function toast(opts: ToastOptions | string): ToastHandle {
   const o: ToastOptions = typeof opts === "string" ? { text: opts } : opts;
   const root = ensureRoot();
+  place(root);
   const { item, repeat, evicted } = queue.push(o);
   for (const gone of evicted) {
     const v = views.get(gone.id);
