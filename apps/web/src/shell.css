@@ -231,7 +231,8 @@
   border-radius: var(--radius-lg);
   background: var(--surface-0);
   box-shadow: none;
-  color: var(--text-subtle);
+  /* placeholder-like, but AA (4.5:1) on the top bar */
+  color: var(--text-muted);
   font-weight: var(--weight-regular);
   text-align: left;
   transition: border-color var(--dur-fast) var(--ease-out);
@@ -254,7 +255,7 @@
 .topbar__search kbd {
   flex: none;
   border-bottom-width: 1px;
-  color: var(--text-subtle);
+  color: var(--text-muted);
   background: var(--surface-1);
 }
 

@@ -56,6 +56,9 @@ body {
 }
 
 :where(kbd) {
+  /* keys read as words ("Ctrl K"), in the UI font like the rest of the chrome */
+  font-family: var(--font-ui);
+  font-weight: var(--weight-medium);
   display: inline-block;
   padding: 0 var(--space-1);
   min-width: 18px;
