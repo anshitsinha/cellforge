@@ -1602,3 +1602,14 @@ body.is-start .bottombar {
 .format-bar.can-left.can-right {
   mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
 }
+
+/* hub section labels stay in view while their list scrolls */
+.cf-hub__section > .cf-section__title {
+  position: sticky;
+  top: calc(-1 * var(--space-4));
+  z-index: 1;
+  margin-left: calc(-1 * var(--space-2));
+  margin-right: calc(-1 * var(--space-2));
+  padding: var(--space-1-5) var(--space-2);
+  background: var(--surface-1);
+}

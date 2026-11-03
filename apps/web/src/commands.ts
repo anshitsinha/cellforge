@@ -451,13 +451,13 @@ export function buildCommands(d: CommandDeps): AppCommand[] {
 function auditTools(d: CommandDeps, sheetName: () => string): Def[] {
   const tools: [AuditToolKind, string, string, IconName, string][] = [
     ["duplicates", "Find duplicates…", "Exact and near-duplicate payments, invoices or entries", "copy", "audit duplicate exact near fuzzy similar vendor invoice double payment"],
-    ["sequence", "Find gaps in a sequence…", "Missing, repeated or out-of-order invoice and cheque numbers", "audit", "audit sequence gap missing invoice cheque number duplicate out of order"],
+    ["sequence", "Find gaps in a sequence…", "Missing, repeated or out-of-order invoice and cheque numbers", "list-check", "audit sequence gap missing invoice cheque number duplicate out of order"],
     ["benford", "Benford's law test…", "First-digit test for made-up or manipulated amounts", "chart", "audit benford first digit two digits chi-square mad fraud"],
     ["stratify", "Stratify values into bands…", "How many items and how much value in each size band", "chart", "audit stratify strata bands value ranges profile"],
     ["topn", "Largest items (top N)…", "The biggest items, for a quick look at what matters", "sort", "audit top n largest biggest items"],
     ["pareto", "Pareto analysis…", "Which few vendors or customers make up most of the value", "chart", "audit pareto 80/20 cumulative share vendor customer concentration"],
     ["ageing", "Ageing buckets…", "Receivables or payables by days overdue: 30, 60, 90+", "calendar", "audit ageing aging days overdue receivables payables 30 60 90"],
-    ["sample", "Pick a sample…", "Random, systematic, stratified or monetary-unit sampling, repeatable", "audit", "audit sample sampling random systematic stratified monetary unit mus seed"],
+    ["sample", "Pick a sample…", "Random, systematic, stratified or monetary-unit sampling, repeatable", "filter", "audit sample sampling random systematic stratified monetary unit mus seed"],
   ];
   return tools.map(([kind, title, description, icon, hint]) => ({
     group: "Audit",
@@ -475,7 +475,7 @@ function jeTools(d: CommandDeps, sheetName: () => string, range: () => CellRange
   const tools: [JeToolKind, string, string, string, IconName, string][] = [
     ["journal", "Journal entry tests…", "Weekend, late-night, round-sum, unbalanced and unusual-user entries, scored", "tests", "audit", "audit je journal entries testing manual weekend holiday after hours round amounts approval limit threshold backdated keywords unusual user seldom account period end duplicate score"],
     ["overlaps", "Red-flag overlaps (vendor vs employee)…", "Vendors who share a bank account, address or phone with staff", "tests", "warning", "audit overlap vendor employee master same bank account address phone tax id similar names fraud"],
-    ["footing", "Foot and cross-foot this range…", "Check that the rows and columns add up to their totals", "schedules", "list-check", "audit footing cross-footing cast add up totals check schedule"],
+    ["footing", "Foot and cross-foot this range…", "Check that the rows and columns add up to their totals", "schedules", "table", "audit footing cross-footing cast add up totals check schedule"],
     ["rollforward", "Roll-forward check…", "Opening + movements = closing, for fixed assets and provisions", "schedules", "scale", "audit roll forward opening movements closing balance fixed assets provisions"],
     ["pii", "PII scan and safe copy…", "Find personal data and make a masked copy to share", "privacy", "shield", "privacy personal data pii gdpr mask hash pseudonymise anonymise redact share safely email phone iban card ssn"],
   ];
