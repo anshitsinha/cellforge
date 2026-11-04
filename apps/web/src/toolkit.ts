@@ -304,3 +304,12 @@ export const count = (n: number): string => n.toLocaleString("en-US");
 export const plural = (n: number, one: string, many = `${one}s`): string => `${count(n)} ${n === 1 ? one : many}`;
 /** "95.7%" */
 export const percent = (x: number, digits = 1): string => `${(Math.round(x * 100 * 10 ** digits) / 10 ** digits).toFixed(digits)}%`;
+
+// -------------------------------------------------------- results sheets --
+
+/**
+ * Writing a tool's output as a sheet: title, one-line summary, totals,
+ * frozen header, fitted widths and formats (see resultsheet.ts). Every
+ * "Create results sheet" button should go through `addResultSheets`.
+ */
+export { addResultSheets, buildResultSheet, headerRowOf, DATE_FMT, INT_FMT, MONEY_FMT, type ResultSheetSpec, type ResultWriter } from "./resultsheet";

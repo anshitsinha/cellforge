@@ -178,6 +178,8 @@ export function buildResultSheet(spec: ResultSheetSpec): ResultLayout {
     const labelCol = [...Array(width).keys()].find((c) => !totalsAt.includes(c));
     if (labelCol !== undefined) source.styles.apply(labelCol, all(totalsRow), { bold: true });
   }
+  // the title and summary span the table (text doesn't spill out of frozen cells)
+  if (width > 1) for (const r of [0, lead.indexOf("summary")]) if (r >= 0) source.merges.push({ top: r, left: 0, bottom: r, right: width - 1 });
   source.frozen = { rows: first, cols: 0 };
   return { source, headerRow, firstRow: first, kept };
 }
