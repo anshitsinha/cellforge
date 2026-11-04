@@ -58,6 +58,13 @@ const PATHS = {
   formula: '<path d="M9.5 20c2 0 2.6-1.2 3-3.5l1.6-9c.4-2.3 1-3.5 3-3.5"/><path d="M8 10h8"/>',
   calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/>',
   sidebar: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
+  wand: '<path d="m4 20 11.5-11.5"/><path d="m13.5 6.5 4 4"/><path d="M19 3v4"/><path d="M17 5h4"/><path d="M9.5 3v2.5"/><path d="M8.25 4.25h2.5"/><path d="M20 12.5v2.5"/><path d="M18.75 13.75h2.5"/>',
+  "list-check": '<path d="m3.5 6 1.5 1.5 3-3"/><path d="m3.5 12.5 1.5 1.5 3-3"/><path d="M11 6h10"/><path d="M11 12.5h10"/><path d="M11 19h10"/><path d="M4.5 19h2"/>',
+  checkbox: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+  dropdown: '<rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M7 12h5"/><path d="m15 11 2 2 2-2"/>',
+  merge: '<path d="M7 3v4c0 3 5 4 5 7v7"/><path d="M17 3v4c0 3-5 4-5 7"/><path d="m9 18 3 3 3-3"/>',
+  "decimal-more": '<text x="12" y="11.5" text-anchor="middle" font-size="11" font-weight="600" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">.00</text><path d="M5 17h13"/><path d="m15.5 14 3 3-3 3"/>',
+  "decimal-less": '<text x="12" y="11.5" text-anchor="middle" font-size="11" font-weight="600" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">.0</text><path d="M19 17H6"/><path d="m8.5 14-3 3 3 3"/>',
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof PATHS;

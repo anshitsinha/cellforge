@@ -354,6 +354,13 @@
   pointer-events: none;
 }
 
+/* a modal dialog is open: keep clear of its footer buttons */
+.cf-toasts--top {
+  top: calc(var(--space-4) + env(safe-area-inset-top, 0px));
+  bottom: auto;
+  flex-direction: column-reverse;
+}
+
 .cf-toast {
   pointer-events: auto;
   display: flex;

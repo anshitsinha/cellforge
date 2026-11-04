@@ -10,6 +10,7 @@
 import { SAMPLES, type SampleKind } from "./samples";
 import type { TemplateKind } from "./templates";
 import { icon, type IconName } from "./ui/icons";
+import { recentDetail, type RecentEntry } from "./persist";
 
 export interface StartScreenDeps {
   openFile: () => void;
@@ -21,6 +22,9 @@ export interface StartScreenDeps {
   /** Esc: back to the sheet as it is */
   dismiss: () => void;
   openAi: () => void;
+  /** workbooks kept in this browser, newest first */
+  recent?: () => readonly RecentEntry[];
+  openRecent?: (id: string) => void;
   /** the AI's status for the AI card */
   aiBadge: () => { dot: string; text: string; title: string };
   onAiStatus: (cb: () => void) => void;
@@ -58,7 +62,7 @@ function button(label: string, cls: string, onClick: () => void, ic?: IconName):
   return b;
 }
 
-export function setupStartScreen(host: HTMLElement, d: StartScreenDeps): { show: () => void; hide: () => void; readonly visible: boolean } {
+export function setupStartScreen(host: HTMLElement, d: StartScreenDeps): { show: () => void; hide: () => void; refreshRecent: () => void; readonly visible: boolean } {
   host.className = "cf-start";
   host.hidden = true;
   host.setAttribute("aria-label", "Start");
@@ -84,7 +88,11 @@ export function setupStartScreen(host: HTMLElement, d: StartScreenDeps): { show:
   const dropText = el("div", "cf-start__drop-text");
   dropText.append(el("h2", "", "Open a file or drop it here"), el("p", "", "Excel, CSV, Parquet, JSON or a .cellforge workbook. A PDF bank statement becomes a sheet of transactions."));
   const dropActions = el("div", "cf-start__actions");
-  dropActions.append(button("Open a file…", "btn-primary", d.openFile, "open"), button("Import a bank statement", "btn-secondary", d.importStatement, "upload"));
+  dropActions.append(
+    button("Open a file…", "btn-primary", d.openFile, "open"),
+    button("Import a bank statement", "btn-secondary", d.importStatement, "upload"),
+    button("Blank workbook", "btn-ghost", d.blank, "plus"),
+  );
   dropText.append(dropActions);
   drop.append(dropIcon, dropText);
   drop.addEventListener("dragover", () => drop.classList.add("is-over"));
@@ -115,6 +123,35 @@ export function setupStartScreen(host: HTMLElement, d: StartScreenDeps): { show:
   paintAi();
   top.append(drop, ai);
 
+  // --- recent workbooks (kept in this browser)
+  const recentBox = el("section", "cf-start__recent");
+  recentBox.setAttribute("aria-labelledby", "cf-start-recent");
+  const paintRecent = () => {
+    const list = d.recent?.() ?? [];
+    recentBox.replaceChildren();
+    recentBox.hidden = !list.length;
+    if (!list.length) return;
+    const h = el("h2", "", "Recent");
+    h.id = "cf-start-recent";
+    const row = el("ul", "cf-start__recent-list");
+    for (const r of list.slice(0, 6)) {
+      const li = el("li");
+      const b = el("button", "cf-recent");
+      b.type = "button";
+      b.title = r.sheetNames?.length ? `Sheets: ${r.sheetNames.join(", ")}` : r.name;
+      const ic = el("span", "cf-recent__icon");
+      ic.append(icon("document", { size: 18 }));
+      const txt = el("span", "cf-recent__text");
+      txt.append(el("span", "cf-recent__name", r.name), el("span", "cf-recent__meta", recentDetail(r)));
+      b.append(ic, txt);
+      b.addEventListener("click", () => d.openRecent?.(r.id));
+      li.append(b);
+      row.append(li);
+    }
+    recentBox.append(h, row);
+  };
+  paintRecent();
+
   // --- workflows
   const flowsHead = el("div", "cf-start__section-head");
   flowsHead.append(el("h2", "", "Start a workflow"), el("p", "", "Each opens a workbook laid out for the job, with fictional sample data so you can try it first."));
@@ -140,12 +177,11 @@ export function setupStartScreen(host: HTMLElement, d: StartScreenDeps): { show:
 
   // --- blank
   const foot = el("footer", "cf-start__foot");
-  const blank = button("Blank workbook", "btn-ghost", d.blank, "plus");
   const hint = el("span", "cf-start__hint");
   hint.innerHTML = `<kbd>Esc</kbd> goes to the sheet · <kbd>Ctrl</kbd> <kbd>K</kbd> finds any command · <kbd>F1</kbd> asks the guide`;
-  foot.append(blank, hint);
+  foot.append(hint);
 
-  inner.append(head, top, flowsHead, flows, foot);
+  inner.append(head, top, recentBox, flowsHead, flows, foot);
   host.append(inner);
 
   host.addEventListener("keydown", (e) => {
@@ -157,7 +193,9 @@ export function setupStartScreen(host: HTMLElement, d: StartScreenDeps): { show:
 
   let visible = false;
   return {
+    refreshRecent: paintRecent,
     show: () => {
+      paintRecent();
       host.hidden = false;
       visible = true;
       document.body.classList.add("is-start");

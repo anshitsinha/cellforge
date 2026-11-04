@@ -96,6 +96,8 @@ export async function mount(root: HTMLElement) {
   show();
   // open on the movements that need explaining
   sheet.grid.select(1, 7);
+  // start at column A, so a phone shows the account names, not just the flags
+  sheet.grid.scrollIntoView(1, 0);
   const tabs = sheetTabs(frame, SHEETS, (i) => {
     active = i;
     show();

@@ -69,9 +69,7 @@ export const HUBS: Hub[] = [
     sections: [
       { title: "Journal entries", ids: ["je-journal", "audit-duplicates", "audit-sequence", "audit-benford", "je-overlaps"] },
       { title: "Analytics", ids: ["audit-stratify", "audit-topn", "audit-pareto", "audit-ageing"] },
-      { title: "Sampling", ids: ["audit-sample"] },
-      { title: "Schedules", ids: ["je-footing", "je-rollforward"] },
-      { title: "Privacy", ids: ["je-pii"] },
+      { title: "Sampling, schedules and privacy", ids: ["audit-sample", "je-footing", "je-rollforward", "je-pii"] },
     ],
     next: (c) =>
       c.empty

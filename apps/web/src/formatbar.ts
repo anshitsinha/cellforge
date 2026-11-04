@@ -1,5 +1,7 @@
 import type { Action } from "@cellforge/actions";
-import { adjustDecimals } from "@cellforge/core";
+import { adjustDecimals, getLocale } from "@cellforge/core";
+import { currencyCode, currencySymbol, formatName } from "./numfmtname";
+import { iconSvg } from "./ui/icons";
 import type { CellStyle, Grid } from "@cellforge/grid";
 import type { EditableSource } from "./editable";
 import { CLEAR_ALL, type StylePatch } from "./styles";
@@ -61,6 +63,14 @@ const ICONS = {
 
 export function setupFormatBar(d: FormatBarDeps): { sync: () => void } {
   const { root, grid } = d;
+  // the locale's currency (£ on UK books), for the button, the menu and Ctrl+Shift+4
+  const locale = getLocale().id;
+  const sym = currencySymbol(locale);
+  const curCode = currencyCode(locale);
+  const swap = (t: string) => t.split("$").join(sym);
+  const formats = NUMBER_FORMATS.map(([name, code, ex]): [string, string, string] =>
+    name === "Currency" ? [name, curCode, sym === "€" ? "1,234.50 €" : `${sym}1,234.50`] : name === "Accounting" ? [name, swap(code), swap(ex)] : [name, code, ex],
+  );
   root.innerHTML = `
     <button type="button" data-toggle="bold" title="Bold (Ctrl+B)" aria-pressed="false"><b>B</b></button>
     <button type="button" data-toggle="italic" title="Italic (Ctrl+I)" aria-pressed="false"><i>I</i></button>
@@ -71,17 +81,17 @@ export function setupFormatBar(d: FormatBarDeps): { sync: () => void } {
     </select>
     <span class="toolbar-sep"></span>
     <select id="fmt-number" title="Number format">
-      ${NUMBER_FORMATS.map(([name, code, ex]) => `<option value="${escapeAttr(code)}">${name}${code ? " · " + ex : ""}</option>`).join("")}
+      ${formats.map(([name, code, ex]) => `<option value="${escapeAttr(code)}">${name}${code ? " · " + ex : ""}</option>`).join("")}
       <option value="__custom" id="fmt-number-custom">Custom…</option>
     </select>
-    <button type="button" id="fmt-currency" title="Currency (Ctrl+Shift+4)">$</button>
+    <button type="button" id="fmt-currency" title="Currency, ${sym} (Ctrl+Shift+4)" aria-label="Currency format">${sym}</button>
     <button type="button" id="fmt-percent" title="Percent (Ctrl+Shift+5)">%</button>
     <button type="button" id="fmt-comma" title="Thousands separator (Ctrl+Shift+1)">,</button>
-    <button type="button" id="fmt-dec-more" title="More decimal places">.0<sup>+</sup></button>
-    <button type="button" id="fmt-dec-less" title="Fewer decimal places">.0<sup>−</sup></button>
+    <button type="button" id="fmt-dec-more" class="fmt-dec" title="Increase decimal places (.0 → .00)" aria-label="Increase decimal places">${iconSvg("decimal-more", { size: 20 })}</button>
+    <button type="button" id="fmt-dec-less" class="fmt-dec" title="Decrease decimal places (.00 → .0)" aria-label="Decrease decimal places">${iconSvg("decimal-less", { size: 20 })}</button>
     <span class="toolbar-sep"></span>
-    <label class="swatch" title="Text colour"><span class="swatch-a">A</span><i id="fmt-color-bar"></i><input type="color" id="fmt-color" value="#c00000" /></label>
-    <label class="swatch" title="Fill colour"><span class="swatch-fill"></span><i id="fmt-fill-bar"></i><input type="color" id="fmt-fill" value="#fff2cc" /></label>
+    <label class="fmt-swatch" title="Text colour"><span class="fmt-swatch__a">A</span><i id="fmt-color-bar"></i><input type="color" id="fmt-color" value="#c00000" aria-label="Text colour" /></label>
+    <label class="fmt-swatch" title="Fill colour"><span class="fmt-swatch__fill"></span><i id="fmt-fill-bar"></i><input type="color" id="fmt-fill" value="#fff2cc" aria-label="Fill colour" /></label>
     <span class="toolbar-sep"></span>
     <button type="button" data-align="left" title="Align left" aria-pressed="false">${ICONS.left}</button>
     <button type="button" data-align="center" title="Centre" aria-pressed="false">${ICONS.center}</button>
@@ -105,6 +115,21 @@ export function setupFormatBar(d: FormatBarDeps): { sync: () => void } {
     <button type="button" id="fmt-painter" title="Format painter: copy the look of the selected cell, then select where it goes. Double-click to keep painting; Esc stops." aria-pressed="false">${ICONS.painter}</button>
     <button type="button" id="fmt-clear" title="Clear formatting (Ctrl+\\)">${ICONS.clear}</button>
   `;
+
+  // narrow screens: the bar scrolls sideways; fade the edge that has more
+  const edges = () => {
+    const max = root.scrollWidth - root.clientWidth;
+    root.classList.toggle("can-left", root.scrollLeft > 2);
+    root.classList.toggle("can-right", max - root.scrollLeft > 2);
+  };
+  root.addEventListener("scroll", edges, { passive: true });
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(edges).observe(root);
+  // a vertical wheel scrolls the bar sideways
+  root.addEventListener("wheel", (e) => {
+    if (root.scrollWidth <= root.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    root.scrollLeft += e.deltaY;
+    e.preventDefault();
+  }, { passive: false });
 
   const $ = <T extends HTMLElement>(sel: string) => root.querySelector(sel) as T;
   const size = $<HTMLSelectElement>("#fmt-size");
@@ -179,7 +204,7 @@ export function setupFormatBar(d: FormatBarDeps): { sync: () => void } {
     if (v === "__custom") openCustom();
     else void setCode(v).then(after);
   });
-  $<HTMLButtonElement>("#fmt-currency").addEventListener("click", () => void setCode("$#,##0.00").then(after));
+  $<HTMLButtonElement>("#fmt-currency").addEventListener("click", () => void setCode(curCode).then(after));
   $<HTMLButtonElement>("#fmt-percent").addEventListener("click", () => void setCode("0%").then(after));
   $<HTMLButtonElement>("#fmt-comma").addEventListener("click", () => void setCode("#,##0.00").then(after));
   const decimals = (delta: 1 | -1) => {
@@ -286,7 +311,7 @@ export function setupFormatBar(d: FormatBarDeps): { sync: () => void } {
     } else if (e.shiftKey && (e.code === "Digit5" || e.code === "Digit4" || e.code === "Digit1")) {
       // Excel: Ctrl+Shift+% percent, Ctrl+Shift+$ currency, Ctrl+Shift+! number
       e.preventDefault();
-      void setCode(e.code === "Digit5" ? "0%" : e.code === "Digit4" ? "$#,##0.00" : "#,##0.00");
+      void setCode(e.code === "Digit5" ? "0%" : e.code === "Digit4" ? curCode : "#,##0.00");
     } else if (e.key === "\\") {
       e.preventDefault();
       void d.run({ type: "format.clear", params: { range: grid.range } });
@@ -305,9 +330,12 @@ export function setupFormatBar(d: FormatBarDeps): { sync: () => void } {
     size.value = String(st.size ?? 10);
     mergeBtn.setAttribute("aria-pressed", String(mergedHere()));
     const code = st.numFmt ?? "";
-    const known = NUMBER_FORMATS.some(([, c]) => c === code);
-    customOpt.textContent = known ? "Custom…" : `Custom · ${code}`;
+    const known = formats.find(([, c]) => c === code);
+    // a friendly name for any common format; the code itself only in the tooltip
+    const named = formatName(code);
+    customOpt.textContent = known ? "Custom…" : named.custom ? "Custom" : named.name;
     numberSel.value = known ? code : "__custom";
+    numberSel.title = code ? `Number format: ${known ? known[0] : named.name} (${code})` : "Number format: General";
   }
   return { sync };
 }

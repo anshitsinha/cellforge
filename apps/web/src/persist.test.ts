@@ -3,7 +3,7 @@ import { ActionHistory, BlobStore } from "@cellforge/actions";
 import { Table } from "@cellforge/core";
 import { setCells, sheetActions, type SheetCtx } from "./actions";
 import { BlankSource, EditableSource } from "./editable";
-import { AutoSaver, fromFile, MemoryStore, packWorkbook, toFile, unpackWorkbook, type JournalEntry } from "./persist";
+import { addRecent, AutoSaver, fromFile, MAX_RECENT, MemoryStore, packWorkbook, readRecentIndex, recentDetail, RecentWorkbooks, removeRecent, timeAgo, toFile, unpackWorkbook, type JournalEntry } from "./persist";
 import { Workbook } from "./workbook";
 
 async function sortRows(sheet: EditableSource, col: number, descending: boolean) {
@@ -183,5 +183,75 @@ describe("named versions", () => {
     expect(wb.versions).toEqual([]);
     await history.undo();
     expect(wb.versions.map((v) => v.name)).toEqual(["sent to auditor"]);
+  });
+});
+
+describe("recent workbooks", () => {
+  const entry = (id: string, savedAt = 0) => ({ id, name: id, savedAt, sheets: 1 });
+
+  it("keeps the newest first, without repeats, and drops the oldest past the limit", () => {
+    let list = [entry("a"), entry("b")];
+    ({ list } = addRecent(list, entry("b")));
+    expect(list.map((e) => e.id)).toEqual(["b", "a"]);
+    const r = addRecent(list, entry("c"), 2);
+    expect(r.list.map((e) => e.id)).toEqual(["c", "b"]);
+    expect(r.dropped).toEqual(["a"]);
+    expect(removeRecent(r.list, "c").map((e) => e.id)).toEqual(["b"]);
+  });
+
+  it("says how long ago in words", () => {
+    const now = Date.UTC(2026, 10, 17, 12);
+    expect(timeAgo(now - 10_000, now)).toBe("just now");
+    expect(timeAgo(now - 5 * 60_000, now)).toBe("5 min ago");
+    expect(timeAgo(now - 3 * 3600_000, now)).toBe("3 h ago");
+    expect(timeAgo(now - 26 * 3600_000, now)).toBe("yesterday");
+    expect(timeAgo(now - 4 * 86400_000, now)).toBe("4 days ago");
+    expect(recentDetail({ ...entry("x", now - 60_000), sheets: 3 }, now)).toBe("3 sheets · 1 min ago");
+  });
+
+  it("reads only well-formed index entries", () => {
+    expect(readRecentIndex("not json")).toEqual([]);
+    expect(readRecentIndex(JSON.stringify([entry("a"), { id: 3 }, null]))).toEqual([entry("a")]);
+  });
+
+  it("parks a workbook and gives it back whole, then forgets it", async () => {
+    const folders = new Map<string, MemoryStore>();
+    const home = {
+      folder: async (n: string) => folders.get(n) ?? (folders.set(n, new MemoryStore()), folders.get(n)!),
+      removeFolder: async (n: string) => void folders.delete(n),
+    };
+    let n = 0;
+    const recent = new RecentWorkbooks(home, () => `w${++n}`);
+    await recent.load();
+    const wb = new Workbook({ name: "Cash book", source: new EditableSource(new BlankSource(10, 3)) });
+    const { history } = session(wb);
+    await history.run(setCells([{ row: 0, col: 0, input: "kept" }]));
+    const e = await recent.park(wb, wb.sheets[0].id, "Bank rec", 1000);
+    expect(e).toMatchObject({ id: "w1", name: "Bank rec", sheets: 1, savedAt: 1000 });
+    expect(recent.entries.map((x) => x.id)).toEqual(["w1"]);
+    // a fresh instance reads the same index
+    const again = new RecentWorkbooks(home);
+    expect((await again.load()).map((x) => x.name)).toEqual(["Bank rec"]);
+    const back = await again.take("w1");
+    expect(back?.name).toBe("Bank rec");
+    expect(back?.workbook.sheets[0].source.getCell(0, 0)).toBe("kept");
+    expect(again.entries).toEqual([]);
+    expect(folders.has("recent-w1")).toBe(false);
+  });
+
+  it("deletes the oldest workbook's files when the list is full", async () => {
+    const folders = new Map<string, MemoryStore>();
+    const home = { folder: async (n: string) => folders.get(n) ?? (folders.set(n, new MemoryStore()), folders.get(n)!), removeFolder: async (n: string) => void folders.delete(n) };
+    let n = 0;
+    const recent = new RecentWorkbooks(home, () => `w${++n}`);
+    for (let i = 0; i < MAX_RECENT + 1; i++) {
+      const wb = new Workbook({ name: `S${i}`, source: new EditableSource(new BlankSource(2, 2)) });
+      await recent.park(wb, wb.sheets[0].id, `Book ${i}`);
+    }
+    expect(recent.entries.length).toBe(MAX_RECENT);
+    expect(folders.has("recent-w1")).toBe(false);
+    expect(folders.has(`recent-w${MAX_RECENT + 1}`)).toBe(true);
+    expect(await recent.clear()).toBe(MAX_RECENT);
+    expect([...folders.keys()].filter((k) => k.startsWith("recent"))).toEqual([]);
   });
 });

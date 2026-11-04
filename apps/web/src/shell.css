@@ -61,7 +61,9 @@
 }
 
 .topbar__doc {
-  flex: 1 1 auto;
+  /* basis 0: the menu bar's width is the room left, not its contents, so
+     the More overflow (menubar.ts) can't feed back into the layout */
+  flex: 1 1 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -156,6 +158,14 @@
   outline-offset: -2px;
 }
 
+.cf-menubar__item[hidden] {
+  display: none;
+}
+
+.cf-menubar__more {
+  color: var(--text-muted);
+}
+
 /* --- actions */
 
 .topbar__actions {
@@ -221,7 +231,8 @@
   border-radius: var(--radius-lg);
   background: var(--surface-0);
   box-shadow: none;
-  color: var(--text-subtle);
+  /* placeholder-like, but AA (4.5:1) on the top bar */
+  color: var(--text-muted);
   font-weight: var(--weight-regular);
   text-align: left;
   transition: border-color var(--dur-fast) var(--ease-out);
@@ -244,7 +255,7 @@
 .topbar__search kbd {
   flex: none;
   border-bottom-width: 1px;
-  color: var(--text-subtle);
+  color: var(--text-muted);
   background: var(--surface-1);
 }
 
@@ -708,14 +719,14 @@
 .cf-start__inner {
   max-width: 1120px;
   margin: 0 auto;
-  padding: 56px var(--space-8) var(--space-8);
+  padding: 36px var(--space-8) var(--space-8);
 }
 
 .cf-start__head {
   display: grid;
   justify-items: center;
-  gap: var(--space-4);
-  margin-bottom: 40px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
   text-align: center;
 }
 
@@ -995,7 +1006,7 @@
 .cf-start__foot {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: var(--space-4);
   margin-top: var(--space-8);
   padding-top: var(--space-5);
@@ -1432,10 +1443,6 @@ body.is-start .bottombar {
     padding: 0 10px;
   }
 
-  .cf-menubar {
-    mask-image: linear-gradient(to right, #000 85%, transparent);
-    padding-right: var(--space-6);
-  }
 
   .status-bar #status-left {
     display: none;
@@ -1501,4 +1508,108 @@ body.is-start .bottombar {
   width: auto;
   min-width: 80px;
   white-space: nowrap;
+}
+
+/* --- start screen: Recent (workbooks kept in this browser) ---------------- */
+.cf-start__recent {
+  margin-top: var(--space-6);
+}
+
+.cf-start__recent[hidden] {
+  display: none;
+}
+
+.cf-start__recent h2 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.cf-start__recent-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cf-recent {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: auto;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-0);
+  box-shadow: var(--shadow-1);
+  text-align: left;
+  cursor: pointer;
+}
+
+.cf-recent:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-1);
+}
+
+.cf-recent__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  color: var(--accent-default);
+}
+
+.cf-recent__text {
+  display: grid;
+  min-width: 0;
+}
+
+.cf-recent__name {
+  overflow: hidden;
+  color: var(--text-strong);
+  font-weight: var(--weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cf-recent__meta {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+@media (max-width: 720px) {
+  .file-name__prefix {
+    display: none;
+  }
+}
+
+/* the format bar scrolls sideways on narrow screens; a fade marks the side with more */
+.format-bar.can-right {
+  mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+}
+
+.format-bar.can-left {
+  mask-image: linear-gradient(to left, #000 calc(100% - 32px), transparent);
+}
+
+.format-bar.can-left.can-right {
+  mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent);
+}
+
+/* hub section labels stay in view while their list scrolls */
+.cf-hub__section > .cf-section__title {
+  position: sticky;
+  top: calc(-1 * var(--space-4));
+  z-index: 1;
+  margin-left: calc(-1 * var(--space-2));
+  margin-right: calc(-1 * var(--space-2));
+  padding: var(--space-1-5) var(--space-2);
+  background: var(--surface-1);
 }

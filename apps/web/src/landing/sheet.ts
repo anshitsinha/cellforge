@@ -140,7 +140,10 @@ export class LiveSheet {
     if (source !== this.source) {
       this.source = source;
       this.grid.setSource(source);
-      if (!keepSelection) this.grid.selectRange({ top: 0, left: 0, bottom: 0, right: 0 });
+      if (!keepSelection) {
+        this.grid.selectRange({ top: 0, left: 0, bottom: 0, right: 0 });
+        this.grid.scrollIntoView(0, 0);
+      }
     }
     this.layout(view);
   }
@@ -173,6 +176,8 @@ export class LiveSheet {
     g.scrollIntoView(Math.min(last, range.bottom + 4), select.right);
     g.scrollIntoView(Math.max(0, range.top - 4), select.left);
     g.scrollIntoView(range.top, select.left);
+    // the label column stays in view (on a phone the selection may not fit beside it)
+    g.scrollIntoView(range.top, 0);
     if (highlight) g.setHighlights([{ range, color: highlight }]);
   }
 

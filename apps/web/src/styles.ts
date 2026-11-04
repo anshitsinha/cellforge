@@ -33,6 +33,7 @@ const KEYS: (keyof CellStyle)[] = [
   "borderRight",
   "borderBottom",
   "borderLeft",
+  "role",
 ];
 
 function keyOf(style: CellStyle): string {

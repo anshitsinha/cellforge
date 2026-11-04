@@ -24,7 +24,9 @@ import { bindSqlStore, registerSqlActions } from "./sqlpanel";
 import { bindChecksStore, gateExport, registerCheckActions } from "./checksui";
 import { RecipeRecorder, unbindAction, usedMemory } from "./recipe";
 import { openLineage } from "./lineagepanel";
-import { askContext, setupAskBar } from "./askbar";
+import { aggregateFigure, askContext, setupAskBar, sheetInfo, type FigureView } from "./askbar";
+import type { Figure } from "@cellforge/ai";
+import { formatCell } from "./ui/table";
 import { registerReportActions } from "./reports/actions";
 import { openAskGuide } from "./askguide";
 import { aiStatus, currentModel, onAiStatus } from "./localmodel";
@@ -42,12 +44,16 @@ import { chartSpecs, closeChart, openChart, refreshCharts } from "./charts/panel
 import { registerFindActions } from "./findreplace";
 import { delocalizeFormula, jsonToColumns, localizeFormula, readParquet, Table } from "@cellforge/core";
 import { installA11y } from "./a11y";
+import { installModalGate } from "./ui/modalgate";
 import { startLocale } from "./locale";
 import { setupPalette } from "./palette";
 import { setupHistoryPanel, type TrailEntry } from "./historypanel";
-import { AutoSaver, fromFile, OpfsStore, packWorkbook, toFile, unpackWorkbook, type JournalEntry } from "./persist";
+import { AutoSaver, fromFile, OpfsStore, opfsHome, packWorkbook, RecentWorkbooks, toFile, unpackWorkbook, type JournalEntry } from "./persist";
 import { sheetNameProblem, Workbook } from "./workbook";
 import { extractKeys, sortInWorker } from "./sort";
+import { dataExtent, dataRows } from "./usedrange";
+import { sortedMessage, type SortKeyInfo } from "./sorttext";
+import { toast } from "./ui/toast";
 import { formatBytes, importCsv } from "./importer";
 import { confirmDialog } from "./ui/confirm";
 import { openDialog } from "./ui/dialog";
@@ -115,6 +121,8 @@ const coarsePointer = matchMedia("(pointer: coarse)").matches;
 // the number format and separators people expect where they are, and keyboard / screen reader support in dialogs
 startLocale();
 installA11y();
+// one modal at a time: global shortcuts wait while a dialog is open
+installModalGate();
 const grid = new Grid(
   sheet,
   source,
@@ -127,13 +135,41 @@ mountSidePanelHost(sheet);
 
 /** The sheet's size, quietly, on the left of the status bar. */
 function updateStatus() {
-  statusLeft.textContent = !sheetIsBlank(source) ? `${rowFormat.format(source.rowCount)} row${source.rowCount === 1 ? "" : "s"} · ${source.colCount} column${source.colCount === 1 ? "" : "s"}` : "";
+  // the rows and columns that show data, not the sheet's allocated size
+  // (a template's 2,000 formula rows that show "" aren't data)
+  const ext = sheetIsBlank(source) ? { rows: 0, cols: 0 } : dataExtent(source);
+  // a header row isn't a data row: a 128-line cash book says 128 rows, like the reconciliation
+  const header = ext.rows > 1 && sheetInfo("", "", source).headerRow === 0 ? 1 : 0;
+  const rows = ext.rows - header;
+  const cols = ext.cols;
+  statusLeft.textContent = rows ? `${rowFormat.format(rows)} row${rows === 1 ? "" : "s"} · ${cols} column${cols === 1 ? "" : "s"}` : "";
+}
+
+/** Monospace only for a formula; values read in the UI font, as in Sheets and Excel. */
+function markFormula() {
+  formulaInput.classList.toggle("is-formula", formulaInput.value.trimStart().startsWith("="));
+}
+formulaInput.addEventListener("input", markFormula);
+
+/** The workbook's name in the top bar; "Sample — " is dropped on a phone (shell.css). */
+function showFileName(name: string) {
+  const m = /^(Sample\s+[—–-]\s+)(.+)$/.exec(name);
+  fileName.title = name;
+  if (!m) {
+    fileName.textContent = name;
+    return;
+  }
+  const pre = document.createElement("span");
+  pre.className = "file-name__prefix";
+  pre.textContent = m[1];
+  fileName.replaceChildren(pre, m[2]);
 }
 
 function syncFormulaBar() {
   const { row, col } = grid.selection;
   cellRef.textContent = `${columnLetter(col)}${row + 1}`;
   formulaInput.value = localizeFormula(source.getEditText(row, col));
+  markFormula();
 }
 
 // --- status bar (right side) ----------------------------------------------------
@@ -405,12 +441,31 @@ const recipeFilesDeps = () => ({
 const recorder = new RecipeRecorder();
 
 /** Run a user action; problems are reported in the status bar, not thrown. */
+const SORTS = new Set(["rows.sort", "rows.sortBy"]);
+
+/** A sort ends on its result ("Sorted 1,772 rows by Amount, largest first · Undo"), never on its progress toast. */
+function reportSort(action: Action, applied: boolean) {
+  notify.endProgress();
+  if (!applied) return;
+  const p = action.params as { col?: number; descending?: boolean; keys?: { col: number; descending?: boolean }[]; hasHeader?: boolean; sheet?: string };
+  const src = p.sheet && workbook.has(p.sheet) ? workbook.get(p.sheet).source : source;
+  const keys = p.keys ?? (p.col !== undefined ? [{ col: p.col, descending: p.descending }] : []);
+  const header = p.hasHeader ? 1 : 0;
+  const info: SortKeyInfo[] = keys.map((k) => ({
+    name: src.getColumnName(k.col) ?? (header ? String(src.getCell(0, k.col) ?? "") || columnLetter(k.col) : columnLetter(k.col)),
+    descending: !!k.descending,
+    numeric: typeof src.getCell(header, k.col) === "number",
+  }));
+  toast({ kind: "success", text: sortedMessage(Math.max(0, dataRows(src) - header), info), action: { label: "Undo", run: () => void undo() } });
+}
+
 async function run(action: Action) {
   try {
     const sheetName = workbook.has(activeId) ? workbook.get(activeId).name : "";
     const mem0 = usedMemory();
     const t0 = performance.now();
     const applied = await history.run(action);
+    if (SORTS.has(action.type)) reportSort(action, !!applied);
     if (applied) {
       journal({ op: "run", action });
       recordTrail(action);
@@ -603,6 +658,8 @@ async function undo() {
       journal({ op: "undo" });
       recorder.undo(label);
       logEvidence({ kind: "undo", label });
+      // say what went, with the way back
+      toast({ kind: "info", text: `Undid ${label}`, action: { label: "Redo", run: () => void redo() } });
     }
     refresh();
   } catch (e) {
@@ -657,9 +714,8 @@ async function sortBy(descending: boolean) {
   const started = performance.now();
   const applied = await run({ type: "rows.sort", params: { col, descending } });
   if (!applied) return; // cancelled by a newer sort, or failed
-  notify(`Sorted ${rowFormat.format(source.rowCount)} rows by ${name} in ${(
-    (performance.now() - started) / 1000
-  ).toFixed(2)}s`);
+  // run() has said what was sorted; the timing goes to the status bar
+  setInfo(`Sorted by ${name} in ${((performance.now() - started) / 1000).toFixed(2)}s`);
 }
 
 
@@ -940,7 +996,10 @@ formulaInput.addEventListener("keydown", (e) => {
 
 // mirror what's being typed in the cell editor into the formula bar
 sheet.addEventListener("input", (e) => {
-  if (e.target instanceof HTMLInputElement) formulaInput.value = e.target.value;
+  if (e.target instanceof HTMLInputElement) {
+    formulaInput.value = e.target.value;
+    markFormula();
+  }
 });
 
 function workbookEdited() {
@@ -998,6 +1057,7 @@ async function deleteCols() {
   const top = grid.range.top;
   grid.spliceColumns(left, count, 0); // move widths with the data
   if (await run({ type: "cols.delete", params: { at: left, count } })) {
+    toast({ kind: "info", text: `Deleted ${count} column${count === 1 ? "" : "s"}`, action: { label: "Undo", run: () => void undo() } });
     const col = Math.min(left, source.colCount - 1);
     grid.selectRange({ top, left: col, bottom: top, right: col });
   } else {
@@ -1021,6 +1081,7 @@ async function insertRows(below: boolean) {
 async function deleteRows() {
   const { top, count } = selectedRows();
   if (await run({ type: "rows.delete", params: { at: top, count } })) {
+    toast({ kind: "info", text: `Deleted ${rowFormat.format(count)} row${count === 1 ? "" : "s"}`, action: { label: "Undo", run: () => void undo() } });
     const row = Math.min(top, source.rowCount - 1);
     grid.selectRange({ top: row, left: grid.range.left, bottom: row, right: grid.range.left });
   }
@@ -1181,7 +1242,7 @@ sheet.addEventListener("contextmenu", (e) => {
   cellMenu = menu;
 });
 
-fileName.textContent = currentName;
+showFileName(currentName);
 statusRight.textContent = infoText;
 syncFormulaBar();
 updateStatus();
@@ -1195,6 +1256,9 @@ grid.focus();
 
 const saveState = document.getElementById("save-state")!;
 let saver: AutoSaver | null = null;
+// Recent: starting another workbook puts the current one away here first (persist.ts)
+const recent = new RecentWorkbooks(opfsHome);
+let recentReady = false;
 let replaying = false;
 // how many journal entries an undo / redo can still be expressed against;
 // past that (undoing something from before the last snapshot) we snapshot
@@ -1281,6 +1345,13 @@ async function startAutosave() {
     return;
   }
   saver = new AutoSaver(store);
+  try {
+    await recent.load();
+    recentReady = true;
+    refreshRecent();
+  } catch {
+    recentReady = false;
+  }
   if (startWithDemo || startSample) return void snapshotNow();
   try {
     const last = await AutoSaver.load(store);
@@ -1294,7 +1365,8 @@ async function startAutosave() {
     }
     replaying = false;
     refresh();
-    notify("Picked up where you left off.");
+    // only when there was something to pick up
+    if (!isEmptyWorkbook()) notify("Picked up where you left off.");
     void snapshotNow();
   } catch (e) {
     replaying = false;
@@ -1505,7 +1577,39 @@ const askBar = setupAskBar({
   // the local model, when one is loaded; one kept from last time loads in the background on first use
   model: () => currentModel(),
   ai: { status: aiStatus, subscribe: (cb) => onAiStatus(() => cb()), setup: () => openAiPanel(aiPanelDeps()) },
+  figure: (f) => figureView(f),
+  dataRows: (id) => (workbook.has(id) ? dataRows(workbook.get(id).source) : 0),
 });
+
+/** Most rows the ask bar adds up on the spot; past that, Insert the formula and let the engine do it. */
+const FIGURE_MAX_ROWS = 2_000_000;
+
+/** "Total of Amount": the value now, and an Insert into the selected cell when it is free. */
+function figureView(f: Figure): FigureView | null {
+  const id = f.sheet ?? activeId;
+  if (!workbook.has(id)) return null;
+  const sheetObj = workbook.get(id);
+  const src = sheetObj.source;
+  const last = Math.min(f.range.bottom, dataRows(src) - 1);
+  let value = "…";
+  if (last - f.range.top + 1 > FIGURE_MAX_ROWS) value = "Too many rows to add up here";
+  else {
+    function* cells() {
+      for (let r = f.range.top; r <= last; r++) yield src.getCell(r, f.col);
+    }
+    const v = aggregateFigure(f.fn, cells());
+    value = v === null ? "No numbers" : formatCell(v, f.fn === "COUNTA" ? "integer" : "amount");
+  }
+  const { row, col } = grid.selection;
+  const ref = `${columnLetter(col)}${row + 1}`;
+  const inside = id === activeId && col === f.col && row >= f.range.top && row <= f.range.bottom;
+  const free = source.getEditText(row, col) === "";
+  const quoted = /^[A-Za-z_][\w.]*$/.test(sheetObj.name) ? sheetObj.name : `'${sheetObj.name.replace(/'/g, "''")}'`;
+  const formula = id === activeId ? f.formula : f.formula.replace(/^=(\w+)\((.*)\)$/, (_m, fn: string, r: string) => `=${fn}(${quoted}!${r})`);
+  const insert = !inside && free ? { action: { type: "cells.set", params: { cells: [{ row, col, input: formula }] } } as Action, ref } : null;
+  const why = inside ? `${ref} is inside the column being added up; select an empty cell elsewhere to insert the formula.` : free ? undefined : `${ref} isn't empty; select an empty cell to insert the formula there.`;
+  return { value, sheetName: sheetObj.name, insert, why };
+}
 
 /** What the AI panel needs from the app (also for the shell's "Ask AI" button). */
 function aiPanelDeps(): AiPanelDeps {
@@ -1532,7 +1636,8 @@ async function saveProtected() {
 
 async function clearLocal() {
   if (!(await confirmClear())) return grid.focus();
-  const n = (await clearLocalData(saver?.store ?? (await OpfsStore.open()))) + (await clearLocalData(docStore));
+  const n = (await clearLocalData(saver?.store ?? (await OpfsStore.open()))) + (await clearLocalData(docStore)) + (await recent.clear().catch(() => 0));
+  refreshRecent();
   notify(`Cleared ${n} stored item${n === 1 ? "" : "s"}. Reload the page to start fresh.`);
 }
 
@@ -1620,6 +1725,8 @@ const commandDeps: CommandDeps = {
   canUndo: () => history.canUndo,
   canRedo: () => history.canRedo,
   newWorkbook: () => void newWorkbook(),
+  recent: () => recent.entries,
+  openRecent: (id) => void openRecent(id),
   showStartScreen: () => startScreen.show(),
   openFile: () => openFilePicker(),
   saveFile: (saveAs) => saveFile(saveAs),
@@ -1719,7 +1826,8 @@ void menubar;
   ai.prepend(icon("ai"));
   const dot = ai.querySelector<HTMLElement>(".ai-dot")!;
   const chip = ai.querySelector<HTMLElement>(".ai-chip")!;
-  ai.addEventListener("click", () => toggleAiPanel(aiPanelDeps()));
+  // always the ask bar, input focused; its chip says whether the private AI is set up
+  ai.addEventListener("click", () => askBar.open());
   const paint = () => {
     const b = aiBadge();
     dot.dataset.state = b.dot;
@@ -1776,6 +1884,8 @@ const startScreen = setupStartScreen(startHost, {
     grid.focus();
   },
   openAi: () => openAiPanel(aiPanelDeps()),
+  recent: () => recent.entries,
+  openRecent: (id) => void openRecent(id),
   aiBadge,
   onAiStatus: (cb) => onAiStatus(() => cb()),
 });
@@ -1791,7 +1901,56 @@ function loadSource(next: EditableSource, name: string) {
 /** The file being opened, fingerprinted into the workbook it becomes. */
 let openingFile: File | null = null;
 
+/**
+ * Put the workbook on screen away in Recent before another replaces it, so
+ * starting something new never loses work. Nothing to keep: a blank,
+ * untouched workbook, or while autosave is replaying.
+ */
+function parkCurrent() {
+  if (!recentReady || replaying || isEmptyWorkbook()) return;
+  const was = currentName;
+  recent.park(workbook, activeId, currentName).then(
+    (e) => {
+      refreshRecent();
+      if (e) toast({ kind: "info", text: `“${was}” is kept in Recent.`, action: { label: "Open it", run: () => void openRecent(e.id) } });
+    },
+    (err) => notify.error(`Couldn't keep “${was}” in Recent: ${(err as Error).message}`),
+  );
+}
+
+/** Open a workbook from Recent (the one on screen goes to Recent in its place). */
+async function openRecent(id: string) {
+  const got = await recent.take(id);
+  if (!got) {
+    notify.error("That workbook is no longer kept in this browser.");
+    refreshRecent();
+    return;
+  }
+  fileHandle = null;
+  loadWorkbook(got.workbook, got.active, got.name);
+  replaying = true;
+  try {
+    for (const e of got.journal) {
+      if (e.op === "run") await history.run(e.action);
+      else if (e.op === "undo") await history.undo();
+      else await history.redo();
+    }
+  } finally {
+    replaying = false;
+  }
+  refresh();
+  refreshRecent();
+  void snapshotNow();
+  notify(`Opened “${got.name}” from Recent.`);
+}
+
+/** Recent changed: the start screen and File > Open recent show it. */
+function refreshRecent() {
+  startScreen.refreshRecent();
+}
+
 function loadWorkbook(next: Workbook, active: string, name: string) {
+  parkCurrent();
   trail.clear();
   workbook = next;
   recorder.clear();
@@ -1808,7 +1967,7 @@ function loadWorkbook(next: Workbook, active: string, name: string) {
   history.clear();
   blobs.clear();
   grid.setSource(source);
-  fileName.textContent = name;
+  showFileName(name);
   document.title = name === "Untitled" ? "cellforge" : `${name} · cellforge`;
   startScreen.hide();
   refresh();
@@ -1817,7 +1976,7 @@ function loadWorkbook(next: Workbook, active: string, name: string) {
 
 /** Start over: a blank workbook (asks first when there's work to lose). */
 async function newWorkbook(): Promise<boolean> {
-  if (workbookEdited() && !(await confirmDialog({ title: "Start a new workbook?", text: "Your changes to this workbook will be discarded.", confirm: "Discard and start new", danger: true }))) return false;
+  if (workbookEdited() && !recentReady && !(await confirmDialog({ title: "Start a new workbook?", text: "Autosave isn't available in this tab, so your changes to this workbook will be lost. Save it first (Ctrl+S) to keep it.", confirm: "Discard and start new", danger: true }))) return false;
   fileHandle = null;
   loadSource(new EditableSource(new BlankSource()), "Untitled");
   return true;
@@ -1825,7 +1984,7 @@ async function newWorkbook(): Promise<boolean> {
 
 /** Open one of the finance samples (samples.ts). */
 async function openSample(kind: SampleKind) {
-  if (workbookEdited() && !(await confirmDialog({ title: "Open the sample?", text: "Your changes to this workbook will be discarded.", confirm: "Discard and open sample", danger: true }))) return;
+  if (workbookEdited() && !recentReady && !(await confirmDialog({ title: "Open the sample?", text: "Autosave isn't available in this tab, so your changes to this workbook will be lost. Save it first (Ctrl+S) to keep it.", confirm: "Discard and open sample", danger: true }))) return;
   notify("Opening the sample…");
   const s = await sampleWorkbook(kind);
   fileHandle = null;
@@ -1838,7 +1997,7 @@ async function openSample(kind: SampleKind) {
 async function startTemplate(kind?: TemplateKind) {
   const k = kind ?? (await pickTemplate());
   if (!k) return grid.focus();
-  if (workbookEdited() && !(await confirmDialog({ title: "Start from the template?", text: "Your changes to this workbook will be discarded.", confirm: "Discard and start", danger: true }))) return;
+  if (workbookEdited() && !recentReady && !(await confirmDialog({ title: "Start from the template?", text: "Autosave isn't available in this tab, so your changes to this workbook will be lost. Save it first (Ctrl+S) to keep it.", confirm: "Discard and start", danger: true }))) return;
   notify("Building the template…");
   const wb = await buildTemplate(k);
   fileHandle = null;
