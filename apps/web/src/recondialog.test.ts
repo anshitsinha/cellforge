@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Table, type ColumnData } from "@cellforge/core";
 import { reconcile } from "@cellforge/core";
 import { EditableSource } from "./editable";
-import { guessMap, pickSides, readSide, reconSheets, sheetHeader } from "./recondialog";
+import { guessMap, pickSides, plainReason, readSide, reconSheets, sheetHeader } from "./recondialog";
 
 const str = (name: string, values: string[]): ColumnData => {
   const dict = [...new Set(values.filter(Boolean))];
@@ -49,18 +49,29 @@ describe("reconcile dialog helpers", () => {
       { row: 7, key: "Z", amount: 99 },
     ];
     const r = reconcile(a, b, {});
-    const sheets = reconSheets(r, a, b);
-    expect(sheets.map((s) => s.name)).toEqual(["Rec matched", "Rec unmatched A", "Rec unmatched B", "Rec mismatched"]);
+    const sheets = reconSheets(r, a, b, { a: "Cash book", b: "Bank" });
+    expect(sheets.map((s) => s.name)).toEqual(["Rec · Matched", "Rec · Only in Cash book", "Rec · Only in Bank", "Rec · Differences"]);
     for (const s of sheets) expect(s.numFmts.length).toBe(s.columns.length);
     const col = (s: number, name: string) => sheets[s].columns.find((c) => c.name === name)!;
     const rows = (c: ColumnData) => (c.kind === "number" ? [...c.values] : []);
-    expect(rows(col(0, "Sheet row"))).toEqual([2, 5]);
-    expect(rows(col(1, "Sheet row"))).toEqual([4]);
-    expect(rows(col(2, "Sheet row"))).toEqual([7]);
-    expect(rows(col(3, "A row"))).toEqual([3]);
+    expect(rows(col(0, "Row"))).toEqual([2, 5]);
+    expect(rows(col(1, "Cash book row"))).toEqual([4]);
+    expect(rows(col(2, "Bank row"))).toEqual([7]);
+    expect(rows(col(3, "Cash book row"))).toEqual([3]);
+    expect(sheets[3].columns.map((c) => c.name)).toContain("Bank reference");
+    expect(sheets[3].columns.some((c) => /^[AB] /.test(c.name))).toBe(false);
     expect(rows(col(3, "Difference"))).toEqual([-9]);
-    const note = col(3, "Note");
-    expect(note.kind === "string" && note.dict[note.codes[0] - 1]).toContain("two digits swapped");
+    const note = col(3, "Why");
+    expect(note.kind === "string" && note.dict[note.codes[0] - 1]).toContain("Possible keying error in the amount: two digits swapped");
+    // a title and a one-line summary for every sheet
+    expect(sheets[1].title).toBe("Only in Cash book");
+    expect(sheets[1].summary).toBe("1 line totalling 7.00 with no partner in Bank.");
+  });
+
+  it("explains in the sheets' words, with bracketed negatives", () => {
+    expect(plainReason("Only A has a reference", "Cash book", "Bank")).toBe("Only Cash book has a reference");
+    expect(plainReason("The amounts differ by -867.60 (-1,180.00 / -312.40)", "Cash book", "Bank")).toBe("The amounts differ by (867.60) ((1,180.00) / (312.40))");
+    expect(plainReason("A is 10 times too big compared with B (1.00 / 10.00)", "Cash", "Bank")).toBe("Cash is 10 times too big compared with Bank (1.00 / 10.00)");
   });
 });
 

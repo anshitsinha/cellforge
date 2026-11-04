@@ -133,8 +133,24 @@
 
 .rc-rules {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.rc-rules__settings {
+  display: grid;
   gap: var(--space-4);
-  max-width: 760px;
+}
+
+.rc-rules__passes > .cf-section {
+  margin: 0;
+}
+
+@media (max-width: 860px) {
+  .rc-rules {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .rc-tols {
@@ -293,4 +309,10 @@
 
 .recon-suggest button {
   margin-left: var(--space-1-5);
+}
+
+/* the "Why" column wraps instead of being cut off */
+.rc-tab .data-table td:last-child {
+  white-space: normal;
+  min-width: 14em;
 }
