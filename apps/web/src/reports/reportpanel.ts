@@ -18,7 +18,7 @@ import type { Workbook } from "../workbook";
 import { reportsOf } from "./actions";
 import { rollForward, runBook, runForValues, runReport, workbookEnv, type RenderedReport } from "./engine";
 import { BLOCK_LABEL, newBlock, type BlockKind, type ParamFilter, type Report, type ReportBlock } from "./model";
-import { reportHtml, reportPdf, type ChartBlock } from "./output";
+import { fitPage, reportHtml, reportPdf, type ChartBlock } from "./output";
 import "./reports.css";
 import "./reportui.css";
 import { confirmDialog } from "../ui/confirm";
@@ -27,6 +27,7 @@ import { icon, iconButton } from "../ui/icons";
 import { toast } from "../ui/toast";
 import "../analysis.css";
 import { sheetFacts, starterReport, STARTERS, type SheetFacts, type StarterKind } from "./starters";
+import { hasFields, textParts } from "./fields";
 
 export interface ReportDeps {
   workbook: () => Workbook;
@@ -148,6 +149,8 @@ export function openReports(d: ReportDeps): void {
   let saved = rep ? JSON.stringify(rep) : "";
   let saveTimer = 0;
   let previewTimer = 0;
+  // text blocks showing their {{…}} source instead of chips
+  const sourceOpen = new Set<string>();
   let mode: "start" | "edit" = rep ? "edit" : "start";
   let starter: StarterKind = "summary";
 
@@ -188,7 +191,17 @@ export function openReports(d: ReportDeps): void {
     } catch {
       data = null;
     }
-    return sheetFacts(id, sheet.name, data);
+    // text that may name the period ("October 2026"): sheet names and the top of every sheet
+    const texts: string[] = [];
+    for (const s of wb.sheets) {
+      texts.push(s.name);
+      for (let r = 0; r < 12; r++)
+        for (let c = 0; c < 6; c++) {
+          const v = s.source.getCell(r, c);
+          if (typeof v === "string" && v.length < 200) texts.push(v);
+        }
+    }
+    return sheetFacts(id, sheet.name, data, { texts });
   };
   const sheetInfo = facts();
 
@@ -682,13 +695,51 @@ export function openReports(d: ReportDeps): void {
         const t = el("textarea");
         t.value = b.text;
         t.rows = 3;
-        t.placeholder = "Write a note. A live figure looks like {{=SUM(F:F)}}.";
+        t.placeholder = "Write a note.";
         t.setAttribute("aria-label", "Text");
         t.addEventListener("input", () => {
           b.text = t.value;
           changed();
         });
-        card.append(t);
+        // text with live figures reads as words and chips; the {{…}} source is behind a toggle
+        if (!hasFields(b.text) && !sourceOpen.has(b.id)) {
+          card.append(t);
+          break;
+        }
+        const names = columnsOf(r.sheetId).map(([, label]) => label.replace(/ \([A-Z]+\)$/, ""));
+        const view = el("div", "report-text-view");
+        view.setAttribute("aria-label", "Text with live figures");
+        for (const part of textParts(b.text, names)) {
+          if (part.kind === "text") view.append(part.text);
+          else {
+            const chip = el("span", `report-chip${part.param ? " report-chip--param" : ""}`);
+            chip.append(icon(part.param ? "info" : "formula", { size: 12 }), el("span", undefined, part.label));
+            chip.title = part.param ? `Parameter: shows the value of {{${part.source.trim()}}}` : `Live figure: ${part.source.trim()}`;
+            view.append(chip);
+          }
+        }
+        const open = sourceOpen.has(b.id);
+        const toggle = makeButton(open ? "Done" : "Edit source", "ghost", open ? undefined : "formula");
+        toggle.classList.add("btn-sm", "report-source-toggle");
+        toggle.setAttribute("aria-expanded", String(open));
+        toggle.title = open ? "Back to the words and live figures" : "Edit the text, with the formulas behind the live figures";
+        toggle.addEventListener("click", () => {
+          if (open) sourceOpen.delete(b.id);
+          else sourceOpen.add(b.id);
+          changed(true);
+          if (!open) editor.querySelector<HTMLTextAreaElement>(`.report-block[data-id="${b.id}"] textarea`)?.focus();
+        });
+        card.dataset.id = b.id;
+        if (open) {
+          t.placeholder = "Write a note. A live figure looks like {{=SUM(F:F)}}; a parameter like {{period}}.";
+          const tools = el("div", "report-text-tools");
+          tools.append(toggle);
+          card.append(t, tools);
+        } else {
+          const tools = el("div", "report-text-tools");
+          tools.append(toggle);
+          card.append(view, tools);
+        }
         break;
       }
       case "table": {
@@ -844,15 +895,29 @@ export function openReports(d: ReportDeps): void {
     lastRuns = all;
     const shown = all.slice(0, PREVIEW_RUNS);
     const scroll = previewBox.scrollTop;
-    previewBox.innerHTML = reportHtml(shown);
+    const fit = fitPage(shown, currentReport().page ?? { size: "A4", landscape: false });
+    previewBox.innerHTML = reportHtml(shown, fit);
     if (all.length > shown.length) previewBox.append(el("p", "an-hint report-more", `Showing ${shown.length} of ${all.length} reports here. The PDF has them all.`));
     drawCharts(previewBox, shown);
+    scalePages();
     previewBox.scrollTop = scroll;
     const warn = [...new Set(all.flatMap((r) => r.warnings))];
+    if (fit.note) warn.push(fit.note);
     previewNote.hidden = !warn.length;
     previewNote.replaceChildren();
     if (warn.length) previewNote.append(icon("warning"), el("span", undefined, warn.length === 1 ? warn[0] : `${warn.length} things to check: ${warn.slice(0, 3).join(" · ")}`));
   }
+
+  /** Show each page whole: scale it down to the pane's width (never up). */
+  function scalePages() {
+    const room = previewBox.clientWidth - 32;
+    for (const page of previewBox.querySelectorAll<HTMLElement>(".report-page")) {
+      page.style.zoom = "";
+      const w = page.offsetWidth;
+      if (room > 0 && w > room) page.style.zoom = String(Math.max(0.3, room / w));
+    }
+  }
+  new ResizeObserver(() => scalePages()).observe(previewBox);
 
   function drawCharts(root: HTMLElement, reports: RenderedReport[]) {
     for (const fig of root.querySelectorAll<HTMLElement>("figure.report-chart")) {
@@ -893,13 +958,20 @@ export function openReports(d: ReportDeps): void {
   function print() {
     preview();
     const host = el("div", "report-print report-doc");
-    host.innerHTML = reportHtml(lastRuns);
+    const page = currentReport().page ?? { size: "A4", landscape: false };
+    const fit = fitPage(lastRuns, page);
+    host.innerHTML = reportHtml(lastRuns, fit);
     drawCharts(host, lastRuns);
+    // the paper the preview showed (landscape when a wide table needs it)
+    const paper = el("style");
+    paper.textContent = `@page { size: ${page.size} ${fit.landscape ? "landscape" : "portrait"}; }`;
+    document.head.append(paper);
     document.body.append(host);
     document.body.classList.add("report-printing");
     const done = () => {
       document.body.classList.remove("report-printing");
       host.remove();
+      paper.remove();
       removeEventListener("afterprint", done);
     };
     addEventListener("afterprint", done);
