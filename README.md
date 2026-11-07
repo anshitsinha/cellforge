@@ -2,6 +2,11 @@
 
 A spreadsheet that stays fast at 100 million rows — entirely in the browser.
 
+**Live:** [cellforge-six.vercel.app](https://cellforge-six.vercel.app) ·
+[open the app](https://cellforge-six.vercel.app/app) ·
+[100M-row demo](https://cellforge-six.vercel.app/app?demo=1) ·
+[kernel benchmark](https://cellforge-six.vercel.app/bench)
+
 Excel tops out at 1,048,576 rows. Google Sheets at 10M cells. Past that, people
 give up on spreadsheets and move to SQL or pandas. cellforge is an experiment in
 whether that ceiling is actually necessary, or just an artifact of how
@@ -42,7 +47,8 @@ spreadsheets are built.
 
 ### Compiled vs interpreted (preliminary)
 
-16M rows, Chromium + NVIDIA Turing, median of 3 — reproduce at `/bench.html`:
+16M rows, Chromium + NVIDIA Turing, median of 3 — reproduce in your own browser at
+[/bench](https://cellforge-six.vercel.app/bench):
 
 | Formula | Interpreter | Compiled JS | Speedup |
 | --- | ---: | ---: | ---: |
