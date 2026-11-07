@@ -363,15 +363,27 @@ function drawAxes(ctx: CanvasRenderingContext2D, data: ChartData, area: Rect, th
   let catLabelW = 0;
   if (horiz) catLabelW = Math.min(140, widest(data.categories)) + 8;
   const plot: Rect = { ...area };
+  let rotate = false;
   if (horiz) {
     plot.x += catLabelW;
-    plot.w -= catLabelW + 8;
+    // the last value label is centred on the right edge: leave room for its other half
+    const last = yLabels.length ? ctx.measureText(yLabels[yLabels.length - 1]).width / 2 : 0;
+    plot.w -= catLabelW + Math.max(8, last + 2);
     plot.h -= 18;
   } else {
     const lw = widest(yLabels) + 8;
     plot.x += lw;
     plot.w -= lw + (y1t ? widest(y2Labels) + 8 : 8);
     plot.h -= 20;
+    // long category names under narrow columns are turned, not cut to a few letters
+    if (!xy && n > 1) {
+      const band = plot.w / n;
+      const wide = Math.min(LABEL_MAX, widest(data.categories.slice(0, 400)));
+      if (wide + 8 > band && band >= 10) {
+        rotate = true;
+        plot.h -= Math.ceil(wide * Math.sin(LABEL_TURN)) + 4;
+      }
+    }
   }
   plot.w = Math.max(10, plot.w);
   plot.h = Math.max(10, plot.h);
@@ -470,13 +482,17 @@ function drawAxes(ctx: CanvasRenderingContext2D, data: ChartData, area: Rect, th
     });
     return drawXY(ctx, data, plot, xScale, scaleOf, theme, dpr);
   }
-  return drawCategories(ctx, data, plot, horiz, scaleOf, y0, theme);
+  return drawCategories(ctx, data, plot, horiz, scaleOf, y0, theme, rotate);
 }
+
+/** Turned category labels: how far, and how long before they're cut short (the tooltip has the rest). */
+const LABEL_TURN = Math.PI / 4;
+const LABEL_MAX = 110;
 
 // -----------------------------------------------------------------------------
 // category charts: column, bar, combo, line/area with text labels
 
-function drawCategories(ctx: CanvasRenderingContext2D, data: ChartData, plot: Rect, horiz: boolean, scaleOf: (s: Series) => Scale, y0: Scale, theme: ChartTheme): Rendered {
+function drawCategories(ctx: CanvasRenderingContext2D, data: ChartData, plot: Rect, horiz: boolean, scaleOf: (s: Series) => Scale, y0: Scale, theme: ChartTheme, rotate = false): Rendered {
   const n = data.categories.length;
   const bandLen = (horiz ? plot.h : plot.w) / Math.max(1, n);
   const bandStart = (i: number) => (horiz ? plot.y : plot.x) + i * bandLen;
@@ -489,6 +505,17 @@ function drawCategories(ctx: CanvasRenderingContext2D, data: ChartData, plot: Re
     const every = Math.max(1, Math.ceil(14 / bandLen));
     ctx.textAlign = "right";
     for (let i = 0; i < n; i += every) ctx.fillText(ellipsis(ctx, data.categories[i], 140), plot.x - 6, mid(i));
+  } else if (rotate) {
+    // turned 45°, every label when they fit at that angle, else thinned out
+    const every = Math.max(1, Math.ceil(14 / bandLen));
+    ctx.textAlign = "right";
+    for (let i = 0; i < n; i += every) {
+      ctx.save();
+      ctx.translate(mid(i) + 3, plot.y + plot.h + 8);
+      ctx.rotate(-LABEL_TURN);
+      ctx.fillText(ellipsis(ctx, data.categories[i], LABEL_MAX), 0, 0);
+      ctx.restore();
+    }
   } else {
     let widest = 0;
     for (let i = 0; i < n; i += Math.max(1, Math.floor(n / 200))) widest = Math.max(widest, ctx.measureText(data.categories[i]).width);
@@ -574,7 +601,9 @@ function drawCategories(ctx: CanvasRenderingContext2D, data: ChartData, plot: Re
       const along = horiz ? y : x;
       const across = horiz ? x : y;
       const i = Math.floor((along - (horiz ? plot.y : plot.x)) / bandLen);
-      if (i < 0 || i >= n || x < plot.x - 2 || x > plot.x + plot.w + 2 || y < plot.y - 2 || y > plot.y + plot.h + 2) return null;
+      // over the plot, or over a category label (cut-short labels show in full in the tooltip)
+      const labels = horiz ? x >= plot.x - 150 && x < plot.x : y > plot.y + plot.h && y <= plot.y + plot.h + (rotate ? LABEL_MAX : 22);
+      if (i < 0 || i >= n || ((x < plot.x - 2 || x > plot.x + plot.w + 2 || y < plot.y - 2 || y > plot.y + plot.h + 2) && !labels)) return null;
       let best: { s: number; d: number } | null = null;
       marks.forEach((m, si) => {
         const mk = m[i];
