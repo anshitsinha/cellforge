@@ -544,6 +544,7 @@ function syncFilterButtons() {
 let syncingCharts = false;
 const chartDeps = {
   focusGrid: () => grid.focus(),
+  cellRect: (r: number, c: number) => grid.cellPageRect(r, c),
   source: (id: string) => (workbook.has(id) ? workbook.get(id).source : null),
   activeSheet: () => activeId,
   range: () => grid.range,
