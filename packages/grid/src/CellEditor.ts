@@ -49,9 +49,10 @@ export class CellEditor {
     return this.active;
   }
 
-  open(rect: EditorRect, text: string, theme: Theme, caretAtEnd = true): void {
+  open(rect: EditorRect, text: string, theme: Theme, fontSize = 13, caretAtEnd = true): void {
     this.active = true;
     this.input.value = text;
+    this.input.style.fontSize = `${fontSize}px`;
     this.input.style.display = "block";
     this.input.style.background = theme.background;
     this.input.style.color = theme.text;

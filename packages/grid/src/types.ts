@@ -38,6 +38,17 @@ export interface GridOptions {
   rowHeight?: number;
   headerHeight?: number;
   defaultColumnWidth?: number;
+  /**
+   * Handle touch input (swipe to scroll, tap to select, double-tap to edit).
+   * Turn off for decorative grids that sit inside a scrolling page, so a
+   * swipe over them still scrolls the page. Default true.
+   */
+  touch?: boolean;
+  /**
+   * Font size for the in-cell editor. iOS Safari zooms the whole page when
+   * focusing an input with text smaller than 16px, so use 16 on phones.
+   */
+  editorFontSize?: number;
 }
 
 export interface Theme {
