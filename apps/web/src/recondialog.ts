@@ -6,9 +6,10 @@
  */
 import "./recon.css";
 import type { Action } from "@cellforge/actions";
-import { dateParts, formatValue, isDateFormat, parseDateLoose, parseNumberLoose, Table, type ColumnData, type DateOrder } from "@cellforge/core";
+import { dateParts, formatValue, isDateFormat, parseDateLoose, parseNumberLoose, type ColumnData, type DateOrder } from "@cellforge/core";
 import { DEFAULT_REC_SETTINGS, explain, KEYING_LABEL, reconcile, type RecRecord, type RecResult, type RecRule, type RecSettings } from "@cellforge/core";
 import { EditableSource } from "./editable";
+import { addResultSheets, DATE_FMT, headerRowOf, MONEY_FMT, type ResultSheetSpec } from "./resultsheet";
 import type { Workbook } from "./workbook";
 import { openDialog } from "./ui/dialog";
 import { openSidePanel } from "./ui/sidepanel";
@@ -56,6 +57,17 @@ export function sheetHeader(src: EditableSource): { names: string[]; first: numb
   const { cols } = src.usedRange();
   const named = Array.from({ length: cols }, (_, c) => src.getColumnName?.(c) ?? "");
   if (named.some(Boolean)) return { names: named.map((n, c) => n || colLetter(c)), first: 0 };
+  // a results sheet: a title block frozen above its header row
+  const h = headerRowOf(src);
+  if (h > 0) {
+    let last = cols;
+    while (last > 1 && (src.getCell(h, last - 1) ?? "") === "") last--;
+    const names = Array.from({ length: last }, (_, c) => {
+      const v = src.getCell(h, c);
+      return typeof v === "string" && v.trim() ? v.trim() : colLetter(c);
+    });
+    return { names, first: h + 1 };
+  }
   const top = Array.from({ length: cols }, (_, c) => src.getCell(0, c));
   const looksLikeHeader = top.some((v) => typeof v === "string" && v.trim()) && top.every((v) => v === null || (typeof v === "string" && !/^[-\d.,()\s]+$/.test(v)));
   return looksLikeHeader ? { names: top.map((v, c) => (typeof v === "string" && v.trim() ? v.trim() : colLetter(c))), first: 1 } : { names: named.map((_, c) => colLetter(c)), first: 0 };
@@ -222,17 +234,24 @@ const nums = (name: string, values: Array<number | undefined | null>): ColumnDat
   values: Float64Array.from(values, (v) => (v === undefined || v === null ? NaN : v)),
 });
 
-const DATE = "yyyy-mm-dd";
-const MONEY = "#,##0.00";
+const DATE = DATE_FMT;
+const MONEY = MONEY_FMT;
 
-export interface ReconSheet {
-  name: string;
-  columns: ColumnData[];
+/** A results sheet from the reconciliation (laid out by addResultSheets). */
+export interface ReconSheet extends ResultSheetSpec {
   numFmts: string[];
 }
 
+/** What the two sides are called on the results sheets ("Cash book", "Bank statement"). */
+export interface SideNames {
+  a: string;
+  b: string;
+}
+
+const total = (ids: readonly number[], recs: readonly RecRecord[]) => ids.reduce((t, i) => t + (recs[i].amount ?? 0), 0);
+
 /** Notes for each unmatched or mismatched item: possible keying errors, duplicates, sums not fully searched. */
-function notes(r: RecResult, a: RecRecord[], b: RecRecord[]): { A: Map<number, string[]>; B: Map<number, string[]> } {
+function notes(r: RecResult, a: RecRecord[], b: RecRecord[], names: SideNames): { A: Map<number, string[]>; B: Map<number, string[]> } {
   const A = new Map<number, string[]>();
   const B = new Map<number, string[]>();
   const add = (m: Map<number, string[]>, i: number, t: string) => {
@@ -241,32 +260,32 @@ function notes(r: RecResult, a: RecRecord[], b: RecRecord[]): { A: Map<number, s
     else m.set(i, [t]);
   };
   for (const f of r.flags) {
-    const what = f.field === "key" ? `reference ${f.kind === "transposition" ? "has two characters swapped" : "differs in one character"}` : `amount ${KEYING_LABEL[f.kind]}`;
-    add(A, f.a, `possible keying error: ${what} (B row ${b[f.b].row})`);
-    add(B, f.b, `possible keying error: ${what} (A row ${a[f.a].row})`);
+    const what = f.field === "key" ? `reference: ${f.kind === "transposition" ? "two characters swapped" : "one character differs"}` : `amount: ${KEYING_LABEL[f.kind]}`;
+    add(A, f.a, `Possible keying error in the ${what}, against ${names.b} row ${b[f.b].row}`);
+    add(B, f.b, `Possible keying error in the ${what}, against ${names.a} row ${a[f.a].row}`);
   }
   for (const d of r.duplicates) {
     const recs = d.side === "A" ? a : b;
     for (const i of d.items) {
       const others = d.items.filter((x) => x !== i).map((x) => recs[x].row);
-      add(d.side === "A" ? A : B, i, `looks like a duplicate of row${others.length === 1 ? "" : "s"} ${others.join(", ")}`);
+      add(d.side === "A" ? A : B, i, `Looks like a duplicate of row${others.length === 1 ? "" : "s"} ${others.join(", ")}`);
     }
   }
-  for (const c of r.sumCapped) add(c.side === "A" ? A : B, c.item, "sum search stopped at the limit");
+  for (const c of r.sumCapped) add(c.side === "A" ? A : B, c.item, "Split-payment search stopped at its limit");
   return { A, B };
 }
 
-/** The result as four sheets. */
-export function reconSheets(r: RecResult, a: RecRecord[], b: RecRecord[]): ReconSheet[] {
-  const note = notes(r, a, b);
+/** The result as four sheets, named and headed by the two sides' sheet names. */
+export function reconSheets(r: RecResult, a: RecRecord[], b: RecRecord[], names: SideNames = { a: "A", b: "B" }): ReconSheet[] {
+  const note = notes(r, a, b, names);
 
-  // matched: one row per record, groups numbered
+  // matched: one row per record, pairs numbered
   const m = { group: [] as number[], rule: [] as string[], side: [] as string[], row: [] as number[], key: [] as string[], date: [] as Array<number | undefined>, amount: [] as Array<number | undefined>, text: [] as string[], diff: [] as Array<number | null>, days: [] as Array<number | null> };
   r.matches.forEach((g, n) => {
     let firstRow = true;
-    const push = (side: "A" | "B", rec: RecRecord) => {
+    const push = (side: string, rec: RecRecord) => {
       m.group.push(n + 1);
-      m.rule.push(RULE_LABEL[g.rule] + (g.score !== undefined && firstRow ? ` (${Math.round(g.score * 100)}%)` : ""));
+      m.rule.push(firstRow ? RULE_LABEL[g.rule] + (g.score !== undefined ? ` (${Math.round(g.score * 100)}%)` : "") : "");
       m.side.push(side);
       m.row.push(rec.row);
       m.key.push(rec.key ?? "");
@@ -277,16 +296,19 @@ export function reconSheets(r: RecResult, a: RecRecord[], b: RecRecord[]): Recon
       m.days.push(firstRow ? g.days : null);
       firstRow = false;
     };
-    for (const i of g.a) push("A", a[i]);
-    for (const j of g.b) push("B", b[j]);
+    for (const i of g.a) push(names.a, a[i]);
+    for (const j of g.b) push(names.b, b[j]);
   });
+  const lines = m.row.length;
   const matched: ReconSheet = {
-    name: "Rec matched",
+    name: "Rec · Matched",
+    title: `Matched: ${names.a} and ${names.b}`,
+    summary: `${plural(r.matches.length, "matched pair")} (${plural(lines, "line")}). Each pair is numbered; the first line of a pair says which rule matched it.`,
     columns: [
-      nums("Group", m.group),
-      text("Rule", m.rule),
-      text("Side", m.side),
-      nums("Sheet row", m.row),
+      nums("Pair", m.group),
+      text("How matched", m.rule),
+      text("Sheet", m.side),
+      nums("Row", m.row),
       text("Reference", m.key),
       nums("Date", m.date),
       nums("Amount", m.amount),
@@ -295,44 +317,52 @@ export function reconSheets(r: RecResult, a: RecRecord[], b: RecRecord[]): Recon
       nums("Days apart", m.days),
     ],
     numFmts: ["", "", "", "", "", DATE, MONEY, "", MONEY, ""],
+    totals: [8],
   };
 
-  const unmatched = (name: string, ids: number[], recs: RecRecord[], notesOf: Map<number, string[]>): ReconSheet => ({
-    name,
+  const unmatched = (side: string, other: string, ids: number[], recs: RecRecord[], notesOf: Map<number, string[]>): ReconSheet => ({
+    name: `Rec · Only in ${side}`,
+    title: `Only in ${side}`,
+    summary: ids.length ? `${plural(ids.length, "line")} totalling ${money(total(ids, recs))} with no partner in ${other}.` : `Every line in ${side} found a partner in ${other}.`,
     columns: [
-      nums("Sheet row", ids.map((i) => recs[i].row)),
+      nums(`${side} row`, ids.map((i) => recs[i].row)),
       text("Reference", ids.map((i) => recs[i].key ?? "")),
       nums("Date", ids.map((i) => recs[i].date)),
       nums("Amount", ids.map((i) => recs[i].amount)),
       text("Description", ids.map((i) => recs[i].text ?? "")),
-      text("Note", ids.map((i) => (notesOf.get(i) ?? []).join("; "))),
+      text("Why", ids.map((i) => (notesOf.get(i) ?? []).join("; "))),
     ],
     numFmts: ["", "", DATE, MONEY, "", ""],
   });
 
   const mm = r.mismatched;
-  const mmNote = (p: { a: number; b: number }) => {
+  const mmNote = (p: { a: number; b: number; amountDiff: number; days: number | null }) => {
     const f = r.flags.find((x) => x.mismatched && x.a === p.a && x.b === p.b);
-    return f ? `possible keying error: amount ${KEYING_LABEL[f.kind]}` : "";
+    if (f) return `Possible keying error in the amount: ${KEYING_LABEL[f.kind]}`;
+    const amt = Number.isFinite(p.amountDiff) && Math.abs(p.amountDiff) > 0.004;
+    const late = p.days !== null && p.days !== 0;
+    return amt && late ? `Amount and date differ (${plural(Math.abs(p.days!), "day")} apart)` : amt ? "Amount differs" : late ? `Dates ${plural(Math.abs(p.days!), "day")} apart` : "";
   };
   const mismatched: ReconSheet = {
-    name: "Rec mismatched",
+    name: "Rec · Differences",
+    title: `Same reference, different amount or date`,
+    summary: mm.length ? `${plural(mm.length, "pair")} where ${names.a} and ${names.b} share a reference but the amount or date differs.` : `No pairs share a reference with a different amount or date.`,
     columns: [
-      nums("A row", mm.map((p) => a[p.a].row)),
-      nums("B row", mm.map((p) => b[p.b].row)),
-      text("A reference", mm.map((p) => a[p.a].key ?? "")),
-      text("B reference", mm.map((p) => b[p.b].key ?? "")),
-      nums("A date", mm.map((p) => a[p.a].date)),
-      nums("B date", mm.map((p) => b[p.b].date)),
+      nums(`${names.a} row`, mm.map((p) => a[p.a].row)),
+      nums(`${names.b} row`, mm.map((p) => b[p.b].row)),
+      text(`${names.a} reference`, mm.map((p) => a[p.a].key ?? "")),
+      text(`${names.b} reference`, mm.map((p) => b[p.b].key ?? "")),
+      nums(`${names.a} date`, mm.map((p) => a[p.a].date)),
+      nums(`${names.b} date`, mm.map((p) => b[p.b].date)),
       nums("Days apart", mm.map((p) => p.days)),
-      nums("A amount", mm.map((p) => a[p.a].amount)),
-      nums("B amount", mm.map((p) => b[p.b].amount)),
+      nums(`${names.a} amount`, mm.map((p) => a[p.a].amount)),
+      nums(`${names.b} amount`, mm.map((p) => b[p.b].amount)),
       nums("Difference", mm.map((p) => (Number.isFinite(p.amountDiff) ? p.amountDiff : null))),
-      text("Note", mm.map(mmNote)),
+      text("Why", mm.map(mmNote)),
     ],
     numFmts: ["", "", "", "", DATE, DATE, "", MONEY, MONEY, MONEY, ""],
   };
-  return [matched, unmatched("Rec unmatched A", r.unmatchedA, a, note.A), unmatched("Rec unmatched B", r.unmatchedB, b, note.B), mismatched];
+  return [matched, unmatched(names.a, names.b, r.unmatchedA, a, note.A), unmatched(names.b, names.a, r.unmatchedB, b, note.B), mismatched];
 }
 
 
@@ -620,11 +650,8 @@ function openSetup(d: ReconDeps, st: ReconState, startStep: number): void {
     return el(
       "div",
       { className: "rc-rules" },
-      el("p", { className: "tk-lead", textContent: `Matching runs in passes, strictest first. Each pass only looks at the lines the earlier passes left, so a strict match always wins over a loose one.` }),
-      el("div", { className: "tk-grid rc-tols" }, tol, win),
-      flip,
-      section("Passes, in order", passes),
-      adv,
+      el("div", { className: "rc-rules__settings" }, el("p", { className: "tk-lead", textContent: `Matching runs in passes, strictest first. Each pass only looks at the lines the earlier passes left, so a strict match always wins over a loose one.` }), el("div", { className: "tk-grid rc-tols" }, tol, win), flip, adv),
+      el("div", { className: "rc-rules__passes" }, section("Passes, in order", passes)),
     );
   };
 
@@ -669,6 +696,34 @@ interface ItemRow {
   note: string;
 }
 
+/**
+ * A reason from the matcher in the sheet's words: "A"/"B" become the sheet
+ * names and negative amounts use brackets, like everywhere else in the app.
+ */
+export function plainReason(text: string, nameA: string, nameB: string): string {
+  return text
+    .replace(/\bOnly A\b/g, `Only ${nameA}`)
+    .replace(/\bOnly B\b/g, `Only ${nameB}`)
+    .replace(/^A is\b/, `${nameA} is`)
+    .replace(/\bcompared with B\b/g, `compared with ${nameB}`)
+    .replace(/(^|[\s(/])-(\d[\d,]*(?:\.\d+)?)/g, "$1($2)");
+}
+
+/** Clicking a row in a results table marks it as the selected one. */
+function selectable(table: HTMLElement): HTMLElement {
+  table.addEventListener("click", (e) => {
+    const tr = (e.target as HTMLElement).closest("tbody tr");
+    if (!tr) return;
+    for (const x of table.querySelectorAll("tbody tr.is-selected")) {
+      x.classList.remove("is-selected");
+      x.removeAttribute("aria-selected");
+    }
+    tr.classList.add("is-selected");
+    tr.setAttribute("aria-selected", "true");
+  });
+  return table;
+}
+
 function showResults(d: ReconDeps, st: ReconState): void {
   const wb = d.workbook();
   if (!st.last || !wb.has(st.idA) || !wb.has(st.idB)) return;
@@ -676,7 +731,8 @@ function showResults(d: ReconDeps, st: ReconState): void {
   const nameA = wb.get(st.idA).name;
   const nameB = wb.get(st.idB).name;
   const goTo = navigator(d.goTo);
-  const notesOf = notes(r, a, b);
+  const names = { a: nameA, b: nameB };
+  const notesOf = notes(r, a, b, names);
   const s = r.summary;
 
   openSidePanel({ minWidth: 560,
@@ -704,7 +760,7 @@ function showResults(d: ReconDeps, st: ReconState): void {
             { key: "amount", label: "Amount", format: "amount" },
             { key: "key", label: "Reference" },
             { key: "text", label: "Description" },
-            { key: "note", label: "Note" },
+            { key: "note", label: "Why" },
           ],
           rows,
           onRowClick: (x) => {
@@ -720,7 +776,7 @@ function showResults(d: ReconDeps, st: ReconState): void {
           "div",
           { className: "rc-tab" },
           ids.length ? el("p", { className: "tk-muted", textContent: `${plural(ids.length, "line")} totalling ${money(total)} with no partner on ${side === "A" ? nameB : nameA}. Click a line to see it in the sheet.` }) : null,
-          t.element,
+          selectable(t.element),
           capNote(ids.length),
         );
       };
@@ -729,7 +785,7 @@ function showResults(d: ReconDeps, st: ReconState): void {
         type Row = { aRow: number; bRow: number; key: string; aAmt?: number; bAmt?: number; diff: number | null; days: number | null; note: string };
         const rows: Row[] = r.mismatched.slice(0, TABLE_CAP).map((m) => {
           const f = r.flags.find((x) => x.mismatched && x.a === m.a && x.b === m.b);
-          return { aRow: a[m.a].row, bRow: b[m.b].row, key: a[m.a].key ?? b[m.b].key ?? "", aAmt: a[m.a].amount, bAmt: b[m.b].amount, diff: Number.isFinite(m.amountDiff) ? m.amountDiff : null, days: m.days ?? null, note: f ? `possible keying error: amount ${KEYING_LABEL[f.kind]}` : "" };
+          return { aRow: a[m.a].row, bRow: b[m.b].row, key: a[m.a].key ?? b[m.b].key ?? "", aAmt: a[m.a].amount, bAmt: b[m.b].amount, diff: Number.isFinite(m.amountDiff) ? m.amountDiff : null, days: m.days ?? null, note: f ? `Possible keying error in the amount: ${KEYING_LABEL[f.kind]}` : "" };
         });
         const t = renderTable<Row>({
           columns: [
@@ -740,7 +796,7 @@ function showResults(d: ReconDeps, st: ReconState): void {
             { key: "bAmt", label: nameB, format: "amount" },
             { key: "diff", label: "Difference", format: "amount" },
             { key: "days", label: "Days apart", format: "integer" },
-            { key: "note", label: "Note" },
+            { key: "note", label: "Why" },
           ],
           rows,
           onRowClick: (x) => {
@@ -751,7 +807,7 @@ function showResults(d: ReconDeps, st: ReconState): void {
           empty: "No pairs with the same reference and a different amount or date.",
           maxHeight: "46vh",
         });
-        return el("div", { className: "rc-tab" }, r.mismatched.length ? el("p", { className: "tk-muted", textContent: "Same reference on both sides, but the amount or the date is off. Usually a keying error, a fee or a part payment." }) : null, t.element, capNote(r.mismatched.length));
+        return el("div", { className: "rc-tab" }, r.mismatched.length ? el("p", { className: "tk-muted", textContent: "Same reference on both sides, but the amount or the date is off. Usually a keying error, a fee or a part payment." }) : null, selectable(t.element), capNote(r.mismatched.length));
       };
 
       const dupTable = () => {
@@ -774,7 +830,7 @@ function showResults(d: ReconDeps, st: ReconState): void {
           empty: "No line appears twice on either side.",
           maxHeight: "46vh",
         });
-        return el("div", { className: "rc-tab" }, r.duplicates.length ? el("p", { className: "tk-muted", textContent: "Lines that appear more than once on the same side: a double posting or a payment made twice. Check them before clearing anything." }) : null, t.element);
+        return el("div", { className: "rc-tab" }, r.duplicates.length ? el("p", { className: "tk-muted", textContent: "Lines that appear more than once on the same side: a double posting or a payment made twice. Check them before clearing anything." }) : null, selectable(t.element));
       };
 
       const matchedTable = () => {
@@ -802,7 +858,7 @@ function showResults(d: ReconDeps, st: ReconState): void {
           maxHeight: "46vh",
         });
         const byRule = (Object.keys(RULE_LABEL) as RecRule[]).filter((k) => s.byRule[k]).map((k) => `${RULE_LABEL[k]}: ${count(s.byRule[k])}`);
-        return el("div", { className: "rc-tab" }, byRule.length ? el("p", { className: "tk-muted", textContent: byRule.join(" · ") }) : null, t.element, capNote(r.matches.length));
+        return el("div", { className: "rc-tab" }, byRule.length ? el("p", { className: "tk-muted", textContent: byRule.join(" · ") }) : null, selectable(t.element), capNote(r.matches.length));
       };
 
       const dupCount = s.duplicatesA + s.duplicatesB;
@@ -811,7 +867,7 @@ function showResults(d: ReconDeps, st: ReconState): void {
         { id: "b", label: `Only in ${nameB}`, count: s.unmatchedB, tone: "unmatched" as const, render: () => itemTable("B", r.unmatchedB) },
         { id: "diff", label: "Differences", count: s.mismatched, tone: "mismatch" as const, render: diffTable },
         { id: "dup", label: "Duplicates", count: dupCount, tone: "mismatch" as const, render: dupTable },
-        { id: "matched", label: "Matched", count: r.matches.length, tone: "match" as const, render: matchedTable },
+        { id: "matched", label: "Matched pairs", count: r.matches.length, tone: "match" as const, render: matchedTable },
       ];
       const firstIssue = tabList.find((t) => t.id !== "matched" && t.count)?.id ?? "matched";
       const tb = tabs(tabList, firstIssue);
@@ -824,13 +880,13 @@ function showResults(d: ReconDeps, st: ReconState): void {
         ? `Everything matched. ${nameA} and ${nameB} agree line for line.`
         : `${plural(s.unmatchedA, "line")} left in ${nameA} and ${plural(s.unmatchedB, "line")} in ${nameB}${s.mismatched ? `; ${plural(s.mismatched, "pair")} with the same reference but a different amount or date` : ""}.`;
       const head = headline({
-        value: (Math.floor(s.matchRate * 1000) / 10).toFixed(1),
-        unit: "% matched",
+        value: `${(Math.floor(s.matchRate * 1000) / 10).toFixed(1)}%`,
+        unit: "of lines matched",
         progress: s.matchRate,
         tone: exceptions ? "accent" : "match",
         caption,
         lines: [
-          { label: "Matched lines", value: `${count(matchedLines)} of ${count(allLines)}`, tone: "match", onClick: () => tb.select("matched") },
+          { label: "Matched", value: `${plural(r.matches.length, "pair")} · ${count(matchedLines)} of ${count(allLines)} lines`, tone: "match", onClick: () => tb.select("matched") },
           { label: `Only in ${nameA}`, value: s.unmatchedA ? `${count(s.unmatchedA)} · ${money(s.unmatchedTotalA)}` : "None", tone: s.unmatchedA ? "unmatched" : undefined, onClick: () => tb.select("a") },
           { label: `Only in ${nameB}`, value: s.unmatchedB ? `${count(s.unmatchedB)} · ${money(s.unmatchedTotalB)}` : "None", tone: s.unmatchedB ? "unmatched" : undefined, onClick: () => tb.select("b") },
           { label: "Amount or date differs", value: s.mismatched ? count(s.mismatched) : "None", tone: s.mismatched ? "mismatch" : undefined, onClick: () => tb.select("diff") },
@@ -839,7 +895,7 @@ function showResults(d: ReconDeps, st: ReconState): void {
       });
 
       const warnings: HTMLElement[] = [];
-      if (r.flags.length) warnings.push(notice(`${plural(r.flags.length, "possible keying error")} (swapped digits, a slipped digit, a misplaced decimal point or a flipped sign). See the Note column.`, "warning"));
+      if (r.flags.length) warnings.push(notice(`${plural(r.flags.length, "possible keying error")} (swapped digits, a slipped digit, a misplaced decimal point or a flipped sign). See the Why column.`, "warning"));
       if (r.sumCapped.length || r.sumBudgetExhausted)
         warnings.push(notice(`The split-payment search stopped early${r.sumCapped.length ? ` for ${plural(r.sumCapped.length, "line")}` : ""}${r.sumBudgetExhausted ? " and ran out of time for the rest" : ""}, so a split match may still exist. Fewer lines per split or a narrower date window helps.`, "warning"));
       if (st.last!.bad) warnings.push(notice(`${plural(st.last!.bad, "value")} couldn't be read as an amount or a date and ${st.last!.bad === 1 ? "was" : "were"} left blank. Check the columns in step 1.`, "warning"));
@@ -860,7 +916,7 @@ function showResults(d: ReconDeps, st: ReconState): void {
         }
         const e = explain(ra, rb, st.settings);
         const kids: Node[] = [notice(e.rule ? `These match by: ${RULE_LABEL[e.rule]}.` : "These don't match with the current rules.", e.rule ? "success" : "info")];
-        if (e.reasons.length) kids.push(el("ul", { className: "rc-reasons" }, ...e.reasons.map((x) => el("li", { textContent: x.text }))));
+        if (e.reasons.length) kids.push(el("ul", { className: "rc-reasons" }, ...e.reasons.map((x) => el("li", { textContent: plainReason(x.text, nameA, nameB) }))));
         if (e.normalised && e.normalised[0] !== e.normalised[1]) kids.push(el("p", { className: "tk-muted", textContent: `Tidied references: ${e.normalised[0] || "(empty)"} / ${e.normalised[1] || "(empty)"}` }));
         if (e.suggestion) {
           const sg = e.suggestion;
@@ -898,14 +954,11 @@ function showResults(d: ReconDeps, st: ReconState): void {
       const create = button(st.added ? "Results sheets added" : "Create results sheets", async () => {
         if (!st.last) return;
         create.disabled = true;
-        const sheets = reconSheets(st.last.r, st.last.a, st.last.b);
-        for (const sh of sheets) {
-          const source = new EditableSource(new Table(sh.columns), 10);
-          await d.run({ type: "sheet.insert", params: { name: sh.name, source: d.putBlob(source), numFmts: sh.numFmts } });
-        }
+        const sheets = reconSheets(st.last.r, st.last.a, st.last.b, names);
+        const added = await addResultSheets({ ...d, workbook: d.workbook }, sheets, { replace: true });
         st.added = true;
         create.textContent = "Results sheets added";
-        report(d.status, `Added ${sheets.length} results sheets: ${sheets.map((x) => x.name).join(", ")}`);
+        report(d.status, `Added ${sheets.length} results sheets: ${added.join(", ")}`);
       }, "primary");
       create.disabled = st.added;
       p.footer.append(el("div", { className: "tk-panel-actions" }, edit, create));

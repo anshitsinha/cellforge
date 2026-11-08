@@ -1,14 +1,8 @@
-/* Joins, compares, TB tie-outs and mapping tables (joindialog.ts) */
-.palette.join-dialog {
-  width: min(var(--dialog-lg), 100%);
-}
+/* Joins, compares, TB tie-outs and mapping tables (joindialog.ts). The side
+   cards, previews and pass-style checkboxes come from recon.css. */
 
-.join-map select {
-  max-width: 240px;
-}
-
-.join-map th select {
-  margin-left: var(--space-1-5);
+.join-dialog .rc-side__head select {
+  max-width: 55%;
 }
 
 .join-checks {
@@ -16,49 +10,74 @@
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: var(--space-1) var(--space-4);
   margin: 0;
-  padding: var(--space-2) 10px;
+  padding: 0;
+  border: 0;
+}
+
+.join-checks--cols {
+  max-height: 200px;
+  overflow: auto;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
 }
 
 .join-checks legend {
   padding: 0 var(--space-1);
-  color: var(--muted);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
 }
 
-.join-checks .opt-check {
-  display: flex;
-  gap: var(--space-1-5);
+.join-check {
   align-items: center;
+  min-height: var(--control-h-sm);
+}
+
+.join-options {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  align-items: end;
 }
 
 .join-bring {
   display: grid;
-  gap: var(--space-2);
-  max-height: 220px;
-  overflow: auto;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-3);
 }
 
 .join-result,
 .join-why {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
-.join-result ul,
-.join-why ul {
+.join-ab td:first-child {
+  white-space: nowrap;
+}
+
+.join-fixes {
+  display: grid;
+  gap: var(--space-1-5);
+}
+
+.join-fixes__lead {
   margin: 0;
-  padding-left: var(--space-5);
 }
 
-.join-warn-row td {
-  color: var(--warning);
+.join-fix {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1-5) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
 }
 
-.join-suggest button {
-  margin-left: var(--space-1-5);
-}
-
-.join-why select {
-  max-width: 260px;
+.join-fix strong {
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
 }

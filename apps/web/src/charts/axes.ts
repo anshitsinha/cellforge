@@ -2,7 +2,7 @@
  * Axis maths: round tick steps (1, 2, 5 x 10^n), tick labels in the cells'
  * number format, and calendar ticks (days, months, years) for date axes.
  */
-import { dateToSerial, formatValue, serialToParts } from "@cellforge/core";
+import { dateToSerial, formatValue, isDateFormat, serialToParts } from "@cellforge/core";
 
 export interface Ticks {
   min: number;
@@ -67,7 +67,12 @@ export function extent(arrays: ArrayLike<number>[]): [number, number] | null {
  * none we pick decimals from the step and shorten millions and billions.
  */
 export function tickLabel(v: number, fmt: string, step: number): string {
-  if (fmt && fmt.toLowerCase() !== "general") return formatValue(v, fmt).text;
+  if (fmt && fmt.toLowerCase() !== "general") {
+    // amounts on an axis read short: 500k, 1.5M, (500k) in a bracket format; no decimals on whole steps
+    if (!fmt.includes("%") && !isDateFormat(fmt) && Math.abs(step) >= 1000) return compactNumber(v, fmt);
+    if (Number.isInteger(step) && /0\.0+/.test(fmt)) return formatValue(v, fmt.replace(/(0)\.0+/g, "$1")).text;
+    return formatValue(v, fmt).text;
+  }
   const big = Math.abs(step) >= 1e8 ? [1e9, "B"] : Math.abs(step) >= 1e5 ? [1e6, "M"] : null;
   const [div, suffix] = big ?? [1, ""];
   const s = step / (div as number);
@@ -146,4 +151,18 @@ export function dateTicks(lo: number, hi: number, maxTicks = 6): DateTicks {
     values.push(v);
   }
   return { values, fmt: "yyyy" };
+}
+
+/**
+ * A short axis figure: 950, 12.5k, 1.5M, 2B; negatives in brackets when the
+ * cells' format uses them, and the format's currency sign kept.
+ */
+export function compactNumber(v: number, fmt = ""): string {
+  const a = Math.abs(v);
+  const [div, unit] = a >= 1e9 ? [1e9, "B"] : a >= 1e6 ? [1e6, "M"] : a >= 1e3 ? [1e3, "k"] : [1, ""];
+  const n = Math.round((a / div) * 10) / 10;
+  const body = `${n.toLocaleString("en-US", { maximumFractionDigits: 1 })}${unit}`;
+  const sign = /[£$€¥]/.exec(fmt.split(";")[0])?.[0] ?? "";
+  if (v < 0 && !(n === 0)) return /\(/.test(fmt.split(";")[1] ?? "") ? `(${sign}${body})` : `-${sign}${body}`;
+  return `${sign}${body}`;
 }

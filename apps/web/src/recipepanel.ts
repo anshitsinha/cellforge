@@ -153,8 +153,10 @@ export function openRecipes(d: RecipeDeps): void {
           });
           const main = el("div", { className: "recipe-step__main" });
           main.append(el("span", { className: "recipe-step__label", textContent: step.label, title: step.label }));
-          const meta = [step.sheet ? `on ${step.sheet}` : "", step.ms !== undefined ? `${step.ms < 1 ? "<1" : Math.round(step.ms)} ms` : "", step.ms !== undefined ? memoryText(step.memory) : ""].filter(Boolean).join(" · ");
-          if (meta) main.append(el("span", { className: "an-list__sub", textContent: meta }));
+          // which sheet is what matters; time and memory are for the curious, in the tooltip
+          const cost = [step.ms !== undefined ? `took ${step.ms < 1 ? "<1" : Math.round(step.ms)} ms` : "", step.ms !== undefined ? memoryText(step.memory) : ""].filter(Boolean).join(" · ");
+          if (step.sheet) main.append(el("span", { className: "an-list__sub", textContent: `On ${step.sheet}` }));
+          if (cost) main.title = `${step.label} (${cost})`;
           const tools = el("span", { className: "recipe-tools" });
           if (!editing.name)
             tools.append(

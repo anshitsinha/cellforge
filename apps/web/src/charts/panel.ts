@@ -25,6 +25,8 @@ import { isIdLike, lastFilledRow, profileColumns, suggestChart, type ColumnInfo 
 import { CHART_TYPES, colLetters, defaultSpec, formatRange, limitText, parseLimit, parseRange, type ChartSpec, type ChartType, type Limit, type SavedPivot } from "./model";
 import { chartInput, isColumnSource } from "./pivotchart";
 import { pivotChartSpec, PIVOT_CHART_TYPES } from "./pivotspec";
+import { placeChart, type Box } from "./place";
+import { dataExtent } from "../usedrange";
 import { drawToCanvas, readChartTheme, type Rendered } from "./render";
 
 export interface ChartDeps {
@@ -40,6 +42,8 @@ export interface ChartDeps {
   onChange?(id: string, spec: ChartSpec | null): void;
   /** put keyboard focus back on the grid (Esc on a chart) */
   focusGrid?(): void;
+  /** a cell's bounds on the page, to place new charts beside the data (default: window.grid.cellPageRect) */
+  cellRect?(row: number, col: number): { x: number; y: number; width: number; height: number } | null;
 }
 
 interface ChartWindow {
@@ -105,14 +109,36 @@ type Named = { getColumnName?(c: number): string | undefined };
 
 // ------------------------------------------------------------ new charts --
 
-/** Where a new chart sits: over the right half of the sheet. */
-function newFrame(): ChartSpec["frame"] {
+type CellRect = (row: number, col: number) => { x: number; y: number; width: number; height: number } | null;
+
+/** The grid's cell geometry: from the deps, else the shell's grid on window. */
+function cellRectOf(deps?: ChartDeps): CellRect | null {
+  if (deps?.cellRect) return deps.cellRect;
+  const g = (globalThis as { grid?: { cellPageRect?: CellRect } }).grid;
+  return g?.cellPageRect ? (r, c) => g.cellPageRect!(r, c) : null;
+}
+
+/** Where a new chart sits: in empty space beside the data on `sheetId` (charts/place.ts). */
+function newFrame(deps?: ChartDeps, sheetId?: string): ChartSpec["frame"] & { clear: boolean } {
   const sheet = document.getElementById("sheet")?.getBoundingClientRect();
-  const area = sheet && sheet.width > 200 ? sheet : { left: 0, top: 0, width: innerWidth, height: innerHeight };
-  const w = Math.min(600, Math.max(320, Math.round(area.width * 0.48)));
-  const h = Math.min(380, Math.max(240, Math.round(area.height * 0.55)));
-  const off = (windows.size % 5) * 24;
-  return { x: Math.max(8, Math.round(area.left + area.width - w - 32 - off)), y: Math.round(area.top + 48 + off), w, h };
+  const r = sheet && sheet.width > 200 ? sheet : { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+  const view = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+  let data: Box | null = null;
+  const src = deps && sheetId ? deps.source(sheetId) : null;
+  const rect = cellRectOf(deps);
+  if (src && rect && sheetId === deps!.activeSheet() && "getCell" in src && src.usedRange) {
+    const { rows, cols } = dataExtent(src as Parameters<typeof dataExtent>[0]);
+    if (rows > 0 && cols > 0) {
+      try {
+        const a = rect(0, 0);
+        const b = rect(rows - 1, cols - 1);
+        if (a && b) data = { left: a.x, top: a.y, right: b.x + b.width, bottom: b.y + b.height };
+      } catch {
+        data = null;
+      }
+    }
+  }
+  return placeChart(view, data, windows.size);
 }
 
 function freshId(): string {
@@ -143,7 +169,9 @@ export function specFromSelection(deps: ChartDeps): { spec: ChartSpec; note: str
   }
   const id = freshId();
   const spec = defaultSpec(id, { sheetId, ...r });
-  spec.frame = newFrame();
+  const { clear: _clear, ...frame } = newFrame(deps, sheetId);
+  void _clear;
+  spec.frame = frame;
   if (!src) return { spec, note: null };
   Object.assign(spec, guessLayout(src, spec.range));
   if (spec.seriesIn !== "columns") return { spec, note: null };
@@ -163,6 +191,7 @@ export function specFromSelection(deps: ChartDeps): { spec: ChartSpec; note: str
     };
     const p = pivotChartSpec(id, sheetId, saved, s.type, s.title);
     p.frame = spec.frame;
+    delete p.place;
     return { spec: p, note: null };
   }
   spec.type = s.type;
@@ -210,6 +239,13 @@ function mountWindow(deps: ChartDeps, spec: ChartSpec): void {
   win.tabIndex = 0;
   win.setAttribute("role", "figure");
   win.setAttribute("aria-roledescription", "chart");
+  // a new chart made elsewhere (the pivot's Chart button): beside its data, then saved there
+  if (spec.place === "auto") {
+    const { x, y, w, h } = newFrame(deps, spec.pivot?.sheetId ?? spec.range.sheetId);
+    spec.frame = { x, y, w, h };
+    delete spec.place;
+    queueMicrotask(() => deps.onChange?.(spec.id, structuredClone(spec)));
+  }
   const place = () => {
     const f = spec.frame;
     win.style.left = `${f.x}px`;

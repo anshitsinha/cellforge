@@ -8,7 +8,7 @@ import type { CellRange } from "@cellforge/grid";
 import { columnLetter } from "@cellforge/grid";
 import "./analysis.css";
 import "./historypanel.css";
-import { inspectCell, type Place } from "./inspect";
+import { displayValue, inspectCell, meaningfulStep, type Place } from "./inspect";
 import { icon } from "./ui/icons";
 import { closeSidePanel, currentSidePanel, onSidePanelChange, openSidePanel, type SidePanelContext } from "./ui/sidepanel";
 import type { Workbook } from "./workbook";
@@ -58,14 +58,19 @@ export function setupInspectPanel(d: InspectPanelDeps) {
     }
   });
 
-  function stepTree(s: Step): HTMLElement {
+  /** A step and the steps inside it; the whole formula shows in the cell's format, the parts rounded. */
+  function stepTree(s: Step, numFmt?: string): HTMLElement {
     const li = el("li");
     const line = el("div", "insp-step");
-    line.append(el("code", undefined, s.text), el("span", undefined, "→"), el("strong", undefined, s.value));
+    const shown = displayValue(s.value, numFmt);
+    line.append(el("code", undefined, s.text), el("span", undefined, "→"), el("strong", undefined, shown));
+    if (shown !== s.value) line.title = `Exact value: ${s.value}`;
     li.append(line);
-    if (s.children.length) {
+    // "2 → 2" says nothing: literal parts are left out
+    const kids = s.children.filter(meaningfulStep);
+    if (kids.length) {
       const ul = el("ul");
-      for (const c of s.children) ul.append(stepTree(c));
+      for (const c of kids) ul.append(stepTree(c));
       li.append(ul);
     }
     return li;
@@ -111,7 +116,8 @@ export function setupInspectPanel(d: InspectPanelDeps) {
     if (i.steps) {
       const sec = section(root, "How it's worked out");
       const ul = el("ul", "insp-steps");
-      ul.append(stepTree(i.steps));
+      const src = d.workbook().has(sheetId) ? d.workbook().get(sheetId).source : null;
+      ul.append(stepTree(i.steps, src?.getStyle(row, col)?.numFmt));
       sec.append(ul);
       places(root, "Reads", i.precedents, PRECEDENT, "No cell references: the formula only uses numbers and functions.");
     } else {

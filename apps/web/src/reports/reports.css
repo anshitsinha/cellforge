@@ -7,12 +7,19 @@
   line-height: 1.4;
 }
 
+/* the page at its paper size (A4: 210 mm, the PDF's 50 pt margins); the
+   preview scales it down to fit the pane rather than cutting it off */
 .report-doc .report-page {
+  box-sizing: border-box;
+  width: 210mm;
   background: #fff;
-  max-width: 190mm;
   margin: 0 auto var(--space-3);
-  padding: 14mm 12mm;
+  padding: 14mm 17.6mm;
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.15);
+}
+
+.report-doc .report-page--landscape {
+  width: 297mm;
 }
 
 .report-doc :is(h1, h2, h3, h4) {
@@ -79,6 +86,26 @@
 
 .report-table tbody tr:last-child td {
   border-bottom: 0.75pt solid #000;
+}
+
+/* a wide table: smaller text, headers wrap */
+.report-table--compact {
+  font-size: 7.5pt;
+}
+
+.report-table--compact thead th {
+  white-space: normal;
+}
+
+/* wider than the page even so: columns share the width, long text is cut */
+.report-table--squeeze {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.report-table--squeeze td {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .report-table .num {
@@ -153,7 +180,7 @@
     box-shadow: none;
     margin: 0;
     padding: 0;
-    max-width: none;
+    width: auto;
   }
 
   .report-print .report-break {

@@ -69,5 +69,6 @@ export function pivotChartSpec(id: string, sheetId: string, pivot: SavedPivot, t
   const spec = defaultSpec(id, { sheetId, top: 0, left: 0, bottom: 0, right: 0 }, type);
   spec.title = title;
   spec.pivot = { sheetId, pivot };
+  spec.place = "auto";
   return spec;
 }
