@@ -48,6 +48,7 @@ const cfRule = s.object(
     a: s.anyOf(s.number(), s.string()),
     b: s.number(),
     value: s.string(),
+    formula: s.string(),
     n: s.number(),
     percent: s.bool(),
     bottom: s.bool(),

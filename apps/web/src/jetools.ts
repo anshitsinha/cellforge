@@ -46,6 +46,7 @@ import { readSheet, stringGrid, type SheetData } from "./audittools";
 import { EditableSource } from "./editable";
 import type { Workbook } from "./workbook";
 import "./jetools.css";
+import { addResultSheets, type ResultSheetSpec } from "./resultsheet";
 import { button, el, emptyState, field as tkField, headline, navigator, notice, report, section as tkSection, type HeadlineOptions } from "./toolkit";
 import { openSidePanel } from "./ui/sidepanel";
 import { renderTable, type TableColumn } from "./ui/table";
@@ -143,6 +144,16 @@ export class Out {
 export interface ResultSheet {
   name: string;
   out: Out;
+  /** row 1 of the sheet (default: its name) */
+  title?: string;
+  /** row 2: one sentence on what it shows */
+  summary?: string;
+  totals?: ResultSheetSpec["totals"];
+}
+
+/** A result sheet in the shared layout (title, summary, totals, frozen header, fitted widths). */
+export function resultSpec(s: ResultSheet): ResultSheetSpec {
+  return { name: s.name, title: s.title, summary: s.summary, totals: s.totals, columns: s.out.columns, numFmts: s.out.numFmts, fixes: s.out.fixes };
 }
 
 /** The EditableSource for a result sheet (numbers in text columns put back). */
@@ -287,12 +298,16 @@ export function journalSheets(data: SheetData, lines: readonly JeLine[], r: JeRe
       rows.push(i);
     }
   });
-  const out = new Out().num("Rank", rank).num("Score", score).text("Entry", entry).num("Row", rowNo).text("Tests", tests).text("Reasons", reasons).copy(data, rows);
-  const sheets: ResultSheet[] = [{ name: `${sheet} JE flags`, out }];
+  const out = new Out().num("Rank", rank).num("Score", score).text("Entry", entry).num(`${sheet} row`, rowNo).text("Tests failed", tests).text("Why", reasons).copy(data, rows);
+  const flagged = `${plural(r.ranked.length, "entry", "entries")} (${plural(rows.length, "line")}) flagged out of ${plural(r.entries.length, "entry", "entries")}`;
+  const sheets: ResultSheet[] = [{ name: `${sheet} JE flags`, title: `Journal entry tests: ${sheet}`, summary: `${flagged}. Every line of each flagged entry, riskiest first.`, out }];
   if (withSummary) {
     const S = r.summary;
     sheets.push({
       name: `${sheet} JE summary`,
+      title: `Journal entry tests: summary of ${sheet}`,
+      summary: `${flagged}. One line per test with its weight in the score.`,
+      totals: false,
       out: new Out()
         .text(
           "Test",
@@ -314,7 +329,7 @@ export function journalSheets(data: SheetData, lines: readonly JeLine[], r: JeRe
         )
         .text(
           "Note",
-          S.map((s) => (s.skipped ? `not run: ${s.skipped}` : "")),
+          S.map((s) => (s.skipped ? `Not run: ${s.skipped}` : "")),
         ),
     });
   }
@@ -381,7 +396,7 @@ export function overlapSheet(a: SheetData, b: SheetData, pa: readonly Party[], p
       "Details",
       P.map((p) => p.matches.map((m) => `${OVERLAP_LABEL[m.field]}: ${m.a} / ${m.b}${m.similarity !== undefined ? ` (${Math.round(m.similarity * 100)}% alike)` : ""}`).join(" | ")),
     );
-  return { name: `Overlaps ${nameA.slice(0, 10)} v ${nameB.slice(0, 10)}`, out };
+  return { name: `Overlaps ${nameA.slice(0, 10)} v ${nameB.slice(0, 10)}`, title: `Overlaps between ${nameA} and ${nameB}`, summary: `${plural(P.length, "pair")} share a name, bank account, address, phone or tax id. Strongest first.`, totals: false, out };
 }
 
 /** The selected block of cells (the whole used range when a single cell is selected). */
@@ -423,7 +438,7 @@ export function footSheet(r: FootResult, top: number, left: number, lastRow: num
     computed.push(x.computed);
     stated.push(x.stated);
     diff.push(x.difference);
-    result.push(x.ok ? "agrees" : "DIFFERENCE");
+    result.push(x.ok ? "Agrees" : "Differs");
   }
   for (const x of r.rows) {
     check.push("Row total (cross-footing)");
@@ -432,7 +447,7 @@ export function footSheet(r: FootResult, top: number, left: number, lastRow: num
     computed.push(x.computed);
     stated.push(x.stated);
     diff.push(x.difference);
-    result.push(x.ok ? "agrees" : "DIFFERENCE");
+    result.push(x.ok ? "Agrees" : "Differs");
   }
   if (r.grand) {
     for (const [what, v] of [
@@ -446,11 +461,12 @@ export function footSheet(r: FootResult, top: number, left: number, lastRow: num
       stated.push(r.grand.stated);
       const d = Math.round(((r.grand.stated ?? 0) - v) * 100) / 100;
       diff.push(d);
-      result.push(Math.abs(d) <= 0.005 && r.grand.stated !== null ? "agrees" : "DIFFERENCE");
+      result.push(Math.abs(d) <= 0.005 && r.grand.stated !== null ? "Agrees" : "Differs");
     }
   }
   const out = new Out().text("Check", check).text("Cell", cell).text("Line", label).num("Added up", computed, MONEY).num("Stated", stated, MONEY).num("Difference", diff, MONEY).text("Result", result);
-  return { name: `${sheet} footing`, out };
+  const bad = result.filter((x) => x !== "Agrees").length;
+  return { name: `${sheet} footing`, title: `Footing and cross-footing: ${sheet}`, summary: bad ? `${plural(bad, "total")} of ${result.length} don't agree with the numbers above them.` : `All ${plural(result.length, "total")} agree with the numbers they add up.`, totals: false, out };
 }
 
 export function rollSheet(data: SheetData, r: RollResult, labelCol: number, moveNames: readonly string[], sheet: string): ResultSheet {
@@ -465,8 +481,8 @@ export function rollSheet(data: SheetData, r: RollResult, labelCol: number, move
     .num("Expected closing", [...L.map((l) => l.expected), r.totals.expected], MONEY)
     .num("Closing", [...L.map((l) => l.closing), r.totals.closing], MONEY)
     .num("Difference", [...L.map((l) => l.difference), Math.round((r.totals.closing - r.totals.expected) * 100) / 100], MONEY)
-    .text("Result", [...L.map((l) => (l.ok ? "agrees" : "DIFFERENCE")), r.issues ? `${r.issues} lines differ` : "all agree"]);
-  return { name: `${sheet} roll-forward`, out };
+    .text("Result", [...L.map((l) => (l.ok ? "Agrees" : "Differs")), r.issues ? `${plural(r.issues, "line")} differ` : "All agree"]);
+  return { name: `${sheet} roll-forward`, title: `Roll-forward: ${sheet}`, summary: r.issues ? `${plural(r.issues, "line")} where opening plus movements doesn't give the closing balance.` : `Every line rolls forward: opening plus movements gives the closing balance.`, totals: false, out };
 }
 
 const NEGATIVE_MOVE = /dispos|depreciat|amorti[sz]|impair|write|decrease|payment|paid|reduc|less|outflow|withdraw|utili[sz]|release|transfer out|sold|sale/i;
@@ -508,10 +524,14 @@ export async function buildSafeCopy(data: SheetData, choices: readonly SafeChoic
   const r = await protectColumns(cols, { hasher, hashLength: opts.hashLength, pseudonymiser: new Pseudonymiser() });
   const out = new Out();
   cols.forEach((c, i) => out.cells(c.name, r.columns[i], c.method === "keep" ? data.numFmt(i) : ""));
-  const sheets: ResultSheet[] = [{ name: `${opts.sheet} safe copy`, out }];
+  const changed = choices.filter((c) => c.method !== "keep").length;
+  const sheets: ResultSheet[] = [{ name: `${opts.sheet} safe copy`, title: `${opts.sheet}: safe copy`, summary: `${plural(changed, "column")} protected; the rest copied as they are.`, totals: false, out }];
   if (opts.mapping && r.mapping.length)
     sheets.push({
       name: `${opts.sheet} pseudonym map`,
+      title: `${opts.sheet}: pseudonym map`,
+      summary: "Each token and the value it stands for. Keep this sheet private.",
+      totals: false,
       out: new Out()
         .text(
           "Column",
@@ -1011,7 +1031,8 @@ export function openJeTool(kind: JeToolKind, d: JeToolDeps): void {
         void (async () => {
           try {
             const sheets = await pv.make!();
-            for (const s of sheets) await d.run({ type: "sheet.insert", params: { name: s.name.slice(0, 31), source: d.putBlob(sheetSource(s.out)), numFmts: s.out.numFmts } });
+            // running a test again replaces the sheets it made last time
+            await addResultSheets({ run: d.run, putBlob: d.putBlob, workbook: d.workbook }, sheets.map(resultSpec), { replace: true });
             report(d.status, pv.done);
           } catch (e) {
             result.prepend(notice((e as Error).message, "danger"));

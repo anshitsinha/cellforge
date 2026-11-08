@@ -112,6 +112,8 @@ export interface ChartSpec {
   buckets: number[];
   /** where the chart window sits, in CSS pixels */
   frame: { x: number; y: number; w: number; h: number };
+  /** "auto": a new chart whose frame is worked out when it first shows (beside its data) */
+  place?: "auto";
   /**
    * A pivot chart: the chart draws this pivot of the sheet (worked out again
    * whenever the sheet changes); `range` only says which sheet it sits on.

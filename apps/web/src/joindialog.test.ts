@@ -55,12 +55,12 @@ describe("join dialog helpers", () => {
     const b = sheet(str("ID", ["001", "003", "003", "009"]), num("Amount", [10, 30, 31, 90]));
     const spec: JoinSpec = { keysA: [0], keysB: [0], kind: "left", normalise: { numbers: true }, many: "flag", fuzzy: null, names: false, bringA: [0, 1], bringB: [0, 1] };
     const { sheet: s, result } = joinSheet(a, b, "Sales", "Ledger", spec);
-    expect(s.name).toBe("Join Sales + Ledger");
+    expect(s.name).toBe("Join · Sales + Ledger");
     expect(s.columns.map((c) => c.name)).toEqual(["ID", "Name", "ID (Ledger)", "Amount", "Match", "Sales row", "Ledger row"]);
     expect(s.numFmts.length).toBe(s.columns.length);
     expect(vals(col(s.columns, "Name"))).toEqual(["Acme", "Beta", "Gamma", "Gamma"]);
     expect(vals(col(s.columns, "Amount"))).toEqual([10, null, 30, 31]);
-    expect(vals(col(s.columns, "Match"))).toEqual(["match", "only in Sales", "match; one of several matches", "match; one of several matches"]);
+    expect(vals(col(s.columns, "Match"))).toEqual(["Match", "Only in Sales", "Match; one of several matches", "Match; one of several matches"]);
     expect(vals(col(s.columns, "Ledger row"))).toEqual([1, null, 2, 3]);
     expect(result.matchedRight).toBe(3);
     const anti = joinSheet(a, b, "Sales", "Ledger", { ...spec, kind: "anti" }).sheet;
@@ -83,7 +83,7 @@ describe("join dialog helpers", () => {
     expect(r.removed).toEqual([0]);
     expect(r.unchanged).toBe(1);
     const [added, removed, changed] = compareResultSheets(oldS, newS, spec, r);
-    expect(added.name).toBe("Compare added");
+    expect(added.name).toBe("Compare · Added");
     expect(vals(col(added.columns, "code "))).toEqual(["D"]);
     expect(vals(col(removed.columns, "Old row"))).toEqual([1]);
     expect(vals(col(changed.columns, "Code"))).toEqual(["C", "C"]);
@@ -108,7 +108,7 @@ describe("join dialog helpers", () => {
     const s = tbCompareSheet(r, "2024", "2023");
     expect(s.columns.map((c) => c.name)).toEqual(["Account", "Name", "2024", "2023", "Movement", "Movement %", "Status", "Name in 2023"]);
     expect(vals(col(s.columns, "Movement"))).toEqual([100, 100, -200]);
-    expect(vals(col(s.columns, "Status"))).toEqual([null, null, "only in 2024"]);
+    expect(vals(col(s.columns, "Status"))).toEqual([null, null, "Only in 2024"]);
   });
 
   it("maps GL columns and ties out to the TB", () => {
@@ -123,7 +123,7 @@ describe("join dialog helpers", () => {
     ]);
     const s = tieSheet(r);
     expect(vals(col(s.columns, "Difference"))).toEqual([0, 50]);
-    expect(vals(col(s.columns, "Status"))).toEqual(["agrees", "differs"]);
+    expect(vals(col(s.columns, "Status"))).toEqual(["Agrees", "Differs"]);
   });
 
   it("applies a mapping table, keeping number and text types", () => {

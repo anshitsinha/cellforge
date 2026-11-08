@@ -2,7 +2,7 @@
  * Inspect a cell: its formula step by step, what it reads (precedents),
  * what reads it (dependents, on every sheet), and audit checks.
  */
-import { formatFormula, hardCodedNumbers, hasRefError, references, shape, steps, type Finding, type Step } from "@cellforge/core";
+import { formatFormula, formatValue, hardCodedNumbers, hasRefError, references, shape, steps, type Finding, type Step } from "@cellforge/core";
 import type { CellRange } from "@cellforge/grid";
 import { columnLetter } from "@cellforge/grid";
 import type { Workbook } from "./workbook";
@@ -114,3 +114,23 @@ export function inspectCell(wb: Workbook, sheetId: string, row: number, col: num
     findings,
   };
 }
+
+/**
+ * A number as Inspect, Lineage and History show it: in the cell's number
+ * format when it has one, else rounded to 12 significant digits (so sums
+ * like -4824.429999999935 read -4,824.43) with thousands separators.
+ * Text that is a plain number (a formula step's value) is read as one.
+ */
+export function displayValue(v: unknown, numFmt?: string | null): string {
+  let n: number | null = null;
+  if (typeof v === "number") n = v;
+  else if (typeof v === "string" && /^-?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(v.trim())) n = Number(v);
+  if (n === null || !Number.isFinite(n)) return v === null || v === undefined ? "" : String(v);
+  if (numFmt && numFmt.toLowerCase() !== "general") return formatValue(Math.abs(n) < 1e-9 ? 0 : n, numFmt).text;
+  const clean = Math.abs(n) < 1e-9 ? 0 : Number(n.toPrecision(12));
+  if (Math.abs(clean) >= 1e15 || (clean !== 0 && Math.abs(clean) < 1e-6)) return String(clean);
+  return clean.toLocaleString("en-US", { maximumFractionDigits: 10 });
+}
+
+/** A formula step worth showing: not a bare number or text that "works out" to itself. */
+export const meaningfulStep = (s: Step) => s.children.length > 0 || s.text.trim().replace(/^"|"$/g, "") !== s.value.trim();

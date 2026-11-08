@@ -5,7 +5,7 @@ import { expandToMerges, mergeAt } from "./merges";
 import type { BorderLine, BorderStyle, CellStyle } from "./types";
 import { ColumnLayout, columnLetter } from "./columns";
 import { formatCell } from "./format";
-import { readTheme } from "./theme";
+import { isDarkTheme, readTheme, ROLE_COLORS, themedColor } from "./theme";
 import { describeCell, describeEdit, describeRange, GRID_KEY_HELP, isMenuKey, rangeAddress } from "./a11y";
 import type { CellRange, CellRef, DataSource, GridOptions, Theme } from "./types";
 
@@ -1565,8 +1565,37 @@ export class Grid {
 
   private onThemeChange = (): void => {
     this.theme = readTheme(this.container);
+    this.colorCache.clear();
     this.invalidate();
   };
+
+  // stored cell colours as they paint on this theme (dark mode maps light fills and dark ink)
+  private colorCache = new Map<string, string>();
+  private colorTheme: Theme | null = null;
+  private colorDark = false;
+  private paintColor(color: string, kind: "fill" | "ink"): string {
+    if (this.colorTheme !== this.theme) {
+      this.colorTheme = this.theme;
+      this.colorDark = isDarkTheme(this.theme);
+      this.colorCache.clear();
+    }
+    if (!this.colorDark) return color;
+    const key = kind === "fill" ? `f${color}` : `i${color}`;
+    let out = this.colorCache.get(key);
+    if (out === undefined) {
+      out = themedColor(color, kind, this.theme, true);
+      if (this.colorCache.size > 512) this.colorCache.clear();
+      this.colorCache.set(key, out);
+    }
+    return out;
+  }
+
+  /** A role's colours on this theme. */
+  private roleColors(style: CellStyle | null): { fill: string; ink: string } | null {
+    if (!style?.role) return null;
+    if (this.colorTheme !== this.theme) this.paintColor("#000000", "ink");
+    return ROLE_COLORS[this.colorDark ? "dark" : "light"][style.role] ?? null;
+  }
 
   // ---------------------------------------------------------------------------
   // painting
@@ -1585,8 +1614,9 @@ export class Grid {
   private paintCell(row: number, col: number, x: number, y: number, w: number, h: number, fill: boolean, spanText = false): void {
     const { ctx } = this;
     const style = (this.source.getDisplayStyle ?? this.source.getStyle)?.call(this.source, row, col) ?? null;
-    if (fill && style?.fill) {
-      ctx.fillStyle = style.fill;
+    const role = this.roleColors(style);
+    if (fill && (style?.fill || role)) {
+      ctx.fillStyle = style?.fill ? this.paintColor(style.fill, "fill") : role!.fill;
       ctx.fillRect(x, y, w, h);
     }
     if (style?.bar) {
@@ -1684,7 +1714,8 @@ export class Grid {
     const shown = this.source.formatValue ? this.source.formatValue(value, style) : { text: formatCell(value) };
     const text = shown.text;
     ctx.font = fontFor(style);
-    ctx.fillStyle = shown.color ?? style?.color ?? this.theme.text;
+    const ink = shown.color ?? style?.color;
+    ctx.fillStyle = ink ? this.paintColor(ink, "ink") : (role?.ink ?? this.theme.text);
     const align = style?.align === "centerAcross" ? "center" : (style?.align ?? (typeof value === "number" ? "right" : "left"));
     ctx.textAlign = align;
     const tx = align === "left" ? x + CELL_PADDING : align === "right" ? x + w - CELL_PADDING : x + w / 2;

@@ -94,7 +94,16 @@ export interface BorderLine {
  * How a cell looks. Every property is optional; a missing one means the
  * default (the theme's text colour, no fill, numbers right / text left, ...).
  */
+/**
+ * A semantic style role: the renderer paints it in the theme's colours
+ * (theme.ts ROLE_COLORS), so a template header reads in light and dark.
+ * An explicit fill or color on the same cell wins.
+ */
+export type StyleRole = "header" | "total" | "flag-warn" | "flag-bad" | "flag-good" | "input";
+
 export interface CellStyle {
+  /** a semantic role (header, total, flags) painted in theme colours */
+  role?: StyleRole;
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;

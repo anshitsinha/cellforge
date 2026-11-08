@@ -336,3 +336,40 @@
     border-right: 0;
   }
 }
+
+/* ---- text with live figures: words and chips, the source behind a toggle */
+.report-text-view {
+  padding: var(--space-2) var(--space-2-5, 10px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-0);
+  color: var(--text-default);
+  line-height: 1.9;
+  white-space: pre-wrap;
+}
+
+.report-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 var(--space-1-5);
+  border-radius: var(--radius-full);
+  background: var(--accent-soft);
+  color: var(--accent-default);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: 20px;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.report-chip--param {
+  background: var(--surface-3);
+  color: var(--text-default);
+}
+
+.report-text-tools {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-1);
+}

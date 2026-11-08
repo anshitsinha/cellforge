@@ -20,6 +20,7 @@ import {
   columnLabel,
   columnLetter,
   findColumn,
+  firstDataRow,
   rangeRef,
 } from "./context";
 import { COLORS, COLOR_WORDS, parseCount, parseDateSerial, parseNumber, splitList, unquote } from "./words";
@@ -34,12 +35,32 @@ export interface ParseResult {
    * actions themselves: "undo", "redo", or a tool to open ("pivot").
    */
   command?: string;
+  /**
+   * A figure to work out and show, not a change: "total of amount" →
+   * SUM of the Amount column. The app shows the number and offers to
+   * insert the formula.
+   */
+  figure?: Figure;
   /** 0..1: how sure the parser is that this is what was meant */
   confidence: number;
   /** plain English: what will happen */
   explanation: string;
   /** questions to ask before anything can run; empty when it's ready */
   missing: string[];
+}
+
+/** A single figure over one column: what "total of amount" asks for. */
+export interface Figure {
+  fn: "SUM" | "AVERAGE" | "COUNTA" | "MIN" | "MAX";
+  col: number;
+  /** the column's data cells */
+  range: CellRange;
+  /** set when the request named another sheet */
+  sheet?: string;
+  /** "Total of Amount (column C)" */
+  label: string;
+  /** "=SUM(C2:C200)", relative to the sheet it is on */
+  formula: string;
 }
 
 /** Every action a result would run, in order. */
@@ -65,6 +86,7 @@ interface Env {
 interface Out {
   actions?: Action[];
   command?: string;
+  figure?: Figure;
   explanation: string;
   confidence?: number;
 }
@@ -481,6 +503,105 @@ const AGG: Record<string, string> = {
 };
 
 const COLOR_RE = `(${COLOR_WORDS})`;
+
+// ------------------------------------------------------ figures, flags --
+
+const FIGURE_FN: Record<string, { fn: Figure["fn"]; word: string }> = {
+  sum: { fn: "SUM", word: "Total" }, total: { fn: "SUM", word: "Total" }, "grand total": { fn: "SUM", word: "Total" }, "add up": { fn: "SUM", word: "Total" },
+  average: { fn: "AVERAGE", word: "Average" }, avg: { fn: "AVERAGE", word: "Average" }, mean: { fn: "AVERAGE", word: "Average" },
+  count: { fn: "COUNTA", word: "Count" }, "number of": { fn: "COUNTA", word: "Count" },
+  min: { fn: "MIN", word: "Smallest" }, minimum: { fn: "MIN", word: "Smallest" }, lowest: { fn: "MIN", word: "Smallest" }, smallest: { fn: "MIN", word: "Smallest" },
+  max: { fn: "MAX", word: "Largest" }, maximum: { fn: "MAX", word: "Largest" }, highest: { fn: "MAX", word: "Largest" }, largest: { fn: "MAX", word: "Largest" }, biggest: { fn: "MAX", word: "Largest" },
+};
+
+function figureOut(env: Env, fnWord: string, colText: string): Out {
+  const f = FIGURE_FN[fnWord.toLowerCase().replace(/\s+/g, " ")] ?? FIGURE_FN.sum;
+  const col = column(env, colText.replace(/\s+(?:column|values|figures|numbers)$/i, ""));
+  const range = columnData(env.sheet, col);
+  const label = `${f.word} of ${columnLabel(env.sheet, col)}`;
+  const figure: Figure = { fn: f.fn, col, range, label, formula: `=${f.fn}(${rangeRef(range)})` };
+  if (env.sheetParam) figure.sheet = env.sheetParam;
+  return { figure, explanation: `Work out the ${f.word.toLowerCase()} of ${columnLabel(env.sheet, col)} on ${env.sheet.name}. Nothing on the sheet changes unless you insert it.` };
+}
+
+const AMOUNT_HEADS = [/^(?:amount|amt|value|net amount)$/i, /amount|\bamt\b/i, /debit|\bnet\b|gross|value|total|balance/i];
+const DATE_HEADS = [/^(?:date|posting date|entry date|transaction date|txn date|value date)$/i, /date/i, /posted|period/i];
+
+/** The column whose header looks like a role (the amounts, the dates), or -1. */
+function roleColumn(env: Env, heads: readonly RegExp[]): number {
+  for (const re of heads) {
+    const i = env.sheet.columns.findIndex((c) => !!c && re.test(c.trim()));
+    if (i >= 0) return i;
+  }
+  return -1;
+}
+
+const OVER = /\b(over|above|more than|greater than|bigger than|larger than|exceeding|at least)\s+([-(]?[$€£¥]?[\d.,]+\s*(?:k|m|mn|bn)?\)?)(?=\s|$)/i;
+
+/** The amount threshold in "… over 10,000", or none; asks when the number can't be read. */
+function threshold(rest: string): { value?: number; atLeast: boolean } {
+  const m = OVER.exec(rest);
+  if (!m) {
+    if (/\b(?:over|above|more than|greater than|exceeding|at least)\b/i.test(rest)) throw new Ask('What number should they be over? For example "over 10,000".');
+    return { atLeast: false };
+  }
+  const value = parseNumber(m[2].replace(/\s+/g, ""));
+  if (!Number.isFinite(value)) throw new Ask('What number should they be over? For example "over 10,000".');
+  return { value, atLeast: /at least/i.test(m[1]) };
+}
+
+/** Highlight whole data rows where a formula (written for the first data row) holds. */
+function flagRows(env: Env, formula: string, what: string, colorWord: string | undefined): Out {
+  const n = colCount(env.sheet);
+  const range = columnData(env.sheet, 0, Math.max(0, n - 1));
+  const c = COLORS[(colorWord ?? "red").toLowerCase()] ?? COLORS.red;
+  const name = colorWord ? colorWord.toLowerCase() : "light red";
+  return {
+    actions: [act(env, "format.conditionalAdd", { rule: { kind: "formula", formula, ranges: [range], format: { fill: c.fill, color: c.ink } } })],
+    explanation: `Highlight the rows of ${env.sheet.name} ${what} in ${name}. It's a conditional format, so it follows the values as they change; nothing is deleted.`,
+  };
+}
+
+function amountColumn(env: Env): number {
+  const a = roleColumn(env, AMOUNT_HEADS);
+  if (a < 0) throw new Ask(`Which column holds the amounts? ${env.sheet.name} has no Amount column.`);
+  return a;
+}
+
+function weekendOut(env: Env, rest: string, colorWord: string | undefined): Out {
+  const d = roleColumn(env, DATE_HEADS);
+  if (d < 0) throw new Ask(`Which column holds the dates? ${env.sheet.name} has no Date column.`);
+  const t = threshold(rest);
+  const row = firstDataRow(env.sheet) + 1;
+  const ref = (c: number) => `$${columnLetter(c)}${row}`;
+  const weekend = `WEEKDAY(${ref(d)},2)>5`;
+  const dated = `dated on a Saturday or Sunday (${columnLabel(env.sheet, d)})`;
+  if (t.value === undefined) return flagRows(env, `=AND(ISNUMBER(${ref(d)}),${weekend})`, dated, colorWord);
+  const a = amountColumn(env);
+  const op = t.atLeast ? ">=" : ">";
+  return flagRows(
+    env,
+    `=AND(ISNUMBER(${ref(d)}),${weekend},ABS(${ref(a)})${op}${t.value})`,
+    `${dated} with ${columnLabel(env.sheet, a)} ${t.atLeast ? "of at least" : "over"} ${fmtNum(t.value)}, debit or credit,`,
+    colorWord,
+  );
+}
+
+function roundOut(env: Env, rest: string, colorWord: string | undefined): Out {
+  const a = amountColumn(env);
+  const t = threshold(rest);
+  const ref = `$${columnLetter(a)}${firstDataRow(env.sheet) + 1}`;
+  const over = t.value === undefined ? "" : `,ABS(${ref})${t.atLeast ? ">=" : ">"}${t.value}`;
+  return flagRows(
+    env,
+    `=AND(ISNUMBER(${ref}),${ref}<>0,MOD(ABS(${ref}),1000)=0${over})`,
+    `where ${columnLabel(env.sheet, a)} is a round amount (a multiple of 1,000)${t.value === undefined ? "" : ` ${t.atLeast ? "of at least" : "over"} ${fmtNum(t.value)}`}`,
+    colorWord,
+  );
+}
+
+const FLAG_VERB = "(?:flag|highlight|mark|find|show|spot|colou?r|shade|list|pick out)\\s+(?:me\\s+)?(?:the\\s+|all\\s+|any\\s+)?";
+
 const TYPE_ROWS = "(rows?|columns?|cols?)";
 const kindOf = (w: string): "rows" | "cols" => (/^row/i.test(w) ? "rows" : "cols");
 const COUNT = "(\\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|fifty|hundred)";
@@ -569,6 +690,18 @@ const RULES: Rule[] = [
     },
   },
 
+  // ------------------------------------------------- a single figure
+  {
+    re: /^(?:show\s+(?:me\s+)?|what(?:'s| is| are)\s+(?:the\s+)?|get\s+(?:me\s+)?(?:the\s+)?|calculate\s+(?:the\s+)?|work out\s+(?:the\s+)?|give me\s+(?:the\s+)?|find\s+(?:the\s+)?|how much is\s+(?:the\s+)?)?(sum|total|grand total|average|avg|mean|count|number of|min|minimum|max|maximum|lowest|highest|smallest|largest|biggest|add up)(?:\s+(?:of|for|in|on))?\s+(?:the\s+|all\s+(?:the\s+)?)?(.+?)$/i,
+    run: (m, env) => figureOut(env, m[1], m[2]),
+  },
+  {
+    re: /^(?:what(?:'s| is)\s+)?(?:the\s+)?(?:total|sum|grand total|average)$/i,
+    run: () => {
+      throw new Ask('Of which column? For example "total of amount".');
+    },
+  },
+
   // ------------------------------------------------------- number formats
   {
     re: new RegExp(`^(?:format|show|display|set|make|change|turn|convert)\\s+(.+?)\\s+(?:as|to|in|into|a|an)\\s+(?:an?\\s+)?(?:the\\s+)?(${FORMAT_WORDS})(?:\\s+format)?$`, "i"),
@@ -578,6 +711,16 @@ const RULES: Rule[] = [
       const t = target(env, m[1], false);
       return styleOut(env, t, { numFmt: entry[1] }, `Show the numbers as ${entry[2]} in`);
     },
+  },
+
+  // ------------------------------------------- journal flags (JE tests)
+  {
+    re: new RegExp(`^${FLAG_VERB}(.*\\bweekends?\\b.*?)(?:\\s+in\\s+${COLOR_RE})?$`, "i"),
+    run: (m, env) => weekendOut(env, m[1], m[2]),
+  },
+  {
+    re: new RegExp(`^${FLAG_VERB}(?:round(?:[- ]number)?|round-sum)\\s+(?:amounts?|numbers?|figures?|values?|postings?|entries|journals?|transactions|payments)(.*?)(?:\\s+in\\s+${COLOR_RE})?$`, "i"),
+    run: (m, env) => roundOut(env, m[1], m[2]),
   },
 
   // ---------------------------------------------------- duplicates, CF
@@ -916,6 +1059,7 @@ export function parse(request: string, ctx: AskContext): ParseResult | null {
       if (env.usedSelection) confidence -= 0.15;
       const result: ParseResult = { confidence: Math.round(confidence * 100) / 100, explanation: out.explanation, missing: [] };
       if (out.command) result.command = out.command;
+      if (out.figure) result.figure = out.figure;
       const actions = out.actions ?? [];
       if (actions.length === 1) result.action = actions[0];
       else if (actions.length > 1) result.actions = actions;
@@ -937,6 +1081,8 @@ export const EXAMPLES: readonly string[] = [
   "show blanks in category",
   "clear filter",
   "sum of amount by region",
+  "total of amount",
+  "flag weekend postings over 10,000",
   "make column B bold",
   "format C as currency",
   "freeze top row",

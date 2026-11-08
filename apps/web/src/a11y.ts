@@ -12,6 +12,7 @@
  * startup.
  */
 import "./a11y.css";
+import { selectWantsEscape, trackSelectPickers } from "./ui/selectpicker";
 
 const FOCUSABLE = [
   "a[href]",
@@ -129,6 +130,7 @@ export interface ModalOptions {
 export function modal(back: HTMLElement, opts: ModalOptions = {}): void {
   if (back.dataset.cfModal) return;
   back.dataset.cfModal = "1";
+  trackSelectPickers();
   const active = document.activeElement as HTMLElement | null;
   const previous = active && active !== document.body && !back.contains(active) ? active : lastOutsideFocus;
 
@@ -159,7 +161,8 @@ export function modal(back: HTMLElement, opts: ModalOptions = {}): void {
     } else if (e.key === "Escape") {
       // most dialogs close themselves on Escape; for the rest, press Cancel.
       // Not when something inside used the key (a suggestion list, a select).
-      if (e.target instanceof HTMLSelectElement) return;
+      // An open dropdown takes its own Esc; a closed one with focus doesn't block closing.
+      if (selectWantsEscape(e.target)) return;
       queueMicrotask(() => {
         if (!back.isConnected || e.defaultPrevented) return;
         const cancel = closeButton(dialog);

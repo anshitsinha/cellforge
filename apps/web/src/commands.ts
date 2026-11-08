@@ -13,6 +13,7 @@
  * change a title only together with the guide pages that mention it.
  */
 import type { Action, ActionRegistry } from "@cellforge/actions";
+import { recentDetail, type RecentEntry } from "./persist";
 import { type CellRange, type Grid, columnLetter } from "@cellforge/grid";
 import type { Command } from "./palette";
 import type { EditableSource } from "./editable";
@@ -118,6 +119,9 @@ export interface CommandDeps {
 
   // file
   newWorkbook: () => void;
+  /** workbooks put away in this browser (persist.ts), newest first */
+  recent: () => readonly RecentEntry[];
+  openRecent: (id: string) => void;
   showStartScreen: () => void;
   openFile: () => void;
   saveFile: (saveAs?: boolean) => Promise<void>;
@@ -211,6 +215,7 @@ export function buildCommands(d: CommandDeps): AppCommand[] {
     { group: "File", section: "new", id: "new", title: "New workbook", description: "Start again from the start screen: a blank sheet, a workflow or sample data", icon: "plus", hint: "blank start screen", run: d.showStartScreen },
     { group: "File", section: "new", id: "template", title: "New from a template (monthly close, bank rec, audit tests)…", description: "A ready-made workbook laid out for a common job", icon: "document", hint: "template starter new workbook monthly close bank reconciliation audit tests", run: d.startTemplate },
     { group: "File", section: "open", id: "open", title: "Open…", keys: "Ctrl O", description: "A .cellforge workbook, Excel, CSV, JSON, Parquet or a PDF bank statement", icon: "open", hint: "import csv file cellforge excel xlsx", run: d.openFile },
+    ...(d.recent() ?? []).map((r): Def => ({ group: "File", section: "open", submenu: "Open recent", id: `recent:${r.id}`, title: `Open recent: ${r.name}`, description: `Kept in this browser · ${recentDetail(r)}`, icon: "history", hint: `recent workbook reopen ${r.name}`, run: () => d.openRecent(r.id) })),
     { group: "File", section: "open", id: "statement", title: "Import a bank statement (PDF or CSV)…", description: "Read a statement's transactions onto a new sheet", icon: "upload", hint: "bank statement pdf transactions balance reconcile import", run: () => void pickStatement().then((f) => f && importStatement(f, d.statementDeps())) },
     ...[false, true].map((folder): Def => ({
       group: "File",
@@ -333,14 +338,15 @@ export function buildCommands(d: CommandDeps): AppCommand[] {
         ] as Def[])
       : []),
     ...src.filterViews.map((v): Def => ({ group: "Data", section: "filter", id: `view:${v.name}`, title: `Switch to view: ${v.name}`, description: "A saved filter view", icon: "filter", hint: "filter view saved", menu: false, run: () => d.run({ type: "filter.applyView", params: { name: v.name } }) })),
-    { group: "Data", section: "clean", id: "cleanup", title: "Clean up this sheet (messy export)…", description: "Unwrap report headers, drop totals, fix dates and numbers stored as text", icon: "check", hint: "unwrap report header totals footers dates numbers text to numbers type", run: () => openCleanup({ source: d.source, run: d.run, goTo: (r, c) => d.goTo(d.activeSheet(), r, c), focusGrid: d.focusGrid }) },
-    { group: "Data", section: "clean", id: "variants", title: "Fix spelling variants in this column…", description: "Merge \"ACME Ltd\" and \"Acme Limited\" into one name", icon: "check", hint: "clean spelling variants duplicates names vendors customers case spaces typos abbreviations merge normalise standardise", run: () => void openVariants({ source: d.source, activeSheet: d.activeSheet, col: () => d.grid.selection.col, run: d.run, status: d.status, focusGrid: d.focusGrid, model: d.aiModelKiln, goTo: d.goTo }) },
+    { group: "Data", section: "clean", id: "cleanup", title: "Clean up this sheet (messy export)…", description: "Unwrap report headers, drop totals, fix dates and numbers stored as text", icon: "wand", hint: "unwrap report header totals footers dates numbers text to numbers type", run: () => openCleanup({ source: d.source, run: d.run, goTo: (r, c) => d.goTo(d.activeSheet(), r, c), focusGrid: d.focusGrid }) },
+    { group: "Data", section: "clean", id: "variants", title: "Fix spelling variants in this column…", description: "Merge \"ACME Ltd\" and \"Acme Limited\" into one name", icon: "merge", hint: "clean spelling variants duplicates names vendors customers case spaces typos abbreviations merge normalise standardise", run: () => void openVariants({ source: d.source, activeSheet: d.activeSheet, col: () => d.grid.selection.col, run: d.run, status: d.status, focusGrid: d.focusGrid, model: d.aiModelKiln, goTo: d.goTo }) },
     ...transforms(d, sheetName),
-    { group: "Data", section: "rules", id: "validation", title: "Data validation (dropdown list, allowed values)…", description: "Limit what can be typed: lists, ranges, dates, tick boxes", icon: "check", hint: "validation dropdown list choices allowed values restrict input checkbox tick box", run: () => openValidationDialog(d.dvDeps()) },
-    { group: "Data", section: "rules", id: "validation-tick", title: "Tick boxes in the selection", description: "Turn the selected cells into tick boxes", icon: "check", hint: "checkbox check box tick boxes true false column type", run: () => d.run({ type: "validation.add", params: { rule: { kind: "checkbox", ranges: [range()] } } }) },
+    { group: "Data", section: "rules", id: "validation", submenu: "Validation", title: "Data validation (dropdown list, allowed values)…", description: "Limit what can be typed: lists, ranges, dates, tick boxes", icon: "dropdown", hint: "validation dropdown list choices allowed values restrict input checkbox tick box", run: () => openValidationDialog(d.dvDeps()) },
+    { group: "Data", section: "rules", id: "validation-tick", submenu: "Validation", title: "Tick boxes in the selection", description: "Turn the selected cells into tick boxes", icon: "checkbox", hint: "checkbox check box tick boxes true false column type", run: () => d.run({ type: "validation.add", params: { rule: { kind: "checkbox", ranges: [range()] } } }) },
     {
       group: "Data",
       section: "rules",
+      submenu: "Validation",
       id: "validation-circle",
       title: "Circle invalid data",
       description: "Ring every cell that breaks its validation rule",
@@ -352,8 +358,8 @@ export function buildCommands(d: CommandDeps): AppCommand[] {
         d.status(bad.length ? `${bad.length.toLocaleString()} cell${bad.length === 1 ? " breaks" : "s break"} a validation rule (circled in red)` : "Every cell keeps its validation rule.");
       },
     },
-    { group: "Data", section: "rules", id: "validation-uncircle", title: "Clear validation circles", description: "Remove the red rings", icon: "close", hint: "validation invalid circles remove", run: () => d.grid.setHighlights([]) },
-    { group: "Data", section: "rules", id: "data-checks", title: "Data checks…", description: "Rules the data must pass (not blank, unique, debits = credits) before export", icon: "check", hint: "checks rules validate not blank unique master list lookup debits equal credits control total tolerance row count duplicate keys checklist gate export", run: () => openChecks({ ...base(), goTo: d.goTo }) },
+    { group: "Data", section: "rules", id: "validation-uncircle", submenu: "Validation", title: "Clear validation circles", description: "Remove the red rings", icon: "close", hint: "validation invalid circles remove", run: () => d.grid.setHighlights([]) },
+    { group: "Data", section: "rules", id: "data-checks", title: "Data checks…", description: "Rules the data must pass (not blank, unique, debits = credits) before export", icon: "list-check", hint: "checks rules validate not blank unique master list lookup debits equal credits control total tolerance row count duplicate keys checklist gate export", run: () => openChecks({ ...base(), goTo: d.goTo }) },
     { group: "Data", section: "rules", id: "categorise", title: "Categorise…", description: "Tag rows by rules that learn from you (and the AI, if loaded)", icon: "sparkles", hint: "categorise categorize category tag bulk tagging rules learn uncategorised queue coding expenses", run: () => openCategorise({ ...base(), source: d.source, range, model: d.aiModelKiln }) },
     { group: "Data", section: "join", id: "join-sheets", title: "Join two sheets…", description: "Bring columns from another sheet across by a key, like XLOOKUP", icon: "table", hint: "join merge lookup vlookup xlookup match keys doctor orphans duplicates fuzzy why don't these match", run: () => openJoin(base()) },
     { group: "Data", section: "join", id: "compare-versions", title: "Compare two versions by key…", description: "What was added, removed or changed between two sheets", icon: "table", hint: "compare diff versions changed added removed old new key file compare", run: () => openCompare(base()) },
@@ -445,13 +451,13 @@ export function buildCommands(d: CommandDeps): AppCommand[] {
 function auditTools(d: CommandDeps, sheetName: () => string): Def[] {
   const tools: [AuditToolKind, string, string, IconName, string][] = [
     ["duplicates", "Find duplicates…", "Exact and near-duplicate payments, invoices or entries", "copy", "audit duplicate exact near fuzzy similar vendor invoice double payment"],
-    ["sequence", "Find gaps in a sequence…", "Missing, repeated or out-of-order invoice and cheque numbers", "audit", "audit sequence gap missing invoice cheque number duplicate out of order"],
+    ["sequence", "Find gaps in a sequence…", "Missing, repeated or out-of-order invoice and cheque numbers", "list-check", "audit sequence gap missing invoice cheque number duplicate out of order"],
     ["benford", "Benford's law test…", "First-digit test for made-up or manipulated amounts", "chart", "audit benford first digit two digits chi-square mad fraud"],
     ["stratify", "Stratify values into bands…", "How many items and how much value in each size band", "chart", "audit stratify strata bands value ranges profile"],
     ["topn", "Largest items (top N)…", "The biggest items, for a quick look at what matters", "sort", "audit top n largest biggest items"],
     ["pareto", "Pareto analysis…", "Which few vendors or customers make up most of the value", "chart", "audit pareto 80/20 cumulative share vendor customer concentration"],
     ["ageing", "Ageing buckets…", "Receivables or payables by days overdue: 30, 60, 90+", "calendar", "audit ageing aging days overdue receivables payables 30 60 90"],
-    ["sample", "Pick a sample…", "Random, systematic, stratified or monetary-unit sampling, repeatable", "audit", "audit sample sampling random systematic stratified monetary unit mus seed"],
+    ["sample", "Pick a sample…", "Random, systematic, stratified or monetary-unit sampling, repeatable", "filter", "audit sample sampling random systematic stratified monetary unit mus seed"],
   ];
   return tools.map(([kind, title, description, icon, hint]) => ({
     group: "Audit",
@@ -469,8 +475,8 @@ function jeTools(d: CommandDeps, sheetName: () => string, range: () => CellRange
   const tools: [JeToolKind, string, string, string, IconName, string][] = [
     ["journal", "Journal entry tests…", "Weekend, late-night, round-sum, unbalanced and unusual-user entries, scored", "tests", "audit", "audit je journal entries testing manual weekend holiday after hours round amounts approval limit threshold backdated keywords unusual user seldom account period end duplicate score"],
     ["overlaps", "Red-flag overlaps (vendor vs employee)…", "Vendors who share a bank account, address or phone with staff", "tests", "warning", "audit overlap vendor employee master same bank account address phone tax id similar names fraud"],
-    ["footing", "Foot and cross-foot this range…", "Check that the rows and columns add up to their totals", "schedules", "check", "audit footing cross-footing cast add up totals check schedule"],
-    ["rollforward", "Roll-forward check…", "Opening + movements = closing, for fixed assets and provisions", "schedules", "check", "audit roll forward opening movements closing balance fixed assets provisions"],
+    ["footing", "Foot and cross-foot this range…", "Check that the rows and columns add up to their totals", "schedules", "table", "audit footing cross-footing cast add up totals check schedule"],
+    ["rollforward", "Roll-forward check…", "Opening + movements = closing, for fixed assets and provisions", "schedules", "scale", "audit roll forward opening movements closing balance fixed assets provisions"],
     ["pii", "PII scan and safe copy…", "Find personal data and make a masked copy to share", "privacy", "shield", "privacy personal data pii gdpr mask hash pseudonymise anonymise redact share safely email phone iban card ssn"],
   ];
   return tools.map(([kind, title, description, section, icon, hint]) => ({
@@ -506,11 +512,13 @@ function transforms(d: CommandDeps, sheetName: () => string): Def[] {
   ];
   return tools.map(([kind, title, description, hint]) => ({
     group: kind === "goalseek" ? "Analyse" : "Data",
-    section: kind === "goalseek" ? "whatif" : "shape",
+    section: kind === "goalseek" ? "whatif" : kind === "dedupe" ? "clean" : "shape",
+    // the reshaping tools share one submenu so the Data menu fits on screen
+    ...(kind === "goalseek" || kind === "dedupe" ? {} : { submenu: "Reshape" }),
     id: `transform-${kind}`,
     title,
     description,
-    icon: kind === "goalseek" ? "scale" : "table",
+    icon: kind === "goalseek" ? "scale" : kind === "dedupe" ? "merge" : "table",
     hint,
     run: () => openTransform(kind, { ...d.statementDeps(), source: d.source, activeSheet: d.activeSheet, sheetName, range: () => d.grid.range, selection: () => d.grid.selection }),
   }));
@@ -541,7 +549,7 @@ function timeTools(d: CommandDeps, sheetName: () => string, range: () => CellRan
 function reviewMeta(c: { id: string; title: string; hint: string; run: () => unknown }): Def {
   const meta: Record<string, [string, IconName, string]> = {
     "review-note": ["A reviewer's question on this cell, open until cleared", "signoff", "notes"],
-    "review-clear": ["Mark this review note as dealt with", "check", "notes"],
+    "review-clear": ["Mark this review note as dealt with", "success", "notes"],
     "review-reopen": ["Open this review note again", "signoff", "notes"],
     "review-status": ["Sign-offs and open notes for every sheet", "signoff", "signoff"],
     "sign-prepared": ["Record who prepared this sheet, and when", "signoff", "signoff"],
@@ -549,9 +557,9 @@ function reviewMeta(c: { id: string; title: string; hint: string; run: () => unk
     "sign-reviewed": ["Record who reviewed this sheet, and when", "signoff", "signoff"],
     "unsign-reviewed": ["Take the reviewer's sign-off off this sheet", "signoff", "signoff"],
     "wp-ref": ["The workpaper index for this sheet, like B-3", "document", "signoff"],
-    "mark-legend": ["A sheet explaining every tick mark used", "check", "marks"],
+    "mark-legend": ["A sheet explaining every tick mark used", "list-check", "marks"],
   };
-  if (c.id.startsWith("mark:")) return { ...c, group: "Evidence & review", section: "marks", submenu: "Tick marks", description: "Mark the selection as agreed, footed, traced or vouched", icon: "check" };
+  if (c.id.startsWith("mark:")) return { ...c, group: "Evidence & review", section: "marks", submenu: "Tick marks", description: "Mark the selection as agreed, footed, traced or vouched", icon: "audit" };
   const [description, icon, section] = meta[c.id] ?? ["Review this workbook", "signoff", "signoff"];
   return { ...c, group: "Evidence & review", section, description, icon };
 }

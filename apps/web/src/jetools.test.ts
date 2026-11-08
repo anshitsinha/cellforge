@@ -12,6 +12,7 @@ import {
   guessRollMap,
   guessSign,
   journalSheets,
+  resultSpec,
   numberList,
   Out,
   parseDateList,
@@ -79,13 +80,17 @@ describe("journal tools", () => {
     expect(r.ranked.map((e) => e.id)).toEqual(["J3", "J2"]); // 5 for unbalanced; 1 + 1 + 2 = 4 for the Saturday round plug
     const [flags, summary] = journalSheets(data, lines, r, "GL");
     expect(flags.name).toBe("GL JE flags");
-    expect(flags.out.columns.map((c) => c.name)).toEqual(["Rank", "Score", "Entry", "Row", "Tests", "Reasons", "Entry", "Date", "Account", "Debit", "Credit", "Description"]);
-    expect(colValues(flags.out, "Row")).toEqual([5, 6, 3, 4]);
+    expect(flags.out.columns.map((c) => c.name)).toEqual(["Rank", "Score", "Entry", "GL row", "Tests failed", "Why", "Entry", "Date", "Account", "Debit", "Credit", "Description"]);
+    expect(colValues(flags.out, "GL row")).toEqual([5, 6, 3, 4]);
     expect(colValues(flags.out, "Rank")).toEqual([1, 1, 2, 2]);
-    expect(colValues(flags.out, "Tests")[2]).toBe("Weekend and holiday postings, Round amounts, Keywords in the description");
+    expect(colValues(flags.out, "Tests failed")[2]).toBe("Weekend and holiday postings, Round amounts, Keywords in the description");
     expect(summary.name).toBe("GL JE summary");
     expect(colValues(summary.out, "Entries flagged")).toEqual([1, 1, 1, 1]);
     expect(journalSheets(data, lines, r, "GL", false)).toHaveLength(1);
+    // laid out with a title and a summary
+    expect(flags.title).toBe("Journal entry tests: GL");
+    expect(flags.summary).toBe("2 entries (4 lines) flagged out of 3 entries. Every line of each flagged entry, riskiest first.");
+    expect(resultSpec(flags).fixes).toBe(flags.out.fixes);
   });
 });
 
@@ -119,7 +124,7 @@ describe("footing tools", () => {
     const s = footSheet(r, all.top, all.left, all.cells.length - 1, 3, "TB");
     expect(s.name).toBe("TB footing");
     expect(colValues(s.out, "Cell")).toEqual(["B3", "C3", "D3", "D1", "D2", "D3", "D3", "D3"]);
-    expect(colValues(s.out, "Result")).toEqual(["agrees", "DIFFERENCE", "agrees", "agrees", "agrees", "DIFFERENCE", "DIFFERENCE", "agrees"]);
+    expect(colValues(s.out, "Result")).toEqual(["Agrees", "Differs", "Agrees", "Agrees", "Agrees", "Differs", "Differs", "Agrees"]);
     expect(colValues(s.out, "Line").slice(0, 4)).toEqual(["B", "C", "D", "Sales"]);
   });
 

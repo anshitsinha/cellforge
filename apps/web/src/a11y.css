@@ -31,10 +31,11 @@
 
 /* The grid draws its own active cell, but that shows whether or not the
    grid has focus, so the canvas gets a ring of its own when reached by
-   keyboard. */
+   keyboard. A 1px inset line: the active cell is the main sign of focus,
+   so the frame stays quiet. */
 .sheet canvas[role="application"]:focus-visible {
-  outline: 2px solid var(--focus-ring-color);
-  outline-offset: -2px;
+  outline: 1px solid color-mix(in srgb, var(--focus-ring-color) 55%, transparent);
+  outline-offset: -1px;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ActionHistory, BlobStore } from "@cellforge/actions";
 import { EXAMPLES, actionsOf, parse, runRequest, validateAction } from "@cellforge/ai";
 import { setCells, sheetActions, type SheetCtx } from "./actions";
-import { askContext, planFor, sheetExamples, sheetInfo, suggestCommands } from "./askbar";
+import { aggregateFigure, aiChip, askContext, enterAction, planFor, planMeta, rankExamples, sheetExamples, sheetInfo, suggestCommands, type Plan } from "./askbar";
 import { BlankSource, EditableSource } from "./editable";
 import type { Command } from "./palette";
 import { Workbook } from "./workbook";
@@ -105,7 +105,7 @@ describe("the parser against the real catalog", () => {
     "highlight amounts between 10 and 20",
   ];
 
-  it.each(phrasings.filter((p) => !["undo", "sum of amount by region", "fill down"].includes(p)))("%s → valid actions", async (text) => {
+  it.each(phrasings.filter((p) => !["undo", "sum of amount by region", "fill down", "total of amount"].includes(p)))("%s → valid actions", async (text) => {
     const { deps } = await setup();
     const plan = planFor(text, deps);
     expect(plan.kind, JSON.stringify(plan)).toBe("ready");
@@ -235,5 +235,56 @@ describe("examples from the sheet's own columns", () => {
     const src = new EditableSource(new BlankSource(5, 3));
     const ex = sheetExamples({ sheets: [sheetInfo("s", "Blank", src)], activeSheet: "s", selection: { top: 0, left: 0, bottom: 0, right: 0 } }, 4);
     expect(ex).toEqual(EXAMPLES.slice(0, 4));
+  });
+});
+
+describe("ask bar: no dead ends, no surprises", () => {
+  it("answers a total inline instead of saying it doesn't know", async () => {
+    const { deps } = await setup();
+    const plan = planFor("what is the total amount", deps);
+    expect(plan).toMatchObject({ kind: "figure", figure: { fn: "SUM", col: 2, formula: "=SUM(C2:C120)" } });
+  });
+
+  it("flags weekend postings over a threshold on a sheet with Date and Amount", async () => {
+    const { deps } = await setup();
+    const plan = planFor("flag weekend postings over 10,000", deps);
+    expect(plan.kind).toBe("ready");
+  });
+
+  it("adds up a column the way the formula would", () => {
+    const vals = [100, "x", null, -40.5, "", 0.1, 0.2];
+    expect(aggregateFigure("SUM", vals)).toBe(59.8);
+    expect(aggregateFigure("COUNTA", vals)).toBe(5);
+    expect(aggregateFigure("AVERAGE", [2, 4, "n/a"])).toBe(3);
+    expect(aggregateFigure("MIN", vals)).toBe(-40.5);
+    expect(aggregateFigure("MAX", [])).toBeNull();
+  });
+
+  it("shows a change's plan on the first Enter and makes it on the second", () => {
+    const ready: Plan = { kind: "ready", actions: [], explanation: "Sort", confidence: 0.95 };
+    expect(enterAction(ready, null, "sort by amount")).toBe("confirm");
+    expect(enterAction(ready, "sort by amount", "sort by amount")).toBe("run");
+    expect(enterAction(ready, "sort by amount", "sort by amount desc")).toBe("confirm");
+    const open: Plan = { kind: "command", id: "pivot", command: { id: "pivot", title: "Pivot", run: () => 0 }, explanation: "" };
+    expect(enterAction(open, null, "pivot")).toBe("run");
+    expect(enterAction({ kind: "unknown", suggestions: [], canAskModel: false }, null, "x")).toBe("none");
+    expect(enterAction({ kind: "unknown", suggestions: [], canAskModel: true }, null, "x")).toBe("confirm");
+  });
+
+  it("says where, how many rows, and that it can be undone", async () => {
+    const { deps } = await setup();
+    const plan = planFor("sort by amount descending", deps);
+    if (plan.kind !== "ready") throw new Error(plan.kind);
+    expect(planMeta(plan.actions, deps.context(), () => 5)).toBe("On Sales · 4 rows · You can undo it (Ctrl+Z)");
+  });
+
+  it("puts examples that share a word with the request first", () => {
+    expect(rankExamples("amounts per vendor", ["freeze top row", "sum of amount by vendor", "fill down"])[0]).toBe("sum of amount by vendor");
+  });
+
+  it("names the AI state in a chip and offers setup when there is none", () => {
+    expect(aiChip("none")).toEqual({ text: "Rules only · Set up private AI", setup: true });
+    expect(aiChip("ready")?.setup).toBe(false);
+    expect(aiChip(undefined)).toBeNull();
   });
 });

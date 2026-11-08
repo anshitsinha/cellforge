@@ -121,6 +121,7 @@ const styleSchema = s.object(
     borderRight: nullable(borderLine),
     borderBottom: nullable(borderLine),
     borderLeft: nullable(borderLine),
+    role: nullable(s.string("a semantic look painted in the theme's colours (light and dark); an explicit fill or color wins", { enum: ["header", "total", "flag-warn", "flag-bad", "flag-good", "input"] })),
   },
   [],
   "properties to set; null clears one, missing ones are left alone",

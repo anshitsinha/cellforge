@@ -6,7 +6,7 @@
  */
 import "./joindialog.css";
 import type { Action } from "@cellforge/actions";
-import { buildTb, formatValue, parseNumberLoose, readTb, Table, type ColumnData } from "@cellforge/core";
+import { buildTb, formatValue, parseNumberLoose, readTb, type ColumnData } from "@cellforge/core";
 import {
   applyMapping,
   buildMapping,
@@ -36,8 +36,10 @@ import {
 import { setCells } from "./actions";
 import { sheetText } from "./cleanup";
 import { EditableSource } from "./editable";
-import { needTwoSheets, pickSides, sheetHeader } from "./recondialog";
-import { toolDialog } from "./toolkit";
+import { needTwoSheets, pickSides, sheetHeader, sidePreview } from "./recondialog";
+import { addResultSheets, MONEY_FMT, type ResultSheetSpec } from "./resultsheet";
+import { button, count, el, field, headline, notice, plural, section, tiles, toolDialog, type ToolDialog } from "./toolkit";
+import { formatCell, renderTable } from "./ui/table";
 import type { Workbook } from "./workbook";
 
 export interface JoinDeps {
@@ -52,14 +54,14 @@ export interface JoinDeps {
 
 // ------------------------------------------------------------ helpers --
 
-export interface ResultSheet {
-  name: string;
-  columns: ColumnData[];
+/** A results sheet (laid out by addResultSheets: title, summary, totals, header). */
+export interface ResultSheet extends ResultSheetSpec {
   numFmts: string[];
 }
 
-const MONEY = "#,##0.00;(#,##0.00)";
+const MONEY = MONEY_FMT;
 const PCT = "0.0%";
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** A column of values: numbers when every value is a number or blank, text otherwise. */
 export function toColumn(name: string, values: ReadonlyArray<KeyValue>): ColumnData {
@@ -159,6 +161,15 @@ export const KIND_LABEL: Record<JoinKind, string> = {
   anti: "Anti: A rows with no match in B",
 };
 
+/** The kind of join in a few words, for the results sheet's summary. */
+const KIND_SHORT: Record<JoinKind, (a: string, b: string) => string> = {
+  inner: () => "rows with a match on both sides",
+  left: (a) => `every ${a} row`,
+  right: (_, b) => `every ${b} row`,
+  full: () => "every row from both sides",
+  anti: (a) => `${a} rows with no match`,
+};
+
 export const MANY_LABEL: Record<ManyPolicy, string> = {
   all: "Keep every match (rows repeat)",
   first: "Keep the first match only",
@@ -223,7 +234,7 @@ export function joinSheet(a: EditableSource, b: EditableSource, nameA: string, n
   const how: string[] = new Array(result.rows);
   for (let i = 0; i < result.rows; i++) {
     const s = result.score[i];
-    let t = result.left[i] < 0 ? `only in ${nameB}` : result.right[i] < 0 ? `only in ${nameA}` : s >= 1 ? "match" : `fuzzy ${Math.round(s * 100)}%`;
+    let t = result.left[i] < 0 ? `Only in ${nameB}` : result.right[i] < 0 ? `Only in ${nameA}` : s >= 1 ? "Match" : `Fuzzy match ${Math.round(s * 100)}%`;
     if (result.flag[i]) t += spec.many === "first" ? "; more matches left out" : "; one of several matches";
     how[i] = t;
   }
@@ -241,7 +252,9 @@ export function joinSheet(a: EditableSource, b: EditableSource, nameA: string, n
     columns.push({ kind: "number", name: uniqueName(`${nameB} row`, "join"), values: rowsB });
     numFmts.push("");
   }
-  return { sheet: { name: `Join ${nameA} + ${nameB}`, columns, numFmts }, result };
+  const keys = spec.keysA.filter((k) => k >= 0).map((k) => ha.names[k]).join(" + ");
+  const summary = `${plural(result.rows, "row")}: ${KIND_SHORT[spec.kind](nameA, nameB)}, on ${keys}. ${result.matchedLeft.toLocaleString()} ${nameA} rows found a partner in ${nameB}.`;
+  return { sheet: { name: `Join · ${nameA} + ${nameB}`, title: `${nameA} joined with ${nameB}`, summary, columns, numFmts, totals: false }, result };
 }
 
 /** Columns of two versions paired by header name (case and spaces ignored), in the old file's order. */
@@ -292,7 +305,7 @@ export function compareSheets(oldSrc: EditableSource, newSrc: EditableSource, sp
 }
 
 /** The compare result as three sheets: added rows, removed rows, and changes (one row per changed cell). */
-export function compareResultSheets(oldSrc: EditableSource, newSrc: EditableSource, spec: CompareSpec, r: CompareResult): ResultSheet[] {
+export function compareResultSheets(oldSrc: EditableSource, newSrc: EditableSource, spec: CompareSpec, r: CompareResult, names: { old: string; new: string } = { old: "the old version", new: "the new version" }): ResultSheet[] {
   const ho = sheetHeader(oldSrc);
   const hn = sheetHeader(newSrc);
   const whole = (src: EditableSource, h: { names: string[]; first: number }, rows: number[], label: string, name: string): ResultSheet => {
@@ -302,10 +315,10 @@ export function compareResultSheets(oldSrc: EditableSource, newSrc: EditableSour
       columns.push(toColumn(n, rows.map((x) => src.getCell(x + h.first, c))));
       numFmts.push(colFormat(src, c, h.first));
     });
-    return { name, columns, numFmts };
+    return { name, columns, numFmts, totals: false };
   };
-  const added = whole(newSrc, hn, r.added, "New row", "Compare added");
-  const removed = whole(oldSrc, ho, r.removed, "Old row", "Compare removed");
+  const added = { ...whole(newSrc, hn, r.added, "New row", "Compare · Added"), title: `Rows added in ${names.new}`, summary: r.added.length ? `${plural(r.added.length, "row")} in ${names.new} with a key that isn't in ${names.old}.` : `No rows were added.` };
+  const removed = { ...whole(oldSrc, ho, r.removed, "Old row", "Compare · Removed"), title: `Rows removed from ${names.old}`, summary: r.removed.length ? `${plural(r.removed.length, "row")} in ${names.old} with a key that isn't in ${names.new}.` : `No rows were removed.` };
   // changed: key columns, which column, old, new, difference, rows
   const keyVals: KeyValue[][] = spec.keys.map(() => []);
   const col: string[] = [];
@@ -330,7 +343,10 @@ export function compareResultSheets(oldSrc: EditableSource, newSrc: EditableSour
   const mixed = [...oldV, ...newV].some((v) => typeof v === "string" && v !== "");
   const asText = (vs: KeyValue[]) => (mixed ? vs.map((v) => (v === null || v === undefined ? null : String(v))) : vs);
   const changed: ResultSheet = {
-    name: "Compare changed",
+    name: "Compare · Changed",
+    title: `Values changed between ${names.old} and ${names.new}`,
+    summary: `${plural(col.length, "changed value")} on ${plural(r.changed.length, "row")}, one line per value. ${r.unchanged.toLocaleString()} rows are the same.`,
+    totals: false,
     columns: [
       ...spec.keys.map(([oc], i) => toColumn(ho.names[oc], keyVals[i])),
       toColumn("Column", col),
@@ -355,6 +371,8 @@ export function readTbSheet(src: EditableSource): { lines: TbAccount[]; hasPrior
 export function tbCompareSheet(r: TbCompareResult, nameA: string, nameB: string): ResultSheet {
   return {
     name: "TB compare",
+    title: `Trial balances: ${nameA} against ${nameB}`,
+    summary: `${plural(r.lines.length, "account")}: ${r.onlyA.length.toLocaleString()} only in ${nameA}, ${r.onlyB.length.toLocaleString()} only in ${nameB}, ${r.lines.filter((l) => l.status === "both" && l.movement !== 0).length.toLocaleString()} moved.`,
     columns: [
       toColumn("Account", r.lines.map((l) => l.account)),
       toColumn("Name", r.lines.map((l) => l.name)),
@@ -362,7 +380,7 @@ export function tbCompareSheet(r: TbCompareResult, nameA: string, nameB: string)
       toColumn(nameB, r.lines.map((l) => l.b)),
       toColumn("Movement", r.lines.map((l) => l.movement)),
       toColumn("Movement %", r.lines.map((l) => l.pct)),
-      toColumn("Status", r.lines.map((l) => (l.status === "both" ? "" : l.status === "only A" ? `only in ${nameA}` : `only in ${nameB}`))),
+      toColumn("Status", r.lines.map((l) => (l.status === "both" ? "" : l.status === "only A" ? `Only in ${nameA}` : `Only in ${nameB}`))),
       toColumn(`Name in ${nameB}`, r.lines.map((l) => l.renamed ?? "")),
     ],
     numFmts: ["", "", MONEY, MONEY, MONEY, PCT, "", ""],
@@ -408,6 +426,8 @@ export function readGl(src: EditableSource, map: GlMap): { lines: GlLine[]; bad:
 export function tieSheet(r: TieResult): ResultSheet {
   return {
     name: "GL to TB",
+    title: "General ledger tied out to the trial balance",
+    summary: `${plural(r.lines.length, "account")}: ${r.agree.toLocaleString()} agree, ${r.differ.toLocaleString()} differ, ${r.onlyGl.toLocaleString()} only in the GL, ${r.onlyTb.toLocaleString()} only in the TB. Difference ${formatValue(r.totalDifference, MONEY).text}.`,
     columns: [
       toColumn("Account", r.lines.map((l) => l.account)),
       toColumn("Name", r.lines.map((l) => l.name)),
@@ -415,7 +435,7 @@ export function tieSheet(r: TieResult): ResultSheet {
       toColumn("GL lines", r.lines.map((l) => l.glLines)),
       toColumn("TB", r.lines.map((l) => l.tb)),
       toColumn("Difference", r.lines.map((l) => l.difference)),
-      toColumn("Status", r.lines.map((l) => l.status)),
+      toColumn("Status", r.lines.map((l) => cap(l.status))),
     ],
     numFmts: ["", "", MONEY, "", MONEY, MONEY, ""],
   };
@@ -466,60 +486,38 @@ export function suggestionSheet(from: ReadonlyArray<KeyValue>, to: ReadonlyArray
   const pairs = suggestMapping(s(from), s(to), threshold);
   return {
     name: "Mapping table",
-    columns: [toColumn("From", pairs.map((p) => p.from)), toColumn("To", pairs.map((p) => p.to)), toColumn("Score", pairs.map((p) => Math.round(p.score * 1000) / 1000))],
+    title: "Suggested mapping table",
+    summary: "Check each pair and delete the wrong ones, then use this sheet in Apply a mapping table.",
+    totals: false,
+    columns: [toColumn("From", pairs.map((p) => p.from)), toColumn("To", pairs.map((p) => p.to)), toColumn("How alike", pairs.map((p) => Math.round(p.score * 1000) / 1000))],
     numFmts: ["", "", PCT],
   };
 }
 
 // ---------------------------------------------------------------- UI --
+//
+// Every dialog here follows Reconcile two sheets: a card per side (sheet,
+// the columns that matter, a preview with them highlighted), the settings
+// in titled sections, the result as figures and a table that update as you
+// change things, and one primary button in the footer that adds the sheet.
 
-const money = (n: number) => formatValue(n, "#,##0.00;-#,##0.00").text;
+const money = (n: number) => formatCell(n, "amount");
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
-const count = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
-
-type Props = { textContent?: string; className?: string; type?: string; value?: string; checked?: boolean; inputMode?: string; placeholder?: string; disabled?: boolean; title?: string };
-const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Props = {}, ...kids: Array<Node | string>): HTMLElementTagNameMap[K] => {
-  const e: HTMLElementTagNameMap[K] = document.createElement(tag);
-  Object.assign(e, props);
-  e.append(...kids);
-  return e;
-};
+/** Run straight away when both sheets are this small; bigger ones wait for a button. */
+const LIVE_ROWS = 400_000;
 
 interface Shell {
-  back: { remove(): void };
+  dlg: ToolDialog;
   body: HTMLElement;
-  button: (label: string, act: () => void, disabled?: boolean) => HTMLButtonElement;
+  primary: HTMLButtonElement;
   close: () => void;
-  show: (focus?: HTMLElement) => void;
 }
 
-/**
- * A tool dialog on the shared dialog: fixed header and footer, the body
- * scrolls. The last enabled button in the footer is the primary one (so
- * "Compare" leads until there's a result, then "Add result sheets").
- */
-function shell(d: JoinDeps, title: string, intro: string): Shell {
-  const dlg = toolDialog({ title, size: "lg", onClose: () => d.focusGrid(), className: "join-dialog tk-legacy" });
-  dlg.body.append(el("p", { className: "tk-muted", textContent: intro }));
-  const mine: HTMLButtonElement[] = [];
-  const restyle = () => {
-    const lead = [...mine].reverse().find((b) => !b.disabled) ?? mine[mine.length - 1];
-    for (const b of mine) b.className = b === lead ? "btn-primary" : "btn-secondary";
-  };
-  const watch = new MutationObserver(restyle);
-  const button = (label: string, act: () => void, disabled = false) => {
-    const b = dlg.button(label, act, { kind: "secondary", disabled });
-    dlg.handle.footer.append(b);
-    mine.push(b);
-    watch.observe(b, { attributes: true, attributeFilter: ["disabled"] });
-    restyle();
-    return b;
-  };
-  const close = () => {
-    watch.disconnect();
-    dlg.close();
-  };
-  return { back: { remove: close }, body: dlg.body, button, close, show: (focus) => (focus ?? mine[0])?.focus() };
+/** A tool dialog: Cancel and one primary button (disabled until there's something to add). */
+function shell(d: JoinDeps, title: string, subtitle: string, primaryLabel: string, act: () => unknown, size: "lg" | "xl" = "lg"): Shell {
+  const dlg = toolDialog({ title, subtitle, size, closeLabel: "Cancel", onClose: () => d.focusGrid(), className: "join-dialog rc-dialog" });
+  const primary = dlg.button(primaryLabel, act, { kind: "primary", disabled: true });
+  return { dlg, body: dlg.body, primary, close: () => dlg.close() };
 }
 
 function visibleSheets(d: JoinDeps, need: number, what: string): { wb: Workbook; ids: string[]; first: string; second: string } | null {
@@ -556,23 +554,22 @@ function colSelect(names: readonly string[], selected: number, label: string, on
   return sel;
 }
 
-function checkbox(label: string, checked: boolean, onChange: (v: boolean) => void): HTMLLabelElement {
+function checkbox(label: string, checked: boolean, onChange: (v: boolean) => void, hint?: string): HTMLLabelElement {
   const box = el("input", { type: "checkbox", checked });
   box.addEventListener("change", () => onChange(box.checked));
-  return el("label", { className: "opt-check" }, box, label);
+  return el("label", { className: "rc-pass join-check" }, box, el("span", {}, el("span", { className: "rc-pass__name", textContent: label }), hint ? el("small", { className: "tk-field__hint", textContent: hint }) : null));
 }
 
-function textInput(label: string, value: string, hint: string, onChange: (v: string) => void, mode = "decimal"): HTMLLabelElement {
-  const input = el("input", { type: "text", value, inputMode: mode });
+function textInput(label: string, value: string, hint: string, onChange: (v: string) => void): HTMLLabelElement {
+  const input = el("input", { type: "text", value, inputMode: "decimal" });
   input.addEventListener("change", () => onChange(input.value.trim()));
-  return el("label", {}, label, input, el("small", { textContent: hint }));
+  return field(label, input, hint || undefined);
 }
 
-function normaliseBoxes(o: KeyNormalise, onChange: () => void): HTMLFieldSetElement {
+function normaliseBoxes(o: KeyNormalise, onChange: () => void): HTMLElement {
   return el(
-    "fieldset",
+    "div",
     { className: "join-checks" },
-    el("legend", { textContent: "Compare keys" }),
     ...NORMALISE_OPTIONS.map((opt) =>
       checkbox(NORMALISE_LABEL[opt], !!o[opt], (v) => {
         o[opt] = v;
@@ -582,14 +579,72 @@ function normaliseBoxes(o: KeyNormalise, onChange: () => void): HTMLFieldSetElem
   );
 }
 
-async function addSheets(d: JoinDeps, sheets: ResultSheet[]): Promise<void> {
-  for (const s of sheets) {
-    const source = new EditableSource(new Table(s.columns), 5);
-    await d.run({ type: "sheet.insert", params: { name: s.name, source: d.putBlob(source), numFmts: s.numFmts } });
+interface CardOpts {
+  badge: string;
+  tone?: "a" | "b";
+  title: string;
+  wb: Workbook;
+  ids: readonly string[];
+  id: string;
+  onSheet: (id: string) => void;
+  /** extra choice in the sheet list, e.g. "A's prior period" */
+  extra?: [string, string];
+  /** the column pickers */
+  fields?: readonly HTMLElement[];
+  /** columns to highlight in the preview: column → label */
+  highlight?: ReadonlyMap<number, string>;
+  preview?: boolean;
+}
+
+/** A side card: badge, title, row count, the sheet, its column pickers and a preview. */
+function sideCard(o: CardOpts): HTMLElement {
+  const src = o.wb.has(o.id) ? o.wb.get(o.id).source : null;
+  const rows = src ? Math.max(0, src.usedRange().rows - sheetHeader(src).first) : 0;
+  const sel = sheetSelect(o.wb, o.ids, o.id, `${o.title}: sheet`, o.onSheet, o.extra);
+  const card = el(
+    "section",
+    { className: "rc-side" },
+    el(
+      "header",
+      { className: "rc-side__head" },
+      el("span", { className: `rc-side__badge rc-side__badge--${o.tone ?? "a"}`, textContent: o.badge }),
+      el("div", { className: "rc-side__titles" }, el("strong", { textContent: o.title }), el("span", { className: "tk-muted", textContent: src ? plural(rows, "row") : "" })),
+      sel,
+    ),
+  );
+  if (o.fields?.length) card.append(el("div", { className: "rc-roles" }, ...o.fields));
+  if (src && o.preview !== false) card.append(el("div", { className: "table-wrap rc-preview-wrap" }, sidePreview(src, o.highlight ?? new Map(), 4)));
+  return card;
+}
+
+function sides(a: HTMLElement, b: HTMLElement, mark = "⇄"): HTMLElement {
+  const vs = el("div", { className: "rc-vs", textContent: mark });
+  vs.setAttribute("aria-hidden", "true");
+  return el("div", { className: "rc-sides" }, a, vs, b);
+}
+
+/** A small "label · A · B" table (the key check). */
+function abTable(head: [string, string, string], rows: ReadonlyArray<{ label: string; a: string; b: string; warn?: boolean }>): HTMLElement {
+  const t = el("table", { className: "data-table data-table--dense join-ab" });
+  const h = t.createTHead().insertRow();
+  head.forEach((x, i) => {
+    const th = el("th", { className: i ? "num" : "", textContent: x });
+    th.scope = "col";
+    h.append(th);
+  });
+  const body = t.createTBody();
+  for (const r of rows) {
+    const tr = body.insertRow();
+    const label = el("td", {}, r.label);
+    if (r.warn) label.append(" ", el("span", { className: "cf-badge cf-badge--warning", textContent: "Check" }));
+    tr.append(label, el("td", { className: "num", textContent: r.a }), el("td", { className: "num", textContent: r.b }));
   }
+  return el("div", { className: "table-wrap" }, t);
 }
 
 const fuzzyValue = (v: string): number | null => (v === "" || Number.isNaN(Number(v)) ? null : Math.min(100, Math.max(1, Number(v))) / 100);
+
+const writer = (d: JoinDeps) => ({ run: d.run, putBlob: d.putBlob, workbook: d.workbook });
 
 // ------------------------------------------------------- join dialog --
 
@@ -611,72 +666,94 @@ export function openJoin(d: JoinDeps): void {
   };
   reset();
   let doctor: DoctorResult | null = null;
+  const live = () => src(idA).usedRange().rows + src(idB).usedRange().rows <= LIVE_ROWS;
+  const pairs = () => spec.keysA.map((a, i) => [a, spec.keysB[i]] as const).filter(([a, b]) => a >= 0 && b >= 0);
 
-  const s = shell(d, "Join two sheets", "Pick the two sheets and the key columns (guessed for you). Check the keys first: the join doctor shows how many rows find a partner, repeated keys, keys with no partner, and which fix would match more.");
-  const mapTable = el("table", { className: "cleanup-cols join-map" });
+  const doJoin = async () => {
+    if (!doctor) return;
+    const p = pairs();
+    const full: JoinSpec = { ...spec, keysA: p.map((x) => x[0]), keysB: p.map((x) => x[1]) };
+    if (!full.bringA.length && !full.bringB.length) throw new Error("Pick at least one column to bring over.");
+    const t0 = performance.now();
+    const { sheet, result } = joinSheet(src(idA), src(idB), wb.get(idA).name, wb.get(idB).name, full);
+    await addResultSheets(writer(d), [sheet], { replace: true });
+    s.close();
+    const extra = [result.fuzzyMatched ? `${result.fuzzyMatched.toLocaleString()} fuzzy` : "", result.capped ? "stopped at the row limit" : "", result.fuzzyCapped ? "fuzzy search stopped early" : ""].filter(Boolean).join(", ");
+    d.status(`Joined: ${plural(result.rows, "row")}, ${result.matchedLeft.toLocaleString()} rows of ${wb.get(idA).name} matched${extra ? ` (${extra})` : ""} in ${Math.round(performance.now() - t0).toLocaleString()} ms`);
+    d.focusGrid();
+  };
+  const s = shell(d, "Join two sheets", "Bring columns from one sheet into another, matched on a key", "Add joined sheet", doJoin, "xl");
+
+  const sidesBox = el("div");
   const checks = el("div");
   const doctorOut = el("div", { className: "join-result" });
+  doctorOut.setAttribute("aria-live", "polite");
   const whyOut = el("div", { className: "join-why" });
-  const options = el("div", { className: "import-options" });
+  const options = el("div", { className: "tk-grid join-options" });
   const bring = el("div", { className: "join-bring" });
 
-  const pairs = () => spec.keysA.map((a, i) => [a, spec.keysB[i]] as const).filter(([a, b]) => a >= 0 && b >= 0);
+  let timer = 0;
   const stale = () => {
     doctor = null;
-    addBtn.disabled = true;
-    doctorOut.replaceChildren(el("p", { className: "hp-muted", textContent: "Press Check keys to see how well these keys match." }));
+    s.primary.disabled = true;
     whyOut.replaceChildren();
+    if (live()) {
+      clearTimeout(timer);
+      timer = window.setTimeout(runDoctor, 120);
+      return;
+    }
+    doctorOut.replaceChildren(el("p", { className: "tk-muted" }, "These sheets are large, so the key check waits for you. ", button("Check keys", runDoctor, "secondary")));
   };
 
-  const renderMap = () => {
+  const renderSides = () => {
     const na = sheetHeader(src(idA)).names;
     const nb = sheetHeader(src(idB)).names;
-    mapTable.replaceChildren(
-      el(
-        "tr",
-        {},
-        el("th"),
-        el("th", {}, "A ", sheetSelect(wb, ids, idA, "Sheet A", (id) => ((idA = id), reset(), renderAll()))),
-        el("th", {}, "B ", sheetSelect(wb, ids, idB, "Sheet B", (id) => ((idB = id), reset(), renderAll()))),
-      ),
-    );
-    for (let i = 0; i < 3; i++) {
-      mapTable.append(
-        el(
-          "tr",
-          {},
-          el("td", { textContent: i ? `Key column ${i + 1} (optional)` : "Key column" }),
-          el("td", {}, colSelect(na, spec.keysA[i], `Key column ${i + 1} in A`, (c) => ((spec.keysA[i] = c), stale()), i > 0)),
-          el("td", {}, colSelect(nb, spec.keysB[i], `Key column ${i + 1} in B`, (c) => ((spec.keysB[i] = c), stale()), i > 0)),
+    const keyFields = (sheet: string, names: string[], keys: number[]) =>
+      [0, 1, 2].map((i) =>
+        field(
+          i ? `Key ${i + 1} (optional)` : "Key column",
+          colSelect(names, keys[i], `Key column ${i + 1} in ${sheet}`, (c) => {
+            keys[i] = c;
+            renderSides();
+            stale();
+          }, i > 0),
         ),
       );
-    }
+    const marks = (keys: number[]) => new Map(keys.filter((k) => k >= 0).map((k, i) => [k, i ? `Key ${i + 1}` : "Key"] as const));
+    sidesBox.replaceChildren(
+      sides(
+        sideCard({ badge: "A", title: "Add columns to", wb, ids, id: idA, onSheet: (id) => ((idA = id), reset(), renderAll()), fields: keyFields(wb.get(idA).name, na, spec.keysA), highlight: marks(spec.keysA) }),
+        sideCard({ badge: "B", tone: "b", title: "Bring them from", wb, ids, id: idB, onSheet: (id) => ((idB = id), reset(), renderAll()), fields: keyFields(wb.get(idB).name, nb, spec.keysB), highlight: marks(spec.keysB) }),
+        "←",
+      ),
+    );
   };
   const renderChecks = () => checks.replaceChildren(normaliseBoxes(spec.normalise, stale));
 
   const renderOptions = () => {
     const kind = el("select");
-    kind.setAttribute("aria-label", "Kind of join");
+    kind.setAttribute("aria-label", "Rows to keep");
     for (const k of Object.keys(KIND_LABEL) as JoinKind[]) kind.append(new Option(KIND_LABEL[k], k, false, spec.kind === k));
     kind.addEventListener("change", () => {
       spec.kind = kind.value as JoinKind;
       renderBring();
+      if (doctor) runDoctor();
     });
     const many = el("select");
     many.setAttribute("aria-label", "When a key matches several rows");
     for (const k of Object.keys(MANY_LABEL) as ManyPolicy[]) many.append(new Option(MANY_LABEL[k], k, false, spec.many === k));
     many.addEventListener("change", () => (spec.many = many.value as ManyPolicy));
     options.replaceChildren(
-      el("label", {}, "Join", kind),
-      el("label", {}, "Several matches", many),
-      textInput("Fuzzy match %", spec.fuzzy === null ? "" : String(Math.round(spec.fuzzy * 100)), "blank = exact only", (v) => (spec.fuzzy = fuzzyValue(v))),
-      checkbox("Keys are person or company names", spec.names, (v) => (spec.names = v)),
+      field("Rows to keep", kind),
+      field("When a key matches several rows", many),
+      textInput("Fuzzy match %", spec.fuzzy === null ? "" : String(Math.round(spec.fuzzy * 100)), "Blank for exact matches only", (v) => (spec.fuzzy = fuzzyValue(v))),
+      checkbox("Keys are person or company names", spec.names, (v) => (spec.names = v), "Ignores word order, titles and Ltd/Inc"),
     );
   };
 
   const renderBring = () => {
     const side = (names: string[], chosen: number[], label: string, set: (c: number[]) => void) => {
-      const box = el("fieldset", { className: "join-checks" }, el("legend", { textContent: label }));
+      const box = el("fieldset", { className: "join-checks join-checks--cols" }, el("legend", { textContent: label }));
       names.forEach((n, c) =>
         box.append(
           checkbox(n, chosen.includes(c), (v) => {
@@ -694,63 +771,59 @@ export function openJoin(d: JoinDeps): void {
   };
 
   const renderAll = () => {
-    renderMap();
+    renderSides();
     renderBring();
     stale();
   };
 
-  const runDoctor = () => {
-    if (idA === idB) {
-      doctorOut.replaceChildren(el("p", { className: "cleanup-warn", textContent: "Pick two different sheets." }));
-      return;
-    }
+  function runDoctor() {
+    if (idA === idB) return void doctorOut.replaceChildren(notice("Pick two different sheets.", "warning"));
     const p = pairs();
-    if (!p.length || spec.keysA[0] < 0 || spec.keysB[0] < 0) {
-      doctorOut.replaceChildren(el("p", { className: "cleanup-warn", textContent: "Pick a key column on both sides." }));
-      return;
-    }
-    d.status("Checking keys…");
-    const t0 = performance.now();
+    if (!p.length || spec.keysA[0] < 0 || spec.keysB[0] < 0) return void doctorOut.replaceChildren(notice("Pick a key column on both sides.", "warning"));
     const la = keyColumns(src(idA), p.map((x) => x[0]));
     const lb = keyColumns(src(idB), p.map((x) => x[1]));
     doctor = joinDoctor(la, lb, { normalise: spec.normalise });
-    const ms = performance.now() - t0;
-    d.status("Ready");
-    renderDoctor(doctor, la, lb, ms);
-    addBtn.disabled = false;
-  };
+    renderDoctor(doctor, la, lb);
+    s.primary.disabled = false;
+  }
 
-  const renderDoctor = (r: DoctorResult, la: KeyValue[][], lb: KeyValue[][], ms: number) => {
+  const renderDoctor = (r: DoctorResult, la: KeyValue[][], lb: KeyValue[][]) => {
     const nameA = wb.get(idA).name;
     const nameB = wb.get(idB).name;
-    const table = el("table", { className: "cleanup-cols" });
-    table.append(el("tr", {}, el("th", { textContent: "Keys" }), el("th", { textContent: `A (${nameA})` }), el("th", { textContent: `B (${nameB})` })));
-    const row = (label: string, a: string, b: string, warn = false) => table.append(el("tr", { className: warn ? "join-warn-row" : "" }, el("td", { textContent: label }), el("td", { textContent: a }), el("td", { textContent: b })));
-    row("Rows", r.left.rows.toLocaleString(), r.right.rows.toLocaleString());
-    row("Find a partner", `${r.left.matchedRows.toLocaleString()} (${pct(r.left.matchRate)})`, `${r.right.matchedRows.toLocaleString()} (${pct(r.right.matchRate)})`);
-    row("No partner (keys / rows)", `${r.left.orphanKeys.toLocaleString()} / ${r.left.orphanRows.toLocaleString()}`, `${r.right.orphanKeys.toLocaleString()} / ${r.right.orphanRows.toLocaleString()}`, !!(r.left.orphanRows || r.right.orphanRows));
-    row("Repeated keys (keys / rows)", `${r.left.duplicateKeys.toLocaleString()} / ${r.left.duplicateRows.toLocaleString()}`, `${r.right.duplicateKeys.toLocaleString()} / ${r.right.duplicateRows.toLocaleString()}`, !!(r.left.duplicateKeys || r.right.duplicateKeys));
-    row("Blank keys", r.left.blank.toLocaleString(), r.right.blank.toLocaleString(), !!(r.left.blank || r.right.blank));
-    row("Numbers / text like numbers / text", `${r.left.numbers} / ${r.left.numericText} / ${r.left.text}`, `${r.right.numbers} / ${r.right.numericText} / ${r.right.text}`, r.typeMismatch);
-    row("Spaces at the ends or doubled", r.left.padded.toLocaleString(), r.right.padded.toLocaleString(), !!(r.left.padded || r.right.padded));
-    const kids: Node[] = [
-      el("p", { textContent: `${r.relationship.replace(/-/g, " ")}: an inner join makes ${count(r.innerRows, "row")}, a left join ${count(r.leftRows, "row")} (${Math.round(ms).toLocaleString()} ms).` }),
-      el("div", { className: "import-preview" }, table),
-      el("ul", {}, ...r.issues.slice(1).map((t) => el("li", { textContent: t }))),
-    ];
+    const tone = (x: number) => (x >= 0.95 ? ("match" as const) : x >= 0.5 ? ("unmatched" as const) : ("mismatch" as const));
+    const figures = tiles([
+      { label: `${nameA} rows with a partner`, value: pct(r.left.matchRate), sub: `${count(r.left.matchedRows)} of ${count(r.left.rows)}`, tone: tone(r.left.matchRate) },
+      { label: `${nameB} rows with a partner`, value: pct(r.right.matchRate), sub: `${count(r.right.matchedRows)} of ${count(r.right.rows)}`, tone: tone(r.right.matchRate) },
+      { label: "Rows in the joined sheet", value: count(spec.kind === "inner" ? r.innerRows : r.leftRows), sub: `${cap(r.relationship.replace(/-/g, " "))} keys`, tone: "neutral" },
+    ]);
+    const table = abTable(["", nameA, nameB], [
+      { label: "No partner (keys / rows)", a: `${count(r.left.orphanKeys)} / ${count(r.left.orphanRows)}`, b: `${count(r.right.orphanKeys)} / ${count(r.right.orphanRows)}`, warn: !!(r.left.orphanRows || r.right.orphanRows) },
+      { label: "Repeated keys (keys / rows)", a: `${count(r.left.duplicateKeys)} / ${count(r.left.duplicateRows)}`, b: `${count(r.right.duplicateKeys)} / ${count(r.right.duplicateRows)}`, warn: !!(r.left.duplicateKeys || r.right.duplicateKeys) },
+      { label: "Blank keys", a: count(r.left.blank), b: count(r.right.blank), warn: !!(r.left.blank || r.right.blank) },
+      { label: "Numbers / text like numbers / text", a: `${count(r.left.numbers)} / ${count(r.left.numericText)} / ${count(r.left.text)}`, b: `${count(r.right.numbers)} / ${count(r.right.numericText)} / ${count(r.right.text)}`, warn: r.typeMismatch },
+      { label: "Spaces at the ends or doubled", a: count(r.left.padded), b: count(r.right.padded), warn: !!(r.left.padded || r.right.padded) },
+    ]);
+    const kids: Node[] = [figures, table];
+    const issues = r.issues.slice(1);
+    if (issues.length) kids.push(el("ul", { className: "rc-reasons" }, ...issues.map((t) => el("li", { textContent: cap(t) }))));
     if (r.fixes.length) {
       const list = el("div", { className: "join-fixes" });
       for (const f of r.fixes.slice(0, 4)) {
-        const use = el("button", { type: "button", textContent: "Use" });
-        use.addEventListener("click", () => {
-          if (f.option === "all") for (const o of NORMALISE_OPTIONS) if (o !== "ref") spec.normalise[o] = true;
-          if (f.option !== "all") spec.normalise[f.option] = true;
-          renderChecks();
-          runDoctor();
-        });
-        list.append(el("p", { className: "join-suggest" }, `${f.label}: ${pct(f.matchRateLeft)} / ${pct(f.matchRateRight)} would match (+${f.gainLeft.toLocaleString()} / +${f.gainRight.toLocaleString()} rows${f.estimated ? ", estimated" : ""}) `, use));
+        list.append(
+          el(
+            "div",
+            { className: "join-fix" },
+            el("span", {}, el("strong", { textContent: f.label }), ` would match ${pct(f.matchRateLeft)} / ${pct(f.matchRateRight)} (+${count(f.gainLeft)} / +${count(f.gainRight)} rows${f.estimated ? ", estimated" : ""})`),
+            button("Use", () => {
+              if (f.option === "all") for (const o of NORMALISE_OPTIONS) if (o !== "ref") spec.normalise[o] = true;
+              if (f.option !== "all") spec.normalise[f.option] = true;
+              renderChecks();
+              runDoctor();
+            }, "secondary"),
+          ),
+        );
       }
-      kids.push(list);
+      kids.push(el("p", { className: "tk-muted join-fixes__lead", textContent: "Tidying the keys would match more:" }), list);
     }
     doctorOut.replaceChildren(...kids);
     renderWhy(r, la, lb);
@@ -758,81 +831,60 @@ export function openJoin(d: JoinDeps): void {
 
   // "Why don't these match?" on two keys with no partner
   const renderWhy = (r: DoctorResult, la: KeyValue[][], lb: KeyValue[][]) => {
-    if (!r.left.topOrphans.length || !r.right.topOrphans.length) {
-      whyOut.replaceChildren();
-      return;
-    }
-    const pick = (side: "A" | "B", list: typeof r.left.topOrphans) => {
+    if (!r.left.topOrphans.length || !r.right.topOrphans.length) return void whyOut.replaceChildren();
+    const nameA = wb.get(idA).name;
+    const nameB = wb.get(idB).name;
+    const pick = (name: string, list: typeof r.left.topOrphans) => {
       const sel = el("select");
-      sel.setAttribute("aria-label", `Key with no partner in ${side}`);
+      sel.setAttribute("aria-label", `Key with no partner in ${name}`);
       list.forEach((o, i) => sel.append(new Option(`${o.key}${o.count > 1 ? ` (${o.count} rows)` : ""}`, String(i))));
       return sel;
     };
-    const selA = pick("A", r.left.topOrphans);
-    const selB = pick("B", r.right.topOrphans);
+    const selA = pick(nameA, r.left.topOrphans);
+    const selB = pick(nameB, r.right.topOrphans);
     const out = el("div");
-    const go = el("button", { type: "button", textContent: "Explain" });
-    go.addEventListener("click", () => {
+    out.setAttribute("aria-live", "polite");
+    const go = () => {
       const ra = r.left.topOrphans[Number(selA.value)].row;
       const rb = r.right.topOrphans[Number(selB.value)].row;
       const w = whyKeys(la.map((c) => c[ra]), lb.map((c) => c[rb]), spec.normalise);
-      const kids: Node[] = [el("ul", {}, ...w.reasons.map((t) => el("li", { textContent: t })))];
+      const kids: Node[] = [el("ul", { className: "rc-reasons" }, ...w.reasons.map((t) => el("li", { textContent: cap(t) })))];
       if (w.fix && w.fix.length) {
-        const apply = el("button", { type: "button", textContent: "Turn it on and check again" });
-        apply.addEventListener("click", () => {
-          for (const f of w.fix!) spec.normalise[f] = true;
-          renderChecks();
-          runDoctor();
-        });
-        kids.push(el("p", { className: "join-suggest" }, apply));
+        kids.push(
+          button("Turn it on and check again", () => {
+            for (const f of w.fix!) spec.normalise[f] = true;
+            renderChecks();
+            runDoctor();
+          }, "secondary"),
+        );
       } else if (!w.fix && Math.max(w.similarity, w.nameSimilarity) >= 0.8 && spec.fuzzy === null) {
-        const apply = el("button", { type: "button", textContent: "Use fuzzy matching at 85%" });
-        apply.addEventListener("click", () => {
-          spec.fuzzy = 0.85;
-          spec.names = w.nameSimilarity > w.similarity;
-          renderOptions();
-        });
-        kids.push(el("p", { className: "join-suggest" }, apply));
+        kids.push(
+          button("Use fuzzy matching at 85%", () => {
+            spec.fuzzy = 0.85;
+            spec.names = w.nameSimilarity > w.similarity;
+            renderOptions();
+          }, "secondary"),
+        );
       }
       out.replaceChildren(...kids);
-    });
+    };
     whyOut.replaceChildren(
-      el("h3", { textContent: "Why don't these match?" }),
-      el("p", { className: "hp-muted", textContent: "Pick a key from each side that has no partner." }),
-      el("div", { className: "import-options" }, el("label", {}, "A", selA), el("label", {}, "B", selB), go),
-      out,
+      section(
+        "Why don't these match?",
+        el("p", { className: "tk-muted", textContent: "Pick a key from each side that has no partner." }),
+        el("div", { className: "rc-why" }, field(nameA, selA), field(nameB, selB), button("Explain", go, "secondary")),
+        out,
+      ),
     );
   };
 
-  const doJoin = async () => {
-    if (!doctor) return;
-    const p = pairs();
-    const full: JoinSpec = { ...spec, keysA: p.map((x) => x[0]), keysB: p.map((x) => x[1]) };
-    if (!full.bringA.length && !full.bringB.length) {
-      doctorOut.prepend(el("p", { className: "cleanup-warn", textContent: "Pick at least one column to bring over." }));
-      return;
-    }
-    d.status("Joining…");
-    const t0 = performance.now();
-    const { sheet, result } = joinSheet(src(idA), src(idB), wb.get(idA).name, wb.get(idB).name, full);
-    s.back.remove();
-    await addSheets(d, [sheet]);
-    const extra = [result.fuzzyMatched ? `${result.fuzzyMatched.toLocaleString()} fuzzy` : "", result.capped ? "stopped at the row limit" : "", result.fuzzyCapped ? "fuzzy search stopped early" : ""].filter(Boolean).join(", ");
-    d.status(`Joined: ${count(result.rows, "row")}, ${result.matchedLeft.toLocaleString()} A rows matched${extra ? ` (${extra})` : ""} in ${Math.round(performance.now() - t0).toLocaleString()} ms`);
-    d.focusGrid();
-  };
-
-  s.body.append(mapTable, checks, doctorOut, whyOut, el("h3", { textContent: "Join" }), options, bring);
-  const checkBtn = s.button("Check keys", runDoctor);
-  const addBtn = s.button("Add joined sheet", () => void doJoin(), true);
-  renderMap();
+  s.body.append(sidesBox, section("Tidy the keys before matching", checks), section("Key check", doctorOut), whyOut, section("The joined sheet", options, bring));
+  renderSides();
   renderChecks();
   renderOptions();
   renderBring();
-  // check straight away unless the sheets are big enough to make opening slow
-  if (src(idA).usedRange().rows + src(idB).usedRange().rows <= 400_000) runDoctor();
+  if (live()) runDoctor();
   else stale();
-  s.show(checkBtn);
 }
 
 // ---------------------------------------------------- compare dialog --
@@ -849,6 +901,7 @@ export function openCompare(d: JoinDeps): void {
   let compareSet = new Set<number>();
   const spec = { tolerance: 0, ignoreCase: false, trim: true, normalise: { trim: true } as KeyNormalise };
   let last: { r: CompareResult; spec: CompareSpec } | null = null;
+  const live = () => src(idOld).usedRange().rows + src(idNew).usedRange().rows <= LIVE_ROWS;
 
   const reset = () => {
     const ho = sheetHeader(src(idOld));
@@ -864,98 +917,99 @@ export function openCompare(d: JoinDeps): void {
   };
   reset();
 
-  const s = shell(d, "Compare two versions by key", "Rows are paired on the key columns. You get the rows added, the rows removed, and every changed value with its old and new value. Columns are paired by their header names.");
-  const mapTable = el("table", { className: "cleanup-cols join-map" });
-  const opts = el("div", { className: "import-options" });
-  const cols = el("div", { className: "join-bring" });
+  const add = async () => {
+    if (!last) return;
+    const sheets = compareResultSheets(src(idOld), src(idNew), last.spec, last.r, { old: wb.get(idOld).name, new: wb.get(idNew).name });
+    await addResultSheets(writer(d), sheets, { replace: true });
+    s.close();
+    d.status(`Compared: ${last.r.added.length.toLocaleString()} added, ${last.r.removed.length.toLocaleString()} removed, ${last.r.changed.length.toLocaleString()} changed`);
+    d.focusGrid();
+  };
+  const s = shell(d, "Compare two versions by key", "Rows are paired on the key; you get what was added, removed and changed", "Add result sheets", add, "xl");
+  const sidesBox = el("div");
+  const keys = el("div", { className: "rc-roles" });
+  const cols = el("div");
   const out = el("div", { className: "join-result" });
+  out.setAttribute("aria-live", "polite");
+  let timer = 0;
   const stale = () => {
     last = null;
-    addBtn.disabled = true;
-    out.replaceChildren();
+    s.primary.disabled = true;
+    if (live()) {
+      clearTimeout(timer);
+      timer = window.setTimeout(runCompare, 120);
+    } else out.replaceChildren(button("Compare", runCompare, "secondary"));
   };
 
   const render = () => {
     const ho = sheetHeader(src(idOld));
     const names = common.map(([o]) => ho.names[o]);
-    mapTable.replaceChildren(
-      el("tr", {}, el("td", { textContent: "Old version" }), el("td", {}, sheetSelect(wb, ids, idOld, "Old version", (id) => ((idOld = id), reset(), render(), stale())))),
-      el("tr", {}, el("td", { textContent: "New version" }), el("td", {}, sheetSelect(wb, ids, idNew, "New version", (id) => ((idNew = id), reset(), render(), stale())))),
+    const mark = (side: 0 | 1) => new Map(keyIdx.filter((i) => i >= 0).map((i, n) => [common[i][side], n ? `Key ${n + 1}` : "Key"] as const));
+    sidesBox.replaceChildren(
+      sides(
+        sideCard({ badge: "Old", title: "Old version", wb, ids, id: idOld, onSheet: (id) => ((idOld = id), reset(), render(), stale()), highlight: mark(0) }),
+        sideCard({ badge: "New", tone: "b", title: "New version", wb, ids, id: idNew, onSheet: (id) => ((idNew = id), reset(), render(), stale()), highlight: mark(1) }),
+        "→",
+      ),
     );
-    for (let i = 0; i < 3; i++) {
-      mapTable.append(
-        el(
-          "tr",
-          {},
-          el("td", { textContent: i ? `Key column ${i + 1} (optional)` : "Key column" }),
-          el(
-            "td",
-            {},
-            colSelect(names, keyIdx[i], `Key column ${i + 1}`, (c) => {
-              keyIdx[i] = c;
-              if (c >= 0) compareSet.delete(c);
-              render();
-              stale();
-            }, i > 0),
-          ),
+    keys.replaceChildren(
+      ...[0, 1, 2].map((i) =>
+        field(
+          i ? `Key ${i + 1} (optional)` : "Key column",
+          colSelect(names, keyIdx[i], `Key column ${i + 1}`, (c) => {
+            keyIdx[i] = c;
+            if (c >= 0) compareSet.delete(c);
+            render();
+            stale();
+          }, i > 0),
         ),
-      );
-    }
-    if (!common.length) {
-      cols.replaceChildren(el("p", { className: "cleanup-warn", textContent: "These sheets have no column names in common." }));
-      return;
-    }
-    const box = el("fieldset", { className: "join-checks" }, el("legend", { textContent: "Columns to compare" }));
+      ),
+    );
+    if (!common.length) return void cols.replaceChildren(notice("These sheets have no column names in common, so there is nothing to pair.", "warning"));
+    const box = el("div", { className: "join-checks join-checks--cols" });
     names.forEach((n, i) => {
       if (keyIdx.includes(i)) return;
       box.append(checkbox(n, compareSet.has(i), (v) => (v ? compareSet.add(i) : compareSet.delete(i), stale())));
     });
     cols.replaceChildren(box);
   };
-  opts.append(
-    textInput("Number tolerance", "0", "e.g. 0.01", (v) => ((spec.tolerance = Math.max(0, Number(v) || 0)), stale())),
+  const opts = el(
+    "div",
+    { className: "tk-grid join-options" },
+    textInput("Number tolerance", "0", "Differences up to this count as the same, e.g. 0.01", (v) => ((spec.tolerance = Math.max(0, Number(v) || 0)), stale())),
     checkbox("Ignore case", spec.ignoreCase, (v) => ((spec.ignoreCase = v), stale())),
     checkbox("Ignore extra spaces", spec.trim, (v) => ((spec.trim = v), (spec.normalise.trim = v), stale())),
   );
 
-  const runCompare = () => {
-    const keys = keyIdx.filter((i) => i >= 0).map((i) => common[i]);
-    if (idOld === idNew) return void out.replaceChildren(el("p", { className: "cleanup-warn", textContent: "Pick two different sheets." }));
-    if (!keys.length) return void out.replaceChildren(el("p", { className: "cleanup-warn", textContent: "Pick a key column." }));
-    const full: CompareSpec = { keys, compare: [...compareSet].sort((a, b) => a - b).map((i) => common[i]), tolerance: spec.tolerance, ignoreCase: spec.ignoreCase, trim: spec.trim, normalise: { ...spec.normalise } };
-    d.status("Comparing…");
-    const t0 = performance.now();
+  function runCompare() {
+    const k = keyIdx.filter((i) => i >= 0).map((i) => common[i]);
+    if (idOld === idNew) return void out.replaceChildren(notice("Pick two different sheets.", "warning"));
+    if (!k.length) return void out.replaceChildren(notice("Pick a key column.", "warning"));
+    const full: CompareSpec = { keys: k, compare: [...compareSet].sort((a, b) => a - b).map((i) => common[i]), tolerance: spec.tolerance, ignoreCase: spec.ignoreCase, trim: spec.trim, normalise: { ...spec.normalise } };
     const r = compareSheets(src(idOld), src(idNew), full);
-    const ms = performance.now() - t0;
-    d.status("Ready");
     last = { r, spec: full };
     const cells = r.changed.reduce((t, c) => t + c.cells.length, 0);
     const kids: Node[] = [
-      el("p", { textContent: `${count(r.added.length, "row")} added, ${count(r.removed.length, "row")} removed, ${count(r.changed.length, "row")} changed (${count(cells, "value")}), ${r.unchanged.toLocaleString()} the same (${Math.round(ms).toLocaleString()} ms).` }),
+      tiles([
+        { label: "Added", value: count(r.added.length), sub: plural(r.added.length, "row"), tone: r.added.length ? "unmatched" : "neutral" },
+        { label: "Removed", value: count(r.removed.length), sub: plural(r.removed.length, "row"), tone: r.removed.length ? "unmatched" : "neutral" },
+        { label: "Changed", value: count(r.changed.length), sub: plural(cells, "value"), tone: r.changed.length ? "mismatch" : "neutral" },
+        { label: "The same", value: count(r.unchanged), sub: plural(r.unchanged, "row"), tone: "match" },
+      ]),
     ];
     if (r.duplicates.length) {
       const sample = r.duplicates.slice(0, 5).map((x) => `${x.key} (${x.side}, ${x.count} rows)`).join(", ");
-      kids.push(el("p", { className: "cleanup-warn", textContent: `${count(r.duplicates.length, "key")} appear on more than one row, e.g. ${sample}. Repeats are paired in order (the 2nd old row with the 2nd new one); add a key column to tell them apart.` }));
+      kids.push(notice(`${plural(r.duplicates.length, "key")} appear on more than one row, e.g. ${sample}. Repeats are paired in order (the 2nd old row with the 2nd new one); add a key column to tell them apart.`, "warning"));
     }
-    if (r.blankOld || r.blankNew) kids.push(el("p", { className: "cleanup-warn", textContent: `Rows with a blank key were left out: ${r.blankOld.toLocaleString()} old, ${r.blankNew.toLocaleString()} new.` }));
+    if (r.blankOld || r.blankNew) kids.push(notice(`Rows with a blank key were left out: ${count(r.blankOld)} old, ${count(r.blankNew)} new.`, "warning"));
     out.replaceChildren(...kids);
-    addBtn.disabled = false;
-  };
+    s.primary.disabled = false;
+  }
 
-  const add = async () => {
-    if (!last) return;
-    const sheets = compareResultSheets(src(idOld), src(idNew), last.spec, last.r);
-    s.back.remove();
-    await addSheets(d, sheets);
-    d.status(`Compared: ${last.r.added.length.toLocaleString()} added, ${last.r.removed.length.toLocaleString()} removed, ${last.r.changed.length.toLocaleString()} changed`);
-    d.focusGrid();
-  };
-
-  s.body.append(mapTable, opts, cols, out);
-  const goBtn = s.button("Compare", runCompare);
-  const addBtn = s.button("Add result sheets", () => void add(), true);
+  s.body.append(sidesBox, section("Pair rows on", keys), section("Columns to compare", el("p", { className: "tk-muted", textContent: "Columns are paired by their header names." }), cols), section("Options", opts), section("Result", out));
   render();
-  s.show(goBtn);
+  if (live()) runCompare();
+  else stale();
 }
 
 // --------------------------------------------------------- TB compare --
@@ -969,64 +1023,85 @@ export function openTbCompare(d: JoinDeps): void {
   let idA = vs.first;
   let idB = ids.length > 1 ? vs.second : PRIOR;
   let last: { r: TbCompareResult; nameA: string; nameB: string } | null = null;
-  const s = shell(
-    d,
-    "Compare trial balances",
-    "Compare a trial balance with the prior period (its own prior column) or with another trial balance, account by account. Columns are guessed as in Map as trial balance; if a guess is wrong, map the sheet there first and compare the sheet it makes.",
-  );
-  const pick = el("div", { className: "import-options" });
-  const out = el("div", { className: "join-result" });
-  const stale = () => {
-    last = null;
-    addBtn.disabled = true;
-    out.replaceChildren();
+  const add = async () => {
+    if (!last) return;
+    await addResultSheets(writer(d), [tbCompareSheet(last.r, last.nameA, last.nameB)], { replace: true });
+    s.close();
+    d.status(`TB compare: ${plural(last.r.lines.length, "account")}, ${last.r.onlyA.length + last.r.onlyB.length} only on one side`);
+    d.focusGrid();
   };
+  const s = shell(d, "Compare trial balances", "Account by account, against the prior period or another trial balance", "Add TB compare sheet", add, "xl");
+  const sidesBox = el("div");
+  const out = el("div", { className: "join-result" });
+  out.setAttribute("aria-live", "polite");
   const render = () =>
-    pick.replaceChildren(
-      el("label", {}, "Trial balance A ", sheetSelect(wb, ids, idA, "Trial balance A", (id) => ((idA = id), stale()))),
-      el("label", {}, "B ", sheetSelect(wb, ids, idB, "Trial balance B", (id) => ((idB = id), stale()), [PRIOR, "(A's prior period)"])),
+    sidesBox.replaceChildren(
+      sides(
+        sideCard({ badge: "A", title: "This trial balance", wb, ids, id: idA, onSheet: (id) => ((idA = id), render(), runIt()) }),
+        sideCard({ badge: "B", tone: "b", title: "Compare with", wb, ids, id: idB, onSheet: (id) => ((idB = id), render(), runIt()), extra: [PRIOR, "(A's prior period)"], preview: idB !== PRIOR }),
+      ),
     );
+  const fail = (text: string) => {
+    last = null;
+    s.primary.disabled = true;
+    out.replaceChildren(notice(text, "warning"));
+  };
   const runIt = () => {
     const a = readTbSheet(wb.get(idA).source);
-    if (!a.lines.length) return void out.replaceChildren(el("p", { className: "cleanup-warn", textContent: `${wb.get(idA).name} doesn't read as a trial balance (no account and balance columns found).` }));
+    if (!a.lines.length) return fail(`${wb.get(idA).name} doesn't read as a trial balance (no account and balance columns found). Map it with Map as a trial balance first.`);
     let r: TbCompareResult;
     let nameB: string;
     const nameA = idB === PRIOR ? "Current" : wb.get(idA).name;
     if (idB === PRIOR) {
-      if (!a.hasPrior) return void out.replaceChildren(el("p", { className: "cleanup-warn", textContent: `${wb.get(idA).name} has no prior period column; pick a second trial balance as B.` }));
+      if (!a.hasPrior) return fail(`${wb.get(idA).name} has no prior period column; pick a second trial balance to compare with.`);
       r = tbCompare(a.lines);
       nameB = "Prior";
     } else {
-      if (idB === idA) return void out.replaceChildren(el("p", { className: "cleanup-warn", textContent: "Pick two different sheets, or A's prior period." }));
+      if (idB === idA) return fail("Pick two different sheets, or A's prior period.");
       const b = readTbSheet(wb.get(idB).source);
-      if (!b.lines.length) return void out.replaceChildren(el("p", { className: "cleanup-warn", textContent: `${wb.get(idB).name} doesn't read as a trial balance.` }));
+      if (!b.lines.length) return fail(`${wb.get(idB).name} doesn't read as a trial balance.`);
       r = tbCompare(a.lines, b.lines);
       nameB = wb.get(idB).name;
     }
     last = { r, nameA, nameB };
+    const moved = r.lines.filter((l) => l.status === "both" && l.movement !== 0).length;
+    const balance = r.balancesA && r.balancesB
+      ? notice(`Both trial balances balance (${nameA} ${money(r.totalA)}, ${nameB} ${money(r.totalB)}).`, "success")
+      : notice(`${!r.balancesA ? `${nameA} doesn't balance: it totals ${money(r.totalA)}.` : ""} ${!r.balancesB ? `${nameB} doesn't balance: it totals ${money(r.totalB)}.` : ""}`.trim(), "warning");
     const kids: Node[] = [
-      el("p", { textContent: `${count(r.lines.length, "account")}: ${r.onlyA.length.toLocaleString()} only in ${nameA}, ${r.onlyB.length.toLocaleString()} only in ${nameB}, ${r.lines.filter((l) => l.status === "both" && l.movement !== 0).length.toLocaleString()} moved.` }),
-      el("p", { textContent: `Totals: ${nameA} ${money(r.totalA)}${r.balancesA ? " (balances)" : ""}, ${nameB} ${money(r.totalB)}${r.balancesB ? " (balances)" : ""}.`, className: r.balancesA && r.balancesB ? "" : "cleanup-warn" }),
+      tiles([
+        { label: "Accounts", value: count(r.lines.length), tone: "neutral" },
+        { label: `Only in ${nameA}`, value: count(r.onlyA.length), tone: r.onlyA.length ? "unmatched" : "neutral" },
+        { label: `Only in ${nameB}`, value: count(r.onlyB.length), tone: r.onlyB.length ? "unmatched" : "neutral" },
+        { label: "Moved", value: count(moved), tone: "accent" },
+      ]),
+      balance,
     ];
-    if (r.onlyA.length) kids.push(el("p", { className: "hp-muted", textContent: `Only in ${nameA}: ${r.onlyA.slice(0, 10).join(", ")}${r.onlyA.length > 10 ? ", …" : ""}` }));
-    if (r.onlyB.length) kids.push(el("p", { className: "hp-muted", textContent: `Only in ${nameB}: ${r.onlyB.slice(0, 10).join(", ")}${r.onlyB.length > 10 ? ", …" : ""}` }));
+    const moves = r.lines.filter((l) => l.status !== "both" || l.movement !== 0).sort((x, y) => Math.abs(y.movement) - Math.abs(x.movement)).slice(0, 8);
+    if (moves.length)
+      kids.push(
+        section(
+          "Largest movements",
+          renderTable({
+            columns: [
+              { key: "account", label: "Account" },
+              { key: "name", label: "Name" },
+              { key: "a", label: nameA, format: "amount" },
+              { key: "b", label: nameB, format: "amount" },
+              { key: "movement", label: "Movement", format: "amount" },
+            ],
+            rows: moves,
+          }).element,
+        ),
+      );
     const dups = [...r.duplicatesA, ...r.duplicatesB];
-    if (dups.length) kids.push(el("p", { className: "cleanup-warn", textContent: `Accounts on more than one line were added together: ${dups.slice(0, 10).join(", ")}.` }));
+    if (dups.length) kids.push(notice(`Accounts on more than one line were added together: ${dups.slice(0, 10).join(", ")}.`, "info"));
     out.replaceChildren(...kids);
-    addBtn.disabled = false;
+    s.primary.disabled = false;
   };
-  const add = async () => {
-    if (!last) return;
-    s.back.remove();
-    await addSheets(d, [tbCompareSheet(last.r, last.nameA, last.nameB)]);
-    d.status(`TB compare: ${last.r.lines.length.toLocaleString()} accounts, ${last.r.onlyA.length + last.r.onlyB.length} only on one side`);
-    d.focusGrid();
-  };
-  s.body.append(pick, out);
-  const goBtn = s.button("Compare", runIt);
-  const addBtn = s.button("Add TB compare sheet", () => void add(), true);
+  s.body.append(el("p", { className: "tk-muted", textContent: "Columns are guessed as in Map as a trial balance; if a guess is wrong, map the sheet there first and compare the sheet it makes." }), sidesBox, section("Result", out));
   render();
-  s.show(goBtn);
+  runIt();
 }
 
 // ------------------------------------------------------- GL to TB tie --
@@ -1040,65 +1115,95 @@ export function openGlTie(d: JoinDeps): void {
   let map = guessGlMap(sheetHeader(wb.get(idGl).source).names);
   const opt = { against: "balance" as "balance" | "movement", tolerance: 0.005 };
   let last: TieResult | null = null;
-  const s = shell(d, "Tie the GL out to the TB", "Totals the general ledger by account and compares each total with the trial balance. Say which GL columns hold the account and the amount (or debit and credit).");
-  const mapTable = el("table", { className: "cleanup-cols join-map" });
-  const opts = el("div", { className: "import-options" });
-  const out = el("div", { className: "join-result" });
-  const stale = () => {
-    last = null;
-    addBtn.disabled = true;
-    out.replaceChildren();
+  const add = async () => {
+    if (!last) return;
+    await addResultSheets(writer(d), [tieSheet(last)], { replace: true });
+    s.close();
+    d.status(`GL to TB: ${last.agree} agree, ${last.differ} differ, ${last.onlyGl + last.onlyTb} on one side only`);
+    d.focusGrid();
   };
+  const s = shell(d, "Tie the GL out to the TB", "Total the general ledger by account and compare each total with the trial balance", "Add GL to TB sheet", add, "xl");
+  const sidesBox = el("div");
+  const out = el("div", { className: "join-result" });
+  out.setAttribute("aria-live", "polite");
+  const ROLE: Array<[GlRole, string, string]> = [
+    ["account", "Account", "Account"],
+    ["amount", "Amount (signed)", "Amount"],
+    ["debit", "Debit", "Debit"],
+    ["credit", "Credit", "Credit"],
+  ];
   const render = () => {
     const names = sheetHeader(wb.get(idGl).source).names;
-    const role = (label: string, r: GlRole) => el("tr", {}, el("td", { textContent: label }), el("td", {}, colSelect(names, map[r], label, (c) => ((map[r] = c), stale()))));
-    mapTable.replaceChildren(
-      el("tr", {}, el("td", { textContent: "General ledger" }), el("td", {}, sheetSelect(wb, ids, idGl, "General ledger sheet", (id) => ((idGl = id), (map = guessGlMap(sheetHeader(wb.get(idGl).source).names)), render(), stale())))),
-      role("Account", "account"),
-      role("Amount (signed)", "amount"),
-      role("Debit", "debit"),
-      role("Credit", "credit"),
-      el("tr", {}, el("td", { textContent: "Trial balance" }), el("td", {}, sheetSelect(wb, ids, idTb, "Trial balance sheet", (id) => ((idTb = id), stale())))),
+    const fields = ROLE.map(([r, label]) => field(label, colSelect(names, map[r], label, (c) => ((map[r] = c), render(), runIt()))));
+    const marks = new Map<number, string>();
+    for (const [r, , short] of ROLE) if (map[r] >= 0) marks.set(map[r], short);
+    sidesBox.replaceChildren(
+      sides(
+        sideCard({ badge: "GL", title: "General ledger", wb, ids, id: idGl, onSheet: (id) => ((idGl = id), (map = guessGlMap(sheetHeader(wb.get(idGl).source).names)), render(), runIt()), fields, highlight: marks }),
+        sideCard({ badge: "TB", tone: "b", title: "Trial balance", wb, ids, id: idTb, onSheet: (id) => ((idTb = id), render(), runIt()) }),
+      ),
     );
   };
   const against = el("select");
   against.setAttribute("aria-label", "Compare the GL with");
   against.append(new Option("TB closing balance", "balance"), new Option("TB movement (current − prior)", "movement"));
-  against.addEventListener("change", () => ((opt.against = against.value as "balance" | "movement"), stale()));
-  opts.append(el("label", {}, "Compare with", against), textInput("Tolerance", "0.005", "differences up to this agree", (v) => ((opt.tolerance = Math.max(0, Number(v) || 0)), stale())));
+  against.addEventListener("change", () => ((opt.against = against.value as "balance" | "movement"), runIt()));
+  const opts = el("div", { className: "tk-grid join-options" }, field("Compare with", against), textInput("Tolerance", "0.005", "Differences up to this agree", (v) => ((opt.tolerance = Math.max(0, Number(v) || 0)), runIt())));
 
-  const runIt = () => {
-    if (idGl === idTb) return void out.replaceChildren(el("p", { className: "cleanup-warn", textContent: "Pick two different sheets." }));
-    if (map.account < 0 || (map.amount < 0 && map.debit < 0 && map.credit < 0)) return void out.replaceChildren(el("p", { className: "cleanup-warn", textContent: "Pick the account column and an amount, or debit and credit." }));
+  const fail = (text: string) => {
+    last = null;
+    s.primary.disabled = true;
+    out.replaceChildren(notice(text, "warning"));
+  };
+  function runIt() {
+    if (idGl === idTb) return fail("Pick two different sheets.");
+    if (map.account < 0 || (map.amount < 0 && map.debit < 0 && map.credit < 0)) return fail("Pick the account column and an amount, or debit and credit.");
     const gl = readGl(wb.get(idGl).source, map);
     const tb = readTbSheet(wb.get(idTb).source);
-    if (!tb.lines.length) return void out.replaceChildren(el("p", { className: "cleanup-warn", textContent: `${wb.get(idTb).name} doesn't read as a trial balance.` }));
-    if (opt.against === "movement" && !tb.hasPrior) return void out.replaceChildren(el("p", { className: "cleanup-warn", textContent: "The trial balance has no prior column, so there's no movement to compare with." }));
+    if (!tb.lines.length) return fail(`${wb.get(idTb).name} doesn't read as a trial balance.`);
+    if (opt.against === "movement" && !tb.hasPrior) return fail("The trial balance has no prior column, so there's no movement to compare with.");
     const r = glToTb(gl.lines, tb.lines, { against: opt.against, tolerance: opt.tolerance });
     last = r;
     const kids: Node[] = [
-      el("p", { textContent: `${count(r.lines.length, "account")}: ${r.agree.toLocaleString()} agree, ${r.differ.toLocaleString()} differ, ${r.onlyGl.toLocaleString()} only in the GL, ${r.onlyTb.toLocaleString()} only in the TB.` }),
-      el("p", { className: r.totalDifference ? "cleanup-warn" : "", textContent: `GL ${money(r.totalGl)}, TB ${money(r.totalTb)}, difference ${money(r.totalDifference)}.` }),
+      headline({
+        value: money(r.totalDifference),
+        unit: "difference",
+        tone: Math.abs(r.totalDifference) > opt.tolerance ? "mismatch" : "match",
+        caption: `GL ${money(r.totalGl)} against TB ${money(r.totalTb)}.`,
+        lines: [
+          { label: "Accounts that agree", value: `${count(r.agree)} of ${count(r.lines.length)}`, tone: "match" },
+          { label: "Accounts that differ", value: r.differ ? count(r.differ) : "None", tone: r.differ ? "mismatch" : undefined },
+          { label: "Only in the GL", value: r.onlyGl ? count(r.onlyGl) : "None", tone: r.onlyGl ? "unmatched" : undefined },
+          { label: "Only in the TB", value: r.onlyTb ? count(r.onlyTb) : "None", tone: r.onlyTb ? "unmatched" : undefined },
+        ],
+      }),
     ];
     const worst = r.lines.filter((l) => l.status !== "agrees").sort((a, b) => Math.abs(b.difference) - Math.abs(a.difference)).slice(0, 8);
-    if (worst.length) kids.push(el("ul", {}, ...worst.map((l) => el("li", { textContent: `${l.account}${l.name ? ` ${l.name}` : ""}: ${l.status}, difference ${money(l.difference)}` }))));
-    if (gl.bad) kids.push(el("p", { className: "cleanup-warn", textContent: `${count(gl.bad, "GL amount")} couldn't be read as numbers and counted as 0.` }));
-    if (r.blankAccounts) kids.push(el("p", { className: "cleanup-warn", textContent: `${count(r.blankAccounts, "GL line")} had no account and were left out.` }));
+    if (worst.length)
+      kids.push(
+        section(
+          "Largest differences",
+          renderTable({
+            columns: [
+              { key: "account", label: "Account" },
+              { key: "name", label: "Name" },
+              { key: "gl", label: "GL", format: "amount" },
+              { key: "tb", label: "TB", format: "amount" },
+              { key: "difference", label: "Difference", format: "amount" },
+              { key: "status", label: "Status", format: (v) => cap(String(v)) },
+            ],
+            rows: worst,
+          }).element,
+        ),
+      );
+    if (gl.bad) kids.push(notice(`${plural(gl.bad, "GL amount")} couldn't be read as numbers and counted as 0.`, "warning"));
+    if (r.blankAccounts) kids.push(notice(`${plural(r.blankAccounts, "GL line")} had no account and were left out.`, "warning"));
     out.replaceChildren(...kids);
-    addBtn.disabled = false;
-  };
-  const add = async () => {
-    if (!last) return;
-    s.back.remove();
-    await addSheets(d, [tieSheet(last)]);
-    d.status(`GL to TB: ${last.agree} agree, ${last.differ} differ, ${last.onlyGl + last.onlyTb} on one side only`);
-    d.focusGrid();
-  };
-  s.body.append(mapTable, opts, out);
-  const goBtn = s.button("Tie out", runIt);
-  const addBtn = s.button("Add GL to TB sheet", () => void add(), true);
+    s.primary.disabled = false;
+  }
+  s.body.append(sidesBox, section("Options", opts), section("Result", out));
   render();
-  s.show(goBtn);
+  runIt();
 }
 
 // ---------------------------------------------------- mapping tables --
@@ -1114,33 +1219,6 @@ export function openMapping(d: JoinDeps): void {
   let col = 0;
   let [from, to] = guessMappingCols(sheetHeader(wb.get(idMap).source).names);
   const opt = { match: "trim+case" as MappingMatch, fuzzy: null as number | null, keep: true, inPlace: false, suggest: 0.85 };
-  const s = shell(
-    d,
-    "Apply a mapping table",
-    `Replace the values in a column of ${wb.get(idData).name} using a two-column table (from → to) on another sheet. The result goes in a new column next to the data, or over the original values. One undo puts it back.`,
-  );
-  const mapTable = el("table", { className: "cleanup-cols join-map" });
-  const opts = el("div", { className: "import-options" });
-  const out = el("div", { className: "join-result" });
-  const render = () => {
-    const mn = sheetHeader(wb.get(idMap).source).names;
-    mapTable.replaceChildren(
-      el("tr", {}, el("td", { textContent: `Column in ${wb.get(idData).name}` }), el("td", {}, colSelect(hd.names, col, "Column to map", (c) => (col = c), false))),
-      el("tr", {}, el("td", { textContent: "Mapping table sheet" }), el("td", {}, sheetSelect(wb, ids.filter((x) => x !== idData), idMap, "Mapping table sheet", (id) => ((idMap = id), ([from, to] = guessMappingCols(sheetHeader(wb.get(idMap).source).names)), render())))),
-      el("tr", {}, el("td", { textContent: "From column" }), el("td", {}, colSelect(mn, from, "From column", (c) => (from = c), false))),
-      el("tr", {}, el("td", { textContent: "To column" }), el("td", {}, colSelect(mn, to, "To column", (c) => (to = c), false))),
-    );
-  };
-  const match = el("select");
-  match.setAttribute("aria-label", "How values must match");
-  match.append(new Option("Ignoring case and spaces", "trim+case", true, true), new Option("Exactly", "exact"), new Option("As names (order, titles, Ltd/Inc ignored)", "name"));
-  match.addEventListener("change", () => (opt.match = match.value as MappingMatch));
-  opts.append(
-    el("label", {}, "Match", match),
-    textInput("Fuzzy match %", "", "blank = off", (v) => (opt.fuzzy = fuzzyValue(v))),
-    checkbox("Keep values with no mapping", opt.keep, (v) => (opt.keep = v)),
-    checkbox("Replace the original values", opt.inPlace, (v) => (opt.inPlace = v)),
-  );
 
   const apply = async () => {
     const m = wb.get(idMap).source;
@@ -1152,37 +1230,73 @@ export function openMapping(d: JoinDeps): void {
     const target = opt.inPlace ? col : data.usedRange().cols;
     const cells = res.inputs.map((input, i) => ({ row: i + hd.first, col: target, input }));
     if (!opt.inPlace && hd.first > 0) cells.push({ row: hd.first - 1, col: target, input: `${hd.names[col]} (mapped)` });
-    s.back.remove();
     await d.run(setCells(cells, "Apply mapping table", idData));
+    s.close();
     const un = res.unmapped.slice(0, 5).map((u) => u.value).join(", ");
-    d.status(`Mapped ${res.mapped.toLocaleString()} of ${values.filter((v) => v !== null && v !== "").length.toLocaleString()} values${res.fuzzy ? ` (${res.fuzzy.toLocaleString()} fuzzy)` : ""}${res.unmapped.length ? `; no mapping for ${count(res.unmapped.length, "value")}: ${un}${res.unmapped.length > 5 ? ", …" : ""}` : ""}${res.conflicts ? `; ${count(res.conflicts, "conflicting entry", "conflicting entries")} in the table (first one used)` : ""}`);
+    d.status(`Mapped ${res.mapped.toLocaleString()} of ${values.filter((v) => v !== null && v !== "").length.toLocaleString()} values${res.fuzzy ? ` (${res.fuzzy.toLocaleString()} fuzzy)` : ""}${res.unmapped.length ? `; no mapping for ${plural(res.unmapped.length, "value")}: ${un}${res.unmapped.length > 5 ? ", …" : ""}` : ""}${res.conflicts ? `; ${plural(res.conflicts, "conflicting entry", "conflicting entries")} in the table (first one used)` : ""}`);
     d.focusGrid();
   };
+  const s = shell(d, "Apply a mapping table", `Replace the values in a column of ${wb.get(idData).name} using a from → to table on another sheet. One undo puts it back.`, "Apply", apply, "xl");
+  s.primary.disabled = false;
+  const sidesBox = el("div");
+  const out = el("div", { className: "join-result" });
+  const render = () => {
+    const mn = sheetHeader(wb.get(idMap).source).names;
+    sidesBox.replaceChildren(
+      sides(
+        sideCard({ badge: "A", title: "Change values in", wb, ids: [idData], id: idData, onSheet: () => {}, fields: [field("Column", colSelect(hd.names, col, "Column to map", (c) => ((col = c), render()), false))], highlight: new Map([[col, "Map"]]) }),
+        sideCard({
+          badge: "B",
+          tone: "b",
+          title: "Mapping table",
+          wb,
+          ids: ids.filter((x) => x !== idData),
+          id: idMap,
+          onSheet: (id) => ((idMap = id), ([from, to] = guessMappingCols(sheetHeader(wb.get(idMap).source).names)), render()),
+          fields: [field("From column", colSelect(mn, from, "From column", (c) => ((from = c), render()), false)), field("To column", colSelect(mn, to, "To column", (c) => ((to = c), render()), false))],
+          highlight: new Map([
+            [from, "From"],
+            [to, "To"],
+          ]),
+        }),
+        "←",
+      ),
+    );
+  };
+  const match = el("select");
+  match.setAttribute("aria-label", "How values must match");
+  match.append(new Option("Ignoring case and spaces", "trim+case", true, true), new Option("Exactly", "exact"), new Option("As names (order, titles, Ltd/Inc ignored)", "name"));
+  match.addEventListener("change", () => (opt.match = match.value as MappingMatch));
+  const opts = el(
+    "div",
+    { className: "tk-grid join-options" },
+    field("Match", match),
+    textInput("Fuzzy match %", "", "Blank to turn it off", (v) => (opt.fuzzy = fuzzyValue(v))),
+    checkbox("Keep values with no mapping", opt.keep, (v) => (opt.keep = v)),
+    checkbox("Replace the original values", opt.inPlace, (v) => (opt.inPlace = v), "Otherwise the result goes in a new column next to the data"),
+  );
 
   // build a table: suggested pairs between the column and a master list
-  const suggest = () => {
+  const suggest = async () => {
     const m = wb.get(idMap).source;
     const hm = sheetHeader(m);
     const sheet = suggestionSheet(readColumn(data, col, hd.first), readColumn(m, to, hm.first), opt.suggest);
-    if (!sheet.columns[0] || (sheet.columns[0].kind === "string" && !sheet.columns[0].codes.length)) {
-      out.replaceChildren(el("p", { className: "cleanup-warn", textContent: "No similar names found." }));
-      return;
-    }
-    s.back.remove();
-    void addSheets(d, [sheet]).then(() => {
-      d.status(`Suggested ${count(sheet.columns[0].kind === "string" ? sheet.columns[0].codes.length : 0, "pair")}: check them, delete the wrong ones, then apply this sheet as the mapping table.`);
-      d.focusGrid();
-    });
+    const n = sheet.columns[0]?.kind === "string" ? sheet.columns[0].codes.length : 0;
+    if (!n) return void out.replaceChildren(notice("No similar names found.", "info"));
+    await addResultSheets(writer(d), [sheet]);
+    s.close();
+    d.status(`Suggested ${plural(n, "pair")}: check them, delete the wrong ones, then apply this sheet as the mapping table.`);
+    d.focusGrid();
   };
   s.body.append(
-    mapTable,
-    opts,
-    el("p", { className: "hp-muted", textContent: "No table yet? Suggest pairs builds one: each distinct value in the column, paired with the most similar name in the To column of the other sheet (your master list)." }),
-    el("div", { className: "import-options" }, textInput("Suggest at %", "85", "how alike names must be", (v) => (opt.suggest = fuzzyValue(v) ?? 0.85))),
-    out,
+    sidesBox,
+    section("Options", opts),
+    section(
+      "No table yet?",
+      el("p", { className: "tk-muted", textContent: "Suggest pairs builds one: each distinct value in the column, paired with the most similar name in the To column of the other sheet (your master list)." }),
+      el("div", { className: "rc-why" }, textInput("How alike names must be (%)", "85", "", (v) => (opt.suggest = fuzzyValue(v) ?? 0.85)), button("Suggest pairs", suggest, "secondary")),
+      out,
+    ),
   );
-  s.button("Suggest pairs", suggest);
-  const goBtn = s.button("Apply", () => void apply());
   render();
-  s.show(goBtn);
 }

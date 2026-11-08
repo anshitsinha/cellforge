@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildCommands, COMMAND_GROUPS, devMode, GROUP_ICONS, sheetContext, sheetIsBlank, suggestedCommandIds, type AppCommand, type CommandDeps } from "./commands";
-import { buildMenuModel, MENUS, menuEntries, type MenuEntry } from "./menubar";
+import { buildMenuModel, fitMenus, MENUS, menuEntries, overflowEntries, type MenuEntry, placeMenu } from "./menubar";
 import { commandScore, paletteView, WEAK_MATCH } from "./palette";
 import { classifyMessage, createNotifier } from "./messages";
 import { ICON_NAMES } from "./ui/icons";
@@ -93,7 +93,7 @@ describe("menu bar model", () => {
   const menus = buildMenuModel(commands);
 
   it("has the menus in desktop order, all built from the registry", () => {
-    expect(menus.map((m) => m.name)).toEqual(["File", "Edit", "View", "Insert", "Format", "Data", "Reconcile", "Audit", "Review", "Reports", "AI", "Help"]);
+    expect(menus.map((m) => m.name)).toEqual(["File", "Edit", "View", "Insert", "Format", "Data", "Analyse", "Reconcile", "Audit", "Review", "Reports", "AI", "Help"]);
     const inMenus = new Set(menus.flatMap((m) => flat(m.items)));
     for (const c of commands) expect(inMenus.has(c.id), c.id).toBe(c.menu !== false);
     expect(MENUS.flatMap((m) => m.groups).sort()).toEqual([...COMMAND_GROUPS].sort());
@@ -104,7 +104,19 @@ describe("menu bar model", () => {
     expect(file).toContain("save");
     expect(file).toContain("open");
     expect(flat(menus.find((m) => m.name === "Review")!.items)).toContain("evidence-pack");
-    expect(flat(menus.find((m) => m.name === "Data")!.items)).toContain("pivot"); // Analyse lives in Data
+    expect(flat(menus.find((m) => m.name === "Analyse")!.items)).toContain("pivot");
+    expect(flat(menus.find((m) => m.name === "Data")!.items)).not.toContain("pivot");
+  });
+
+  it("keeps every menu short enough to fit a laptop screen", () => {
+    for (const m of menus) {
+      const rows = m.items.filter((e) => e.kind !== "sep").length;
+      expect(rows, m.name).toBeLessThanOrEqual(20);
+    }
+  });
+
+  it("never uses a check mark as a command icon (it reads as 'this option is on')", () => {
+    for (const c of commands) expect(c.icon, c.id).not.toBe("check");
   });
 
   it("collects submenus and separates sections without doubled or trailing separators", () => {
@@ -205,5 +217,44 @@ describe("messages", () => {
     notify.error("Invalid range");
     expect(shown[2]).toMatchObject({ kind: "error", text: "Invalid range" });
     notify.endProgress();
+  });
+});
+
+describe("menu placement", () => {
+  const bar = { left: 300, right: 360, top: 28, bottom: 52 };
+  it("hangs a tall menu under the bar and scrolls inside it", () => {
+    const p = placeMenu({ anchor: bar, width: 280, height: 884, side: false, alignEnd: false, viewW: 1440, viewH: 900 });
+    expect(p.top).toBe(56);
+    expect(p.maxHeight).toBe(900 - 56 - 8);
+  });
+  it("leaves a short menu at its height", () => {
+    expect(placeMenu({ anchor: bar, width: 280, height: 300, side: false, alignEnd: false, viewW: 1440, viewH: 900 })).toEqual({ left: 300, top: 56, maxHeight: null });
+  });
+  it("keeps a menu on a narrow screen", () => {
+    expect(placeMenu({ anchor: { left: 350, right: 380, top: 28, bottom: 52 }, width: 280, height: 300, side: false, alignEnd: false, viewW: 390, viewH: 844 }).left).toBe(102);
+  });
+  it("flips a submenu left at the right edge and lifts it only as far as needed", () => {
+    const p = placeMenu({ anchor: { left: 1200, right: 1430, top: 800, bottom: 830 }, width: 240, height: 200, side: true, alignEnd: false, viewW: 1440, viewH: 900 });
+    expect(p.left).toBe(1200 - 240 + 4);
+    expect(p.top).toBe(900 - 200 - 8);
+  });
+});
+
+describe("menu bar overflow", () => {
+  const w = [40, 40, 44, 48, 56, 44, 60, 72, 48, 58, 60, 28, 46];
+  it("shows every menu when they fit", () => {
+    expect(fitMenus(w, 2000, 56)).toBe(w.length);
+  });
+  it("puts the menus that don't fit under More", () => {
+    expect(fitMenus(w, 300, 56)).toBe(5); // 56 + 40+40+44+48+56 = 284
+  });
+  it("uses one Menu button when only a couple would fit (phones)", () => {
+    expect(fitMenus(w, 150, 56)).toBe(0);
+  });
+  it("lists hidden menus as submenus with their own submenus flattened", () => {
+    const menus = buildMenuModel(commands);
+    const more = overflowEntries(menus.slice(-2));
+    expect(more.map((e) => e.kind === "submenu" && e.title)).toEqual(["AI", "Help"]);
+    for (const e of more) if (e.kind === "submenu") for (const it of e.items) expect(it.kind).toBe("item");
   });
 });
