@@ -15,6 +15,7 @@ import { closeSidePanel, currentSidePanel, onSidePanelChange, openSidePanel, typ
 import { toast } from "./ui/toast";
 import { compareWorkbooks, versionWorkbook, type Comparison, type Version } from "./versions";
 import type { Workbook } from "./workbook";
+import { displayValue } from "./inspect";
 
 export interface TrailEntry {
   at: number;
@@ -127,7 +128,9 @@ export function setupHistoryPanel(d: HistoryPanelDeps): { toggle: () => void; re
         if (r < 0) return "(row not there)";
         const t = s.getEditText(r, col);
         const v = s.getCell(r, col);
-        return t.startsWith("=") ? `${t} → ${v ?? ""}` : t || "(empty)";
+        // numbers as the cell shows them (84,210.55), not as stored
+        const shown = v === null ? "" : typeof v === "number" ? displayValue(v, s.getStyle(r, col)?.numFmt) : String(v);
+        return t.startsWith("=") ? `${t} → ${shown}` : shown || t || "(empty)";
       };
       const rowId = src.toBase(row);
       const cellList = el("ol", "hist-cell");

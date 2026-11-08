@@ -43,3 +43,18 @@ describe("inspecting a cell", () => {
     expect(kinds(1, 3)).toContain("ref-error");
   });
 });
+
+describe("numbers in Inspect, Lineage and History", () => {
+  it("show in the cell's format, or rounded without float dust", async () => {
+    const { displayValue, meaningfulStep } = await import("./inspect");
+    expect(displayValue(-4824.429999999935)).toBe("-4,824.43");
+    expect(displayValue("264967.9199999999")).toBe("264,967.92");
+    expect(displayValue(-4824.429999999935, "#,##0.00;(#,##0.00)")).toBe("(4,824.43)");
+    expect(displayValue("84210.55")).toBe("84,210.55");
+    expect(displayValue(1e-13)).toBe("0");
+    expect(displayValue("#N/A")).toBe("#N/A");
+    expect(displayValue("TRUE")).toBe("TRUE");
+    expect(meaningfulStep({ text: "2", value: "2", children: [] })).toBe(false);
+    expect(meaningfulStep({ text: "B7-B12", value: "-4824.43", children: [] })).toBe(true);
+  });
+});

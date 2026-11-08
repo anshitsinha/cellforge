@@ -6,6 +6,7 @@ import "./evidence.css";
 import { button, el, headline, navigator, notice, report, section } from "./toolkit";
 import { iconButton } from "./ui/icons";
 import { openSidePanel } from "./ui/sidepanel";
+import { displayValue } from "./inspect";
 
 export interface LineageDeps {
   workbook: () => Workbook;
@@ -47,7 +48,7 @@ export function openLineage(d: LineageDeps): void {
         const go = el("button", { type: "button", className: "ln-cell", textContent: n.label, title: goTo ? "Show it in the sheet" : "" });
         go.disabled = !goTo;
         go.addEventListener("click", () => goTo?.(n.sheetId, n.row, n.col));
-        const value = n.kind === "range" ? `${n.range!.cells.toLocaleString()} cells · total ${n.range!.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : n.value || "(empty)";
+        const value = n.kind === "range" ? `${n.range!.cells.toLocaleString("en-US")} cells · total ${displayValue(n.range!.total, "#,##0.00;(#,##0.00)")}` : displayValue(n.value) || "(empty)";
         li.append(el("div", { className: "ln-row" }, go, el("span", { className: "ln-kind", textContent: KIND[n.kind] }), el("span", { className: "ln-value", textContent: value })));
         if (n.words) li.append(el("div", { className: "ln-words", textContent: n.words }));
         if (n.formula) li.append(el("code", { className: "ln-formula", textContent: n.formula }));
@@ -85,7 +86,7 @@ export function openLineage(d: LineageDeps): void {
               ? `Imported${root.origin ? `: ${root.origin}` : ""}.`
               : `${KIND[root.kind]}.`;
       p.body.append(
-        headline({ value: root.value || "(empty)", unit: root.label, tone: "accent", caption }),
+        headline({ value: displayValue(root.value) || "(empty)", unit: root.label, tone: "accent", caption }),
         section("How it's built", el("ul", { className: "ln-tree ln-root" }, node(root, 0)), goTo ? el("p", { className: "tk-muted", textContent: "Click a cell to see it in the sheet." }) : null),
       );
 
