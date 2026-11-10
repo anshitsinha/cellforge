@@ -145,8 +145,26 @@ tr.first td {
 }
 
 @media (max-width: 700px) {
+  /* wide results table scrolls sideways inside its own box */
   table {
     display: block;
     overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  td:last-child {
+    white-space: normal;
+    min-width: 220px;
+  }
+
+  #run {
+    width: 100%;
+    margin-left: 0;
+    padding: 10px;
+  }
+
+  select,
+  input[type="number"] {
+    font-size: 16px; /* no iOS zoom on focus */
   }
 }

@@ -32,7 +32,14 @@ let source = startWithDemo
   ? new EditableSource(new SyntheticSource(DEMO_ROWS), SPARE_COLUMNS)
   : new EditableSource(new BlankSource());
 let currentName = startWithDemo ? "demo — synthetic sales" : "Untitled";
-const grid = new Grid(sheet, source);
+// Fingers need bigger targets than a mouse, and iOS zooms the page when an
+// input with <16px text gets focus.
+const coarsePointer = matchMedia("(pointer: coarse)").matches;
+const grid = new Grid(
+  sheet,
+  source,
+  coarsePointer ? { rowHeight: 32, headerHeight: 30, defaultColumnWidth: 120, editorFontSize: 16 } : {},
+);
 
 function updateStatus() {
   const edits = source.editCount ? ` · ${source.editCount} edited` : "";

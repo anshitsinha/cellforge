@@ -2,7 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover for safe-area insets; interactive-widget makes the
+         on-screen keyboard shrink the layout instead of covering the sheet -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta name="description" content="A spreadsheet that stays fast at 100M rows, entirely in the browser." />
     <title>cellforge — sheet</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
