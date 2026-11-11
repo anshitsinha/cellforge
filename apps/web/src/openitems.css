@@ -1,16 +1,106 @@
-/* Bank rec statement, roll-forward, open items, statement recs (openitemsdialog.ts); builds on recon.css */
-.palette.openitems-dialog .import-options small {
-  display: block;
-  color: var(--muted);
+/* Bank rec statement, roll-forward, open items, statement recs (openitemsdialog.ts); the side cards come from recon.css */
+.oi-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-3) var(--space-4);
 }
 
-.openitems-summary {
-  width: auto;
-  min-width: min(520px, 100%);
+.oi-fields input,
+.oi-fields select {
+  width: 100%;
 }
 
-.openitems-summary td.openitems-num {
+.oi-fields input[inputmode="decimal"] {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.oi-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin-top: var(--space-3);
+}
+
+.oi-result {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.oi-result .cf-section {
+  margin: 0;
+}
+
+.oi-result tr.oi-strong td {
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+  border-top: 1px solid var(--border-default);
+}
+
+.oi-lower {
+  display: grid;
+  grid-template-columns: minmax(260px, 2fr) minmax(0, 3fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.oi-lower > .cf-section {
+  margin: 0;
+  min-width: 0;
+}
+
+.oi-lower .oi-fields {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  align-items: start;
+}
+
+.oi-fields input,
+.oi-fields select {
+  height: var(--control-h);
+}
+
+.oi-items td:nth-child(2),
+.oi-result td.num {
   white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .oi-lower {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Map as a trial balance (tbdialog.ts) */
+.tb-map td {
+  vertical-align: middle;
+}
+
+.tb-map select {
+  width: 100%;
+  min-width: 180px;
+}
+
+.tb-map__name {
+  font-weight: var(--weight-medium);
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+
+.tb-map__sample {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tb-map--unused .tb-map__name,
+.tb-map--unused .tb-map__sample {
+  opacity: 0.6;
+}
+
+.tb-result {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.tb-result .cf-section {
+  margin: 0;
 }

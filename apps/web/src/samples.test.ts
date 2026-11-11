@@ -211,3 +211,15 @@ describe("sample URLs", () => {
     expect(isSampleKind("bankrec")).toBe(false);
   });
 });
+
+describe("100M-line ledger sample", () => {
+  it("has formatted amounts, right-aligned dates, fitted columns and a proper title", async () => {
+    const { workbook: wb, name } = await sampleWorkbook("big");
+    expect(name).toBe("Sample — 100M-line general ledger");
+    const src = wb.sheets[0].source;
+    expect(src.getStyle(5, 4)?.numFmt).toBe("#,##0.00;(#,##0.00)");
+    expect(src.getStyle(99_999_998, 5)?.numFmt).toBe("#,##0.00;(#,##0.00)");
+    expect(src.getStyle(7, 1)?.align).toBe("right");
+    expect(wb.evidence.log).toEqual([]);
+  });
+});

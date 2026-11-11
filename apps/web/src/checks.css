@@ -104,31 +104,49 @@
   min-width: 26px;
 }
 
-.ck-more,
-.ck-link {
-  justify-self: start;
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--accent);
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-.ck-more:hover,
-.ck-link:hover {
-  text-decoration: underline;
-}
-
 .ck-failures {
-  margin: 0;
-  padding-left: 30px;
   display: grid;
-  gap: var(--space-0-5);
+  gap: var(--space-1);
+  margin-left: 30px;
+  min-width: 0;
+}
+
+.ck-failures .table-wrap {
+  max-height: 240px;
+}
+
+.ck-failures td:nth-child(2) {
+  font-variant-numeric: tabular-nums;
+}
+
+.ck-more {
+  justify-self: start;
+}
+
+.ck-more-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.ck-on {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   font-size: var(--text-sm);
-  max-height: 200px;
-  overflow-y: auto;
+  color: var(--text-muted);
+  margin-right: var(--space-1);
+  cursor: pointer;
+}
+
+.ck-mark {
+  display: inline-grid;
+  place-items: center;
+  height: 20px;
+}
+
+.ck-buttons .ck-del:hover:not(:disabled) {
+  color: var(--danger);
 }
 
 .ck-summary .ck-good {
@@ -152,7 +170,7 @@
 
 .ck-fields {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-1-5) var(--space-3);
 }
 
@@ -256,8 +274,81 @@
   justify-content: flex-start;
 }
 
-.cf-sidepanel .ck-buttons button {
-  height: var(--control-h-sm);
+.cf-sidepanel .ck-buttons .btn-ghost:not(.btn-icon) {
   padding: 0 var(--space-2);
-  font-size: var(--text-sm);
+}
+
+/* the new / edit check form fits the panel: one column, full-width fields */
+.ck-form label {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.ck-form label > small {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.ck-form input:not([type="checkbox"]),
+.ck-form select {
+  width: 100%;
+  min-width: 0;
+}
+
+.ck-form .audit-check,
+.ck-form .ck-ticks label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.ck-form .numfmt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* Categorise on the kit: rules beside the preview */
+.ck-cat-main {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(240px, 2fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.ck-cat-main > .cf-section {
+  margin: 0;
+  min-width: 0;
+}
+
+.ck-cat-dialog .ck-rule-table th {
+  white-space: nowrap;
+}
+
+.ck-cat-dialog .ck-col-on,
+.ck-cat-dialog .ck-col-del {
+  width: 32px;
+}
+
+.ck-cat-dialog .ck-col-num {
+  width: 90px;
+}
+
+.ck-cat-dialog .ck-col-pr {
+  width: 70px;
+}
+
+.ck-cat-dialog .ck-col-match {
+  width: 130px;
+}
+
+.ck-cat-dialog .ck-row {
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 900px) {
+  .ck-cat-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

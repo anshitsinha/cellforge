@@ -144,3 +144,59 @@ describe("open items dialog helpers", () => {
     expect(matched.name).toBe("Statement rec matched");
   });
 });
+
+describe("bank rec sample, end to end", () => {
+  it("reaches a nil difference by its own steps: balances from Rec, items onto Outstanding, every check green", async () => {
+    const { ActionHistory, BlobStore } = await import("@cellforge/actions");
+    const { setCells, sheetActions } = await import("./actions");
+    const { runWorkbookChecks } = await import("./checksui");
+    const { guessMap } = await import("./recondialog");
+    const { bankRecSample, sampleWorkbook } = await import("./samples");
+    const { outstandingCells, prepareBankRec, recTargets } = await import("./openitemsdialog");
+    const { workbook: wb } = await sampleWorkbook("bank-rec");
+    const s = bankRecSample();
+    // the statement starts from the closing balances already on Rec
+    const t = recTargets(wb);
+    expect(t.rec?.name).toBe("Rec");
+    expect(t.outstanding?.name).toBe("Outstanding");
+    expect(t.bankBalance).toBe(s.bankClosing);
+    expect(t.ledgerBalance).toBe(s.ledgerClosing);
+    const ledger = wb.byName("Cash book")!.source;
+    const bank = wb.byName("Bank statement")!.source;
+    const x = prepareBankRec({ ledger, bank, ledgerMap: guessMap(ledger), bankMap: guessMap(bank), bankBalance: t.bankBalance!, ledgerBalance: t.ledgerBalance! });
+    expect(x.st.difference).toBe(0);
+    // the items found are the planted ones, by kind
+    const byKind = (list: { kind: string; amount: number }[]) => {
+      const m: Record<string, number> = {};
+      for (const i of list) m[i.kind] = Math.round(((m[i.kind] ?? 0) + i.amount) * 100) / 100;
+      return m;
+    };
+    expect(byKind(x.rows)).toEqual(byKind(s.planted));
+    // "Fill Outstanding and Rec", then Rec shows 0.00 and the checks pass
+    const ctx = { workbook: wb, activeSheet: wb.byName("Cash book")!.id, blobs: new BlobStore(), sortRows: async () => null };
+    const h = new ActionHistory(sheetActions(), () => ctx);
+    await h.run(setCells(outstandingCells(x.rows, t.outstanding!.source), "fill", t.outstanding!.id));
+    expect(wb.byName("Rec")!.source.getCell(13, 1)).toBe(0);
+    const results = runWorkbookChecks(wb, wb.checks);
+    expect(results.map((r) => [r.name, r.status])).toEqual(results.map((r) => [r.name, "pass"]));
+    const nil = results.find((r) => r.name === "The reconciliation has no difference")!;
+    expect(nil.message).toBe("B14 is 0.00, as it should be");
+    expect(results.find((r) => r.name === "Every outstanding item has a kind")!.checked).toBe(x.rows.length);
+    // filling again replaces the list rather than adding to it
+    await h.run(setCells(outstandingCells(x.rows.slice(0, 2), t.outstanding!.source), "fill", t.outstanding!.id));
+    expect(wb.byName("Outstanding")!.source.getCell(3, 0)).toBe(null);
+  });
+
+  it("before the items are listed, the nil-difference check says which cell is off and by how much", async () => {
+    const { runWorkbookChecks } = await import("./checksui");
+    const { sampleWorkbook } = await import("./samples");
+    const { workbook: wb } = await sampleWorkbook("bank-rec");
+    const r = runWorkbookChecks(wb, wb.checks).find((x) => x.name === "The reconciliation has no difference")!;
+    expect(r.status).toBe("fail");
+    expect(r.checked).toBe(1);
+    expect(r.message).toMatch(/^B14 is \([\d,]+\.\d\d\); it should be 0\.00$/);
+    expect(r.failures).toHaveLength(1);
+    const kinds = runWorkbookChecks(wb, wb.checks).find((x) => x.name === "Every outstanding item has a kind")!;
+    expect(kinds.message).toBe("Nothing to check yet: no rows");
+  });
+});

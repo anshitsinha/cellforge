@@ -21,6 +21,7 @@ import { columnLetter, type CellRange } from "@cellforge/grid";
 import {
   categorise,
   categoryRuleProblem,
+  checkAmount,
   CHECK_KIND_LABEL,
   checkProblem,
   checksAllPass,
@@ -46,9 +47,11 @@ import type { EditableSource } from "./editable";
 import type { Sheet, Workbook } from "./workbook";
 import "./checks.css";
 import { guessRoles, profileColumns, type ColumnSample } from "./colguess";
-import { emptyState, headline, report } from "./toolkit";
+import { emptyState, headline, notice, report, section, toolDialog } from "./toolkit";
 import { openDialog } from "./ui/dialog";
+import { icon, iconButton } from "./ui/icons";
 import { closeSidePanel, openSidePanel } from "./ui/sidepanel";
+import { renderTable } from "./ui/table";
 
 // ------------------------------------------------------------------ store --
 
@@ -86,6 +89,8 @@ export function bindChecksStore(b: Partial<ChecksStore> & { workbook?: () => Wor
 }
 
 export const getChecks = (): CheckDef[] => store.getChecks();
+/** The workbook the app bound (bindChecksStore), for tools that only know their sheet. */
+export const currentWorkbook = (): Workbook | null => boundWorkbook?.() ?? null;
 export function setChecks(checks: CheckDef[]): void {
   store.setChecks(checks);
   notify();
@@ -170,7 +175,19 @@ export function workbookSource(wb: Workbook): CheckSource & { data(ref: string):
       const d = data(ref);
       if (!d) return null;
       const t = d.data;
-      return { rows: t.rows, cols: t.names.length, names: t.names.map(bareName), get: (r, c) => (t.col(c)[r] ?? null) as CheckValue, numFmt: (c) => t.numFmt(c) };
+      const src = d.sheet.source;
+      return {
+        rows: t.rows,
+        cols: t.names.length,
+        names: t.names.map(bareName),
+        get: (r, c) => (t.col(c)[r] ?? null) as CheckValue,
+        numFmt: (c) => t.numFmt(c),
+        first: t.first,
+        cell: (r, c) => {
+          const v = r < src.rowCount && c < src.colCount ? src.getCell(r, c) : null;
+          return v === undefined || (typeof v === "object" && v !== null) ? null : (v as CheckValue);
+        },
+      };
     },
   };
 }
@@ -327,6 +344,8 @@ export function blankCheck(kind: CheckKind, sheet: string, cols: number): CheckD
       return { ...base, kind, cols: [c] };
     case "formula":
       return { ...base, kind, formula: "" };
+    case "cell":
+      return { ...base, kind, cell: "", op: "=", value: 0, tolerance: 0.005 };
   }
 }
 
@@ -506,30 +525,6 @@ function tick(text: string, checked: boolean): { el: HTMLLabelElement; input: HT
   return { el: l, input: i };
 }
 
-function dialog(title: string, cls: string, onClose: () => void): { back: { remove(): void }; body: HTMLElement; close: () => void } {
-  const dlg = openDialog({ title, size: "lg", className: `ck-dialog tk-legacy ${cls}`, onClose: () => onClose() });
-  // the tool adds its own button row and title to the body: move the row into the fixed footer, drop the repeated title
-  dlg.footer.hidden = true;
-  const tidy = new MutationObserver(() => {
-    for (const r of dlg.body.querySelectorAll<HTMLElement>(":scope > .numfmt-actions")) {
-      dlg.footer.hidden = false;
-      dlg.footer.append(...r.children);
-      r.remove();
-      const buttons = [...dlg.footer.querySelectorAll<HTMLButtonElement>(":scope > button")];
-      const main = buttons[buttons.length - 1];
-      for (const b of buttons) b.className = b === main ? "btn-primary" : b.textContent === "Close" ? "" : "btn-secondary";
-    }
-    const h = dlg.body.querySelector(":scope > h3");
-    if (h?.textContent === title) h.remove();
-  });
-  tidy.observe(dlg.body, { childList: true });
-  const close = () => {
-    tidy.disconnect();
-    dlg.close();
-  };
-  return { back: { remove: close }, body: dlg.body, close };
-}
-
 const colOptions = (names: readonly string[]) => names.map((n, c) => [String(c), n] as const);
 
 // ---------------------------------------------------------- checks panel --
@@ -543,7 +538,34 @@ export interface ChecksDeps {
   focusGrid: () => void;
 }
 
-const STATUS_MARK: Record<CheckResult["status"] | "none", string> = { pass: "✓", fail: "✗", warn: "!", none: "–" };
+const STATUS_ICON: Record<CheckResult["status"], "success" | "error" | "warning"> = { pass: "success", fail: "error", warn: "warning" };
+
+/** A failing value as a person reads it: 1,234.50, (12.00), "(blank)", TRUE. Pure. */
+export function failureValue(v: CheckValue): string {
+  if (v === null || (typeof v === "string" && !v.trim())) return "(blank)";
+  if (typeof v === "boolean") return v ? "TRUE" : "FALSE";
+  if (typeof v === "number") return Number.isInteger(v) ? v.toLocaleString("en-US") : checkAmount(v);
+  return v;
+}
+
+/** Why a row failed, in plain words. Pure. */
+export function failureWhy(kind: CheckKind, note: string | undefined): string {
+  if (note === "formula isn't TRUE") return "The rule isn't met on this row";
+  if (note) return note[0].toUpperCase() + note.slice(1);
+  switch (kind) {
+    case "notBlank":
+      return "Blank";
+    case "pattern":
+      return "Doesn't match the pattern";
+    case "unique":
+      return "Repeated";
+    default:
+      return "Fails the check";
+  }
+}
+
+/** Rows shown under a failing check before "Show all". */
+export const FAILURES_SHOWN = 5;
 
 /** The "Data checks" panel: the list of checks, add / edit / delete / reorder, Run checks. */
 export function openChecks(d: ChecksDeps): void {
@@ -609,49 +631,45 @@ export function openChecks(d: ChecksDeps): void {
     checks.forEach((c, i) => {
       const r = lastResults.get(c.id);
       const off = c.enabled === false;
-      const st = off ? "none" : (r?.status ?? "none");
+      // a pass over no rows isn't a pass yet
+      const empty = !!r && r.status === "pass" && r.checked === 0 && c.kind !== "totalsEqual" && c.kind !== "rowCount";
+      const st = off || !r || empty ? "none" : r.status;
       const li = el("li", `ck-item ck-${st}${off ? " ck-off" : ""}`);
-      const mark = el("span", "ck-mark", STATUS_MARK[st]);
-      mark.setAttribute("aria-label", off ? "off" : r ? r.status : "not run");
+      const mark = el("span", "ck-mark");
+      if (st === "none") mark.textContent = "–";
+      else mark.append(icon(STATUS_ICON[st], { size: 16 }));
+      mark.setAttribute("role", "img");
+      mark.setAttribute("aria-label", off ? "Off" : !r ? "Not run" : empty ? "Nothing to check yet" : r.status === "pass" ? "Passes" : r.status === "fail" ? "Fails" : "Warning");
       const sheet = findSheet(wb, c.sheet);
       const names = sheet ? readSheet(sheet.source).names.map(bareName) : undefined;
       const title = el("span", "ck-name", c.name?.trim() || describeCheck(c, names));
       const where = el("span", "ck-where", `${sheet?.name ?? `(missing sheet ${c.sheet})`} · ${CHECK_KIND_LABEL[c.kind]}${c.severity === "warn" ? " · warning only" : ""}`);
-      const msg = el("span", "ck-msg", off ? "Off" : r ? `${r.message}${r.failed && r.checked ? ` (${r.failed.toLocaleString("en-US")} of ${r.checked.toLocaleString("en-US")})` : ""}` : "Not run yet");
-      const on = el("input");
-      on.type = "checkbox";
-      on.checked = !off;
-      on.title = "Run this check";
-      on.setAttribute("aria-label", "Run this check");
-      on.addEventListener("change", () => {
+      const msg = el("span", "ck-msg", off ? "Off" : r ? `${r.message}${r.failed && r.checked > 1 ? ` (${r.failed.toLocaleString("en-US")} of ${r.checked.toLocaleString("en-US")})` : ""}` : "Not run yet");
+      const onBox = el("input");
+      onBox.type = "checkbox";
+      onBox.checked = !off;
+      onBox.addEventListener("change", () => {
         const next = structuredClone(checks);
-        next[i].enabled = on.checked ? undefined : false;
-        if (on.checked) delete next[i].enabled;
-        save(next, on.checked ? "turn a check on" : "turn a check off");
+        if (onBox.checked) delete next[i].enabled;
+        else next[i].enabled = false;
+        save(next, onBox.checked ? "turn a check on" : "turn a check off");
       });
+      const on = el("label", "ck-on");
+      on.title = "Run this check with the others";
+      on.append(onBox, "On");
       const edit = button("Edit", "Edit this check");
+      edit.className = "btn-ghost btn-sm";
+      edit.setAttribute("aria-label", `Edit "${title.textContent}"`);
       edit.addEventListener("click", () => openEditor(c, i));
-      const up = button("↑", "Move up");
+      const up = iconButton("chevron-up", "Move up", { size: "sm", onClick: () => save(moveItem(checks, i, -1), "reorder checks") });
       up.disabled = i === 0;
-      up.addEventListener("click", () => save(moveItem(checks, i, -1), "reorder checks"));
-      const down = button("↓", "Move down");
+      const down = iconButton("chevron-down", "Move down", { size: "sm", onClick: () => save(moveItem(checks, i, 1), "reorder checks") });
       down.disabled = i === checks.length - 1;
-      down.addEventListener("click", () => save(moveItem(checks, i, 1), "reorder checks"));
-      const del = button("✕", "Delete this check");
-      del.addEventListener("click", () => save(checks.filter((_, k) => k !== i), "delete a check"));
+      const del = iconButton("trash", "Delete this check", { size: "sm", onClick: () => save(checks.filter((_, k) => k !== i), "delete a check") });
+      del.classList.add("ck-del");
       const head = row("ck-head", mark, row("ck-text", title, where, msg), row("ck-buttons", on, edit, up, down, del));
       li.append(head);
-      if (r && r.failures.length && !off) {
-        const more = button(expanded.has(c.id) ? "Hide failing rows" : `Show failing rows${r.failed > r.failures.length ? ` (first ${r.failures.length})` : ""}`);
-        more.className = "ck-more";
-        more.addEventListener("click", () => {
-          if (expanded.has(c.id)) expanded.delete(c.id);
-          else expanded.add(c.id);
-          render();
-        });
-        li.append(more);
-        if (expanded.has(c.id)) li.append(failureList(wb, r));
-      }
+      if (r && r.failures.length && !off) li.append(failureTable(wb, r, c.kind, expanded.has(c.id)));
       list.append(li);
     });
     const results = checks.filter((c) => c.enabled !== false).map((c) => lastResults.get(c.id));
@@ -671,26 +689,50 @@ export function openChecks(d: ChecksDeps): void {
     }
   }
 
-  function failureList(wb: Workbook, r: CheckResult): HTMLElement {
-    const ul = el("ul", "ck-failures");
-    for (const f of r.failures) {
-      const cell = failureCell(wb, r, f);
-      const ref = cell ? `${columnLetter(cell.col)}${cell.row + 1}` : "";
-      const value = f.value === null ? "(blank)" : String(f.value);
-      const text = f.row < 0 ? `${f.note ?? "result"}: ${value}` : `Row ${cell ? cell.row + 1 : f.row + 1}${ref ? ` (${ref})` : ""}: ${value}${f.note ? ` · ${f.note}` : ""}`;
-      const li = el("li");
-      if (cell) {
-        const a = button(text, `Go to ${ref}`);
-        a.className = "ck-link";
-        a.addEventListener("click", () => {
-          close();
-          d.goTo(cell.sheetId, cell.row, cell.col);
-        });
-        li.append(a);
-      } else li.textContent = text;
-      ul.append(li);
+  /** The failing rows as a small table (cell, value, why); a row takes you to the cell. */
+  function failureTable(wb: Workbook, r: CheckResult, kind: CheckKind, all: boolean): HTMLElement {
+    type Row = { cell: string; value: string; why: string; at: ReturnType<typeof failureCell> };
+    const rows: Row[] = r.failures.map((f) => {
+      const at = failureCell(wb, r, f);
+      const cell = at ? `${columnLetter(at.col)}${at.row + 1}` : f.row < 0 ? "Total" : `Row ${f.row + 1}`;
+      return { cell, value: failureValue(f.value), why: failureWhy(kind, f.note), at };
+    });
+    const shown = all ? rows : rows.slice(0, FAILURES_SHOWN);
+    const t = renderTable<Row>({
+      columns: [
+        { key: "cell", label: "Cell", width: "4.5em" },
+        { key: "value", label: "Value", align: "right" },
+        { key: "why", label: "Why" },
+      ],
+      rows: shown,
+      dense: true,
+      onRowClick: (x) => {
+        if (x.at) d.goTo(x.at.sheetId, x.at.row, x.at.col);
+      },
+    });
+    t.table.setAttribute("aria-label", `Failing rows of "${r.name}"`);
+    const box = el("div", "ck-failures");
+    box.append(t.element);
+    const notListed = r.failed - r.failures.length;
+    if (!all && rows.length > FAILURES_SHOWN) {
+      const more = button(`Show all ${rows.length.toLocaleString("en-US")}`);
+      more.className = "btn-ghost btn-sm ck-more";
+      more.addEventListener("click", () => {
+        expanded.add(r.id);
+        render();
+      });
+      box.append(more);
+    } else if (all && rows.length > FAILURES_SHOWN) {
+      const less = button("Show fewer");
+      less.className = "btn-ghost btn-sm ck-more";
+      less.addEventListener("click", () => {
+        expanded.delete(r.id);
+        render();
+      });
+      box.append(less);
     }
-    return ul;
+    if (notListed > 0 && (all || rows.length <= FAILURES_SHOWN)) box.append(el("p", "ck-more-note", `and ${notListed.toLocaleString("en-US")} more not listed`));
+    return box;
   }
 
   function openEditor(existing: CheckDef | null, index: number) {
@@ -877,6 +919,29 @@ export function openChecks(d: ChecksDeps): void {
           );
           break;
         }
+        case "cell": {
+          const at = input(dr.cell, "text", "e.g. B14");
+          at.addEventListener("input", () => (dr.cell = at.value.trim().toUpperCase()));
+          const op = select(
+            [
+              ["=", "is"],
+              ["<>", "is not"],
+              [">=", "is at least"],
+              ["<=", "is at most"],
+              [">", "is over"],
+              ["<", "is under"],
+            ],
+            dr.op ?? "=",
+          );
+          op.addEventListener("change", () => (dr.op = op.value as typeof dr.op));
+          fields.push(
+            field("Cell", at, "One cell on the sheet, such as the rec's difference."),
+            field("Its value", op),
+            numField("Value", () => dr.value, (n) => (dr.value = n ?? 0)),
+            numField("Tolerance", () => dr.tolerance, (n) => (dr.tolerance = n), "0.005 allows rounding to the cent."),
+          );
+          break;
+        }
         case "formula": {
           const data = findSheet(wb, dr.sheet) ? readSheet(findSheet(wb, dr.sheet)!.source) : null;
           const f = input(dr.formula, "text", `e.g. =C${(data?.first ?? 1) + 1}+D${(data?.first ?? 1) + 1}>0`);
@@ -905,6 +970,7 @@ export function openChecks(d: ChecksDeps): void {
       const box = el("fieldset", "ck-form");
       box.append(el("legend", "", existing ? "Edit check" : "New check"), row("ck-fields", ...fields), warn, row("numfmt-actions", cancel, ok));
       editor.append(box);
+      box.scrollIntoView?.({ block: "nearest" });
       (kind as HTMLElement).focus();
     };
     draw();
@@ -914,7 +980,6 @@ export function openChecks(d: ChecksDeps): void {
   runBtn.addEventListener("click", () => {
     const results = runWorkbookChecks(d.workbook());
     const fails = results.filter((r) => r.status === "fail");
-    for (const r of fails) expanded.add(r.id);
     render();
     report(d.status, results.length ? (fails.length ? `${fails.length} of ${results.length} checks fail` : `All ${results.length} checks pass`) : "No checks to run", fails.length ? "warning" : "success");
   });
@@ -954,18 +1019,14 @@ const MATCH_OPTIONS = [
 export function openCategorise(d: CategoriseDeps): void {
   const sheetId = d.activeSheet();
   let data = readSheet(d.source());
-  const { body, close } = dialog("Categorise", "ck-cat", () => d.focusGrid());
-  const h = el("h3", "", "Categorise");
-  body.append(h);
+  const dlg = toolDialog({ title: "Categorise", subtitle: "Give each row a category by rules that learn from what you tag", size: "xl", className: "ck-cat-dialog", onClose: () => d.focusGrid() });
+  const body = dlg.body;
+  const close = () => dlg.close();
   if (!data.names.length || !data.rows) {
-    body.append(el("p", "", "This sheet has no data. Open or paste the transactions first; the first row should name the columns."));
-    const ok = button("Close");
-    ok.addEventListener("click", close);
-    body.append(row("numfmt-actions", ok));
-    ok.focus();
+    body.append(emptyState({ icon: "table", title: "This sheet has no data", text: "Open or paste the transactions first, with the column names in the first row. Then open Categorise again." }));
     return;
   }
-  const intro = el("p", "hp-muted", "Rules give each row a category, written into the category column. Categories already there are kept unless you tick Overwrite. Rules run in priority order (lower first); the first that matches wins.");
+  const intro = el("p", "tk-muted", "Rules write a category into the category column. Categories already there are kept unless you tick Overwrite. Rules run in priority order (lower first); the first that matches wins.");
   const guess = guessCatColumns(data.names);
   const textSel = select(colOptions(data.names), String(guess.text));
   const amountSel = select([["-1", "(none)"], ...colOptions(data.names)], String(guess.amount));
@@ -983,10 +1044,15 @@ export function openCategorise(d: CategoriseDeps): void {
 
   const drawRules = () => {
     rulesBox.replaceChildren();
-    const table = el("table", "ck-rule-table");
+    const table = el("table", "data-table data-table--dense ck-rule-table");
     const head = el("tr");
-    for (const t of ["", "Text", "", "Amount from", "to", "Category", "Priority", ""]) head.append(el("th", "", t));
-    table.append(head);
+    for (const [t, cls] of [["On", "ck-col-on"], ["Match", "ck-col-match"], ["Text", ""], ["Amount from", "ck-col-num"], ["Amount to", "ck-col-num"], ["Category", ""], ["Priority", "ck-col-pr"], ["", "ck-col-del"]]) {
+      const th = el("th", cls, t);
+      th.scope = "col";
+      head.append(th);
+    }
+    table.append(el("thead"));
+    table.tHead!.append(head);
     rules.forEach((rule, i) => {
       const tr = el("tr");
       const r = ruleToRow(rule);
@@ -1047,11 +1113,13 @@ export function openCategorise(d: CategoriseDeps): void {
           later();
         }
       });
-      const del = button("✕", "Remove this rule");
-      del.addEventListener("click", () => {
-        rules = rules.filter((_, k) => k !== i);
-        drawRules();
-        later();
+      const del = iconButton("trash", "Remove this rule", {
+        size: "sm",
+        onClick: () => {
+          rules = rules.filter((_, k) => k !== i);
+          drawRules();
+          later();
+        },
       });
       const problem = categoryRuleProblem(rules[i]);
       if (problem) tr.title = problem;
@@ -1067,23 +1135,28 @@ export function openCategorise(d: CategoriseDeps): void {
       table.append(tr);
     }
     const addRule = button("Add rule");
+    addRule.className = "btn-secondary btn-sm";
+    addRule.prepend(icon("plus"));
     addRule.addEventListener("click", () => {
       rules = [...rules, { id: newId("cat"), condition: { kind: "contains", text: "" }, category: "", source: "manual" }];
       drawRules();
       (rulesBox.querySelector("tr:last-child input[aria-label=Text]") as HTMLInputElement | null)?.focus();
     });
-    const saveRules = button("Save rules");
-    saveRules.disabled = saved();
-    saveRules.addEventListener("click", () => void commitRules().then(drawRules));
     const learn = button("Learn from what's tagged");
+    learn.className = "btn-secondary btn-sm";
     learn.addEventListener("click", showLearned);
     const model = d.model?.() ?? null;
-    const ask = button("Suggest the rest with the local model", model ? "For rows no rule covers: the model picks one of the categories already in use, from examples of each" : "Set up the local AI first (command palette: AI: set up and manage the local model)");
-    ask.disabled = !model;
-    ask.addEventListener("click", () => void suggestWithModel(model!));
-    const wrap = el("div", "import-preview");
+    const tools = row("ck-row", addRule, learn);
+    // the model button only shows when a model is loaded (no row of greyed-out buttons)
+    if (model) {
+      const ask = button("Suggest the rest with the local model", "For rows no rule covers: the model picks one of the categories already in use, from examples of each");
+      ask.className = "btn-secondary btn-sm";
+      ask.addEventListener("click", () => void suggestWithModel(model));
+      tools.append(ask);
+    }
+    const wrap = el("div", "table-wrap");
     wrap.append(table);
-    rulesBox.append(wrap, row("ck-row", addRule, learn, ask, saveRules));
+    rulesBox.append(wrap, tools);
   };
   const td = (child: HTMLElement) => {
     const c = el("td");
@@ -1199,34 +1272,42 @@ export function openCategorise(d: CategoriseDeps): void {
   }
 
   let result: CategoriseResult | null = null;
-  const applyBtn = button("Apply");
+  const applyBtn = dlg.button("Apply categories", () => apply(), { kind: "primary", disabled: true });
   const update = () => {
     preview.replaceChildren();
     const c = cols();
     if (c.category === c.text || c.category === c.amount) {
       result = null;
-      preview.append(el("p", "cleanup-warn", "Pick a category column that isn't the text or amount column."));
+      preview.append(notice("Pick a category column that isn't the text or amount column.", "warning"));
       applyBtn.disabled = true;
       return;
     }
     const rows = readCatRows(data, c);
     result = categorise(rows, rules, { overwrite: overwrite.input.checked });
     const n = (x: number) => x.toLocaleString("en-US");
-    const lines = [
-      `${n(result.changed.length)} row${result.changed.length === 1 ? "" : "s"} would get a category${overwrite.input.checked ? " (or a new one)" : ""}.`,
-      `${n(result.uncategorised.length)} would still have none.`,
-    ];
-    if (result.keptManual.length) lines.push(`${n(result.keptManual.length)} keep the category they have although a rule says otherwise.`);
-    for (const l of lines) preview.append(el("p", "", l));
+    const changed = result.changed.length;
+    preview.append(
+      headline({
+        value: n(changed),
+        unit: changed === 1 ? "row gets a category" : "rows get a category",
+        tone: changed ? "accent" : "unmatched",
+        progress: rows.length ? (rows.length - result.uncategorised.length) / rows.length : 0,
+        caption: `${n(result.uncategorised.length)} of ${n(rows.length)} would still have none.${result.keptManual.length ? ` ${n(result.keptManual.length)} keep the category they have although a rule says otherwise.` : ""}`,
+        lines: result.counts.slice(0, 6).map((x) => ({ label: x.category, value: n(x.rows) })),
+      }),
+    );
     if (result.conflicts.length) {
-      const p = el("p", "cleanup-warn", `${n(result.conflicts.length)} row${result.conflicts.length === 1 ? "" : "s"} match rules with different categories; the higher-priority rule wins. First: ${result.conflicts
-        .slice(0, 5)
-        .map((x) => `row ${x.row + data.first + 1} (${x.categories.join(" / ")})`)
-        .join(", ")}.`);
-      preview.append(p);
+      preview.append(
+        notice(
+          `${n(result.conflicts.length)} row${result.conflicts.length === 1 ? "" : "s"} match rules with different categories; the higher-priority rule wins. First: ${result.conflicts
+            .slice(0, 5)
+            .map((x) => `row ${x.row + data.first + 1} (${x.categories.join(" / ")})`)
+            .join(", ")}.`,
+          "warning",
+        ),
+      );
     }
-    if (result.counts.length) preview.append(el("p", "hp-muted", result.counts.slice(0, 12).map((x) => `${x.category}: ${n(x.rows)}`).join(" · ")));
-    applyBtn.disabled = !result.changed.length;
+    applyBtn.disabled = !changed;
   };
   let timer = 0;
   const later = () => {
@@ -1243,8 +1324,11 @@ export function openCategorise(d: CategoriseDeps): void {
   const tagCat = input("", "text", "Category");
   tagCat.setAttribute("aria-label", "Category for the selected rows");
   const tagBtn = button("Tag the selected rows");
+  tagBtn.className = "btn-secondary";
   const selRows = bulkTagCells(data, range, 0, "x").length;
-  const tagHint = el("small", "hp-muted", selRows ? `Rows ${Math.max(range.top, data.first) + 1}–${Math.min(range.bottom, data.first + data.rows - 1) + 1} are selected (${selRows.toLocaleString("en-US")}).` : "Select the rows in the sheet first, then open Categorise.");
+  const firstSel = Math.max(range.top, data.first) + 1;
+  const lastSel = Math.min(range.bottom, data.first + data.rows - 1) + 1;
+  const tagHint = el("small", "tk-muted", selRows ? (selRows === 1 ? `1 row selected (row ${firstSel}).` : `${selRows.toLocaleString("en-US")} rows selected (rows ${firstSel}–${lastSel}).`) : "Select rows in the sheet first, then open Categorise.");
   tagBtn.disabled = !selRows;
   tagBtn.addEventListener("click", () => {
     const cells = bulkTagCells(data, range, cols().category, tagCat.value);
@@ -1269,22 +1353,20 @@ export function openCategorise(d: CategoriseDeps): void {
     update();
   };
 
-  const queue = button("Show uncategorised rows", "Filter the sheet to rows with a blank category");
-  queue.addEventListener("click", () => {
-    const c = cols().category;
-    if (c >= data.names.length) {
-      preview.append(el("p", "cleanup-warn", "The category column doesn't exist yet. Apply or tag first."));
-      return;
-    }
-    void d.run(uncategorisedFilter(sheetId, data, c)).then(() => {
-      d.status("Showing rows with no category");
-      close();
-    });
-  });
+  dlg.button(
+    "Show uncategorised rows",
+    () => {
+      const c = cols().category;
+      if (c >= data.names.length) throw new Error("The category column doesn't exist yet. Apply or tag first.");
+      void d.run(uncategorisedFilter(sheetId, data, c)).then(() => {
+        d.status("Showing rows with no category");
+        close();
+      });
+    },
+    { start: true, kind: "ghost", title: "Filter the sheet to rows with a blank category" },
+  );
 
-  const cancel = button("Close");
-  cancel.addEventListener("click", close);
-  applyBtn.addEventListener("click", () => {
+  function apply() {
     clearTimeout(timer);
     update();
     const r = result;
@@ -1299,29 +1381,23 @@ export function openCategorise(d: CategoriseDeps): void {
         refresh();
         drawRules();
       } catch (e) {
-        preview.append(el("p", "cleanup-warn", (e as Error).message));
+        preview.append(notice((e as Error).message, "danger"));
         applyBtn.disabled = false;
       }
     })();
-  });
+  }
 
   const colsBox = row("ck-cols3", field("Text to match", textSel), field("Amount", amountSel), field("Write the category to", catSel));
   colsBox.addEventListener("change", later);
   overwrite.input.addEventListener("change", later);
   body.append(
     intro,
-    colsBox,
-    el("h4", "", "Rules"),
-    rulesBox,
-    learnBox,
-    el("h4", "", "Tag by hand"),
-    row("ck-row", tagCat, tagBtn),
-    tagHint,
-    overwrite.el,
-    preview,
-    row("numfmt-actions", queue, cancel, applyBtn),
+    section("Columns", colsBox),
+    row("ck-cat-main", section("Rules", rulesBox, learnBox, overwrite.el), section("Preview", preview)),
+    section("Tag by hand", row("ck-row", tagCat, tagBtn), tagHint),
   );
   drawRules();
   update();
-  textSel.focus();
+  // start on the first rule's text (or the add-rule button), never on a dropdown
+  ((rulesBox.querySelector("input[aria-label=Text]") as HTMLElement | null) ?? (rulesBox.querySelector("button") as HTMLElement | null))?.focus();
 }

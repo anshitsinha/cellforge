@@ -15,6 +15,8 @@ import { AGG_LABEL, fieldMembers, pivot, type DateGroup, type PivotAgg, type Piv
 import type { ChartSpec, ChartType } from "./charts/model";
 import { pivotChartSpec, savePivot } from "./charts/pivotspec";
 import { namedHeader } from "./cleanup";
+import { dataExtent } from "./usedrange";
+import { headerRowOf } from "./resultsheet";
 import { EditableSource } from "./editable";
 import "./pivot.css";
 import "./analysis.css";
@@ -77,9 +79,12 @@ function textColumn(name: string, values: (string | null)[]): ColumnData {
  * when the sheet isn't sorted); edited columns are read cell by cell.
  */
 export function readSheetColumns(src: ColumnSource): SheetColumns {
-  const { rows: used, cols } = src.usedRange();
+  // the rows that show data: a template's formula rows that show "" aren't data
+  const { rows: used, cols } = dataExtent(src);
   const named = namedHeader(src as EditableSource);
-  const first = named ? 0 : 1;
+  // a results sheet has a title block over its header: the header is its last frozen row
+  const head = named || !(src as Partial<EditableSource>).frozen ? -1 : headerRowOf(src as EditableSource);
+  const first = named ? 0 : head >= 0 ? head + 1 : 1;
   const rows = Math.max(0, used - first);
   const names: string[] = [];
   const columns: ColumnData[] = [];
@@ -87,7 +92,7 @@ export function readSheetColumns(src: ColumnSource): SheetColumns {
   const isDate: boolean[] = [];
   const order = src.rowOrder;
   for (let c = 0; c < cols; c++) {
-    const raw = named ? named[c] : src.getCell(0, c);
+    const raw = named ? named[c] : src.getCell(head >= 0 ? head : 0, c);
     const text = raw === null || raw === undefined ? "" : String(raw).trim();
     const name = text || `Column ${columnLetter(c)}`;
     const fmt = (rows ? src.getStyle(first, c)?.numFmt : undefined) ?? "";
@@ -125,7 +130,8 @@ function readColumn(src: ColumnSource, c: number, name: string, first: number, r
     if (v !== null && typeof v !== "number") numbers = false;
     vals[i] = v as string | number | null;
   }
-  if (numbers) return { kind: "number", name, values: Float64Array.from(vals, (v) => (v === null ? NaN : (v as number))) };
+  // an empty column is text (a "#" on a blank Explanation column would mislead)
+  if (numbers && vals.some((v) => v !== null)) return { kind: "number", name, values: Float64Array.from(vals, (v) => (v === null ? NaN : (v as number))) };
   return textColumn(
     name,
     vals.map((v) => (v === null ? null : typeof v === "number" ? formatValue(v, fmt).text : v)),
@@ -431,7 +437,6 @@ function select(options: [string, string][], value: string, label: string): HTML
 }
 
 const kindName = (data: SheetColumns, f: number) => (data.isDate[f] ? "date" : data.columns[f].kind === "number" ? "number" : "text");
-const kindIcon = (data: SheetColumns, f: number) => (data.isDate[f] ? "calendar" : data.columns[f].kind === "number" ? "formula" : "document");
 
 /**
  * The pivot builder in the side panel, beside the data it summarises.
@@ -642,7 +647,9 @@ function renderPivot(p: SidePanelContext, d: PivotDeps, data: SheetColumns, shee
       const b = el("button", "pivot-field" + (used ? " is-used" : ""));
       b.type = "button";
       const k = el("span", "pivot-field__kind");
-      k.append(icon(kindIcon(data, f), { size: 12 }));
+      // numbers show #, text Aa, dates a calendar (an f read as "function")
+      if (data.isDate[f]) k.append(icon("calendar", { size: 12 }));
+      else k.textContent = data.columns[f].kind === "number" ? "#" : "Aa";
       b.append(k, el("span", "pivot-field__name", name));
       const dest = zoneFor(f) === "values" ? "Values" : "Rows";
       b.title = `${name} (${kindName(data, f)}). Click to add to ${dest}, or drag it into a box.`;

@@ -49,7 +49,7 @@ describe("time tools: reading", () => {
   it("reads dates from serials and from text", () => {
     const src = sheet(text("When", ["31/01/2025", "2025-02-15", "nope", null]), num("Serial", [D(2025, 3, 1), null, null, null]), text("Due", ["2025-01-01", "2025-02-01", null, null]));
     const data = readSheet(src);
-    expect(datesOf(data, 0)).toEqual([D(2025, 1, 31), D(2025, 2, 15), null, null]);
+    expect(datesOf(data, 0)).toEqual([D(2025, 1, 31), D(2025, 2, 15), null]); // the blank last row isn't data
     expect(isDateColumn(data, 0)).toBe(false); // only 2 of 3 read as dates
     expect(isDateColumn(data, 2)).toBe(true);
     expect(datesOf(data, 1)[0]).toBe(D(2025, 3, 1));
@@ -225,7 +225,7 @@ describe("journal export", () => {
     const out = journalExport(data, map, { ...DEFAULT_LAYOUT, amounts: "signed" });
     expect(out.header).toEqual(["Date", "Account", "Description", "Amount"]);
     expect(out.rows.map((r) => r[3])).toEqual(["100.00", "-90.00", "50.00"]);
-    expect(out.skipped).toBe(1);
+    expect(out.skipped).toBe(0); // the blank last row isn't data
     expect(out.unbalanced).toEqual(["2025-01-31", "2025-02-28"]);
     expect(toCsv(["a"], [[' x"y ']])).toBe('a\r\n" x""y "\r\n');
   });

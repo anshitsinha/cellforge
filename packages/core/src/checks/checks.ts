@@ -27,7 +27,10 @@ export interface CheckNormalise {
   punctuation?: boolean;
 }
 
-export type CheckKind = "notBlank" | "unique" | "type" | "range" | "pattern" | "inList" | "totalsEqual" | "rowCount" | "noDuplicateKeys" | "formula";
+export type CheckKind = "notBlank" | "unique" | "type" | "range" | "pattern" | "inList" | "totalsEqual" | "rowCount" | "noDuplicateKeys" | "formula" | "cell";
+
+/** How a single cell's value is compared in a "cell" check. */
+export type CellCheckOp = "=" | "<>" | ">" | ">=" | "<" | "<=";
 
 interface CheckBase {
   /** stable id, so results and edits can refer to the check */
@@ -60,6 +63,12 @@ export type CheckDef = CheckBase &
     | { kind: "noDuplicateKeys"; cols: number[]; normalise?: CheckNormalise }
     /** a formula written for the first data row (like =C2>0), moved down for each row; must be TRUE */
     | { kind: "formula"; formula: string }
+    /**
+     * One cell (an A1 reference on the sheet, like B14) compared with a
+     * number, worked out once: "the reconciliation difference is nil".
+     * With "=" or "<>", `tolerance` allows a small difference.
+     */
+    | { kind: "cell"; cell: string; op?: CellCheckOp; value: number; tolerance?: number }
   );
 
 /** One table to check: data rows only (no header), 0-based. */
@@ -71,6 +80,10 @@ export interface CheckTable {
   names?: readonly string[];
   /** number format of a column: dates are numbers shown with a date format */
   numFmt?(col: number): string;
+  /** any cell of the sheet by its sheet position (0-based, header included), for "cell" checks */
+  cell?(row: number, col: number): CheckValue;
+  /** the sheet row of data row 0 (1 when the first row holds the names) */
+  first?: number;
 }
 
 export interface CheckSource {
@@ -130,11 +143,50 @@ export const CHECK_KIND_LABEL: Record<CheckKind, string> = {
   rowCount: "Row count",
   noDuplicateKeys: "No duplicate keys",
   formula: "Formula TRUE on every row",
+  cell: "One cell's value",
 };
+
+/** "B14" → { row: 13, col: 1 }; null when it isn't a cell reference. */
+export function parseCellRef(ref: string): { row: number; col: number } | null {
+  const m = /^\s*\$?([A-Za-z]{1,3})\$?(\d{1,7})\s*$/.exec(ref);
+  if (!m) return null;
+  let col = 0;
+  for (const ch of m[1].toUpperCase()) col = col * 26 + (ch.charCodeAt(0) - 64);
+  const row = Number(m[2]) - 1;
+  return row >= 0 ? { row, col: col - 1 } : null;
+}
+
+/** 1234.5 → "1,234.50", -5 → "(5.00)": how a cell check reports amounts. */
+export function checkAmount(n: number): string {
+  const t = Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n < 0 && t !== "0.00" ? `(${t})` : t;
+}
+
+const OP_TEXT: Record<CellCheckOp, string> = { "=": "should be", "<>": "shouldn't be", ">": "should be over", ">=": "should be at least", "<": "should be under", "<=": "should be at most" };
+
+/** Does a cell value pass a cell check's comparison? */
+export function cellCheckPasses(v: number, op: CellCheckOp, target: number, tolerance = 0): boolean {
+  const d = v - target;
+  const tol = Math.abs(tolerance) + 1e-9;
+  switch (op) {
+    case "=":
+      return Math.abs(d) <= tol;
+    case "<>":
+      return Math.abs(d) > tol;
+    case ">":
+      return d > 0;
+    case ">=":
+      return d >= -1e-9;
+    case "<":
+      return d < 0;
+    case "<=":
+      return d <= 1e-9;
+  }
+}
 
 const isBlank = (v: CheckValue) => v === null || (typeof v === "string" && v.trim() === "");
 const textOf = (v: CheckValue) => (v === null ? "" : typeof v === "boolean" ? (v ? "TRUE" : "FALSE") : String(v));
-const fmtNum = (n: number) => (Number.isInteger(n) ? n.toLocaleString("en-US") : n.toLocaleString("en-US", { maximumFractionDigits: 6 }));
+const fmtNum = (x: number) => ((n) => (Number.isInteger(n) ? n.toLocaleString("en-US") : n.toLocaleString("en-US", { maximumFractionDigits: 6 })))(Object.is(Math.round(x * 1e6) / 1e6, -0) ? 0 : x);
 const plural = (n: number, one: string, many = one + "s") => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
 
 /** The key a value is compared by: normalised text (numbers by their digits). */
@@ -173,6 +225,10 @@ export function checkProblem(def: CheckDef): string | null {
       return def.cols.length ? null : "Pick the key columns.";
     case "formula":
       return def.formula.replace(/^=/, "").trim() ? null : "Type a formula.";
+    case "cell":
+      if (!parseCellRef(def.cell ?? "")) return "Type a cell, like B14.";
+      if (!Number.isFinite(def.value)) return "Type the value the cell should have.";
+      return null;
     case "totalsEqual":
       if (def.tolerance !== undefined && def.tolerance < 0) return "The tolerance can't be negative.";
       return null;
@@ -221,6 +277,10 @@ export function describeCheck(def: CheckDef, names?: readonly string[], listName
       return `no two rows share the same ${def.cols.map((c) => col(c)).join(" + ")}`;
     case "formula":
       return `${def.formula.startsWith("=") ? def.formula : "=" + def.formula} is TRUE on every row`;
+    case "cell": {
+      const op = def.op ?? "=";
+      return `${(def.cell ?? "").toUpperCase()} ${op === "=" ? "is" : op === "<>" ? "isn't" : op} ${checkAmount(def.value)}`;
+    }
   }
 }
 
@@ -447,9 +507,25 @@ function runOne(def: CheckDef, source: CheckSource, max: number, opts: RunChecks
       summary = `${plural(failed, "row")} where the formula isn't TRUE`;
       break;
     }
+    case "cell": {
+      const at = parseCellRef(def.cell)!;
+      const ref = def.cell.trim().replace(/\$/g, "").toUpperCase();
+      if (!table.cell) return broken("single cells can't be read here.");
+      const v = table.cell(at.row, at.col);
+      const op = def.op ?? "=";
+      checked = 1;
+      const num = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : null;
+      const first = table.first ?? 0;
+      if (num === null || !cellCheckPasses(num, op, def.value, def.tolerance)) {
+        failed = 1;
+        failures.push({ row: at.row - first, col: at.col, value: v, note: num === null ? "not a number" : `${OP_TEXT[op]} ${checkAmount(def.value)}` });
+        summary = num === null ? `${ref} is ${isBlank(v) ? "empty" : `"${textOf(v)}"`}; it ${OP_TEXT[op]} ${checkAmount(def.value)}` : `${ref} is ${checkAmount(num)}; it ${OP_TEXT[op]} ${checkAmount(def.value)}`;
+      } else summary = `${ref} is ${checkAmount(num)}, as it should be`;
+      break;
+    }
   }
   const status: CheckStatus = failed === 0 ? "pass" : def.severity === "warn" ? "warn" : "fail";
-  const message = failed === 0 && def.kind !== "totalsEqual" && def.kind !== "rowCount" ? `All ${plural(checked, "row")} pass` : summary;
+  const message = failed === 0 && def.kind !== "totalsEqual" && def.kind !== "rowCount" && def.kind !== "cell" ? (checked ? `All ${plural(checked, "row")} pass` : "Nothing to check yet: no rows") : summary;
   return { ...base, status, checked, failed, failures, message, ...(totals ? { totals } : {}) };
 }
 

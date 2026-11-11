@@ -4,7 +4,7 @@
  * result keeps the original sheet row number so items can be traced back.
  */
 import type { Action } from "@cellforge/actions";
-import { dateParts, formatValue, parseDateLoose, Table, type ColumnData, type DateOrder } from "@cellforge/core";
+import { dateParts, formatValue, parseDateLoose, type ColumnData, type DateOrder } from "@cellforge/core";
 import { columnLetter } from "@cellforge/grid";
 import {
   ageing,
@@ -27,9 +27,14 @@ import {
 } from "@cellforge/core";
 import { namedHeader } from "./cleanup";
 import { EditableSource } from "./editable";
+import { dataExtent } from "./usedrange";
 import "./audittools.css";
 import { columnKind, defaultDuplicateKeys, firstOfKind, formatForKind, guessRoles, type ColumnKind, type ColumnSample } from "./colguess";
-import { activeSheetId, button, el, emptyState, field as tkField, headline, navigator, notice, report, section, type HeadlineOptions } from "./toolkit";
+import { activeSheetId, addResultSheets, button, el, emptyState, field as tkField, headline, navigator, notice, report, section, type HeadlineOptions } from "./toolkit";
+import { setCells } from "./actions";
+import { currentWorkbook } from "./checksui";
+import { RESULTS_ROWS, type ResultsTest } from "./templates";
+import type { Workbook } from "./workbook";
 import { openSidePanel } from "./ui/sidepanel";
 import { renderTable, type TableColumn } from "./ui/table";
 
@@ -46,6 +51,59 @@ export interface AuditDeps {
   goTo?: (sheetId: string, row: number, col: number) => void;
   /** the sheet on screen, for goTo; optional */
   activeSheet?: () => string;
+  /** the workbook, to record results on its Results sheet; optional (the bound one otherwise) */
+  workbook?: () => Workbook;
+}
+
+// ------------------------------------------------------ the Results sheet --
+
+/** What a test found, for the audit template's Results sheet. */
+export interface TestOutcome {
+  test: ResultsTest;
+  /** exceptions found; null when the test doesn't find exceptions (a sample) */
+  exceptions: number | null;
+  /** status to set; default "Done: exceptions" / "Done: no exceptions" */
+  status?: string;
+  /** one line: what was run and where the detail is */
+  detail: string;
+  /** a new label for the test's row ("Sample (seed 154)") */
+  label?: string;
+}
+
+/** The audit template's Results sheet: "Test" and "Status" headers, the test names down column A. */
+export function resultsSheet(wb: Pick<Workbook, "sheets">): { id: string; name: string } | null {
+  for (const s of wb.sheets) {
+    if (String(s.source.getCell(0, 0) ?? "").trim() === "Test" && String(s.source.getCell(0, 1) ?? "").trim() === "Status") return { id: s.id, name: s.name };
+  }
+  return null;
+}
+
+/** The cells that record an outcome on Results (status, exceptions, detail; the conclusion stays the auditor's). Pure. */
+export function outcomeCells(o: TestOutcome): { row: number; col: number; input: string | null }[] {
+  const row = RESULTS_ROWS[o.test];
+  const status = o.status ?? (o.exceptions ? "Done: exceptions" : "Done: no exceptions");
+  const cells = [
+    { row, col: 1, input: status },
+    { row, col: 2, input: o.exceptions === null ? null : String(o.exceptions) },
+    { row, col: 5, input: o.detail },
+  ];
+  if (o.label) cells.push({ row, col: 0, input: o.label });
+  return cells;
+}
+
+/**
+ * Record a test's outcome on the workbook's Results sheet, when it has one
+ * (the audit template), with a link from the detail to the results sheet.
+ * Every run writes it again, so rerunning a test updates Results. For the
+ * other audit tools too (the journal entry tests): call it after adding
+ * their results sheet.
+ */
+export async function recordOnResults(wb: Workbook | null | undefined, run: (a: Action) => Promise<unknown>, o: TestOutcome, resultSheet?: string): Promise<boolean> {
+  const res = wb ? resultsSheet(wb) : null;
+  if (!res) return false;
+  await run(setCells(outcomeCells(o), `record ${o.test} on ${res.name}`, res.id));
+  if (resultSheet) await run({ type: "cells.extra", params: { row: RESULTS_ROWS[o.test], col: 5, link: `#'${resultSheet.replace(/'/g, "''")}'!A1`, sheet: res.id } });
+  return true;
 }
 
 const MONEY = "#,##0.00;(#,##0.00)";
@@ -73,7 +131,8 @@ export interface SheetData {
 }
 
 export function readSheet(src: EditableSource): SheetData {
-  const { rows, cols } = src.usedRange();
+  // the rows that show data: a template's formula rows that show "" aren't data
+  const { rows, cols } = dataExtent(src);
   const named = namedHeader(src);
   const first = named ? 0 : 1;
   const names = Array.from({ length: cols }, (_, c) => {
@@ -209,6 +268,8 @@ interface Preview {
   /** The sheets to add, or null when there's nothing to add. */
   sheets: { name: string; out: Out }[] | null;
   done: string;
+  /** what to record on the audit template's Results sheet */
+  outcome?: Omit<TestOutcome, "detail"> & { detail: string };
 }
 
 interface Tool {
@@ -399,19 +460,73 @@ function duplicatesTool(data: SheetData, sheet: string): Tool {
         grid: r.groups.length ? grid : undefined,
         sheets: r.groups.length ? [{ name: `${sheet} duplicates`, out }] : null,
         done: `Duplicates: ${plural(r.groups.length, "group")}, ${plural(r.flagged, "row")}`,
+        outcome: { test: "duplicates", exceptions: r.groups.length, detail: `Same ${keyNames}: ${plural(r.groups.length, "group")}, ${plural(r.flagged, "row")}` },
       };
     },
   };
 }
 
+/**
+ * Does this column look like a journal's entry numbers, where every line of
+ * an entry repeats its number? True when at least a fifth of the filled rows
+ * repeat the row above. Pure.
+ */
+export function looksLikeEntryLines(values: readonly AuditValue[]): boolean {
+  let filled = 0;
+  let repeats = 0;
+  let prev: AuditValue = null;
+  for (const v of values) {
+    if (v === null || v === "") continue;
+    filled++;
+    if (prev !== null && String(prev) === String(v)) repeats++;
+    prev = v;
+  }
+  return filled >= 4 && repeats / filled >= 0.2;
+}
+
+/**
+ * Gaps in a sequence. With `entries`, the lines of one entry (the same
+ * number on consecutive rows) count once, so a journal is tested over its
+ * distinct entry numbers: a number that comes back later, after other
+ * entries, is still "used more than once". Row numbers in the result are
+ * data rows of `values`. Pure.
+ */
+export function sequenceTest(values: readonly AuditValue[], entries: boolean): ReturnType<typeof sequenceGaps> & { entries: number } {
+  if (!entries) {
+    const r = sequenceGaps(values as AuditValue[]);
+    return { ...r, entries: values.filter((v) => v !== null && v !== "").length };
+  }
+  const kept: AuditValue[] = [];
+  const rowOf: number[] = [];
+  let prev: AuditValue = null;
+  values.forEach((v, i) => {
+    if (v === null || v === "") return;
+    if (prev !== null && String(prev) === String(v)) return;
+    kept.push(v);
+    rowOf.push(i);
+    prev = v;
+  });
+  const r = sequenceGaps(kept);
+  const at = (i: number) => rowOf[i];
+  return {
+    ...r,
+    entries: kept.length,
+    skipped: r.skipped.map(at),
+    series: r.series.map((s) => ({ ...s, duplicates: s.duplicates.map((x) => ({ ...x, rows: x.rows.map(at) })), outOfOrder: s.outOfOrder.map((o) => ({ ...o, row: at(o.row) })) })),
+  };
+}
+
 function sequenceTool(data: SheetData, sheet: string): Tool {
   const col = columnSelect(data);
+  const perEntry = checkbox("Lines of one entry share its number: test distinct entries", looksLikeEntryLines(data.col(0)));
+  col.addEventListener("change", () => (perEntry.input.checked = looksLikeEntryLines(data.col(colOf(col)))));
   return {
     title: "Find gaps in a sequence",
     intro: "For invoice, cheque, journal or receipt numbers. Codes like INV-0001 work too; codes with different text around the number are checked as separate series.",
-    fields: [field("Numbers in", col)],
+    fields: [field("Numbers in", col), perEntry.el],
     compute() {
-      const r = sequenceGaps(data.col(colOf(col)));
+      const values = data.col(colOf(col));
+      const r = sequenceTest(values, perEntry.input.checked);
       const lines: Preview["lines"] = [];
       const table = [["Series", "First", "Last", "Count", "Missing", "Used twice or more", "Out of order"]];
       const series: string[] = [];
@@ -439,10 +554,11 @@ function sequenceTool(data: SheetData, sheet: string): Tool {
       const missing = r.series.reduce((a, s) => a + s.missingCount, 0);
       const dups = r.series.reduce((a, s) => a + s.duplicates.length, 0);
       const ooo = r.series.reduce((a, s) => a + s.outOfOrder.length, 0);
+      const journal = perEntry.input.checked;
       if (!r.series.length) lines.push({ text: "No numbers found in this column.", warn: true });
       else {
-        lines.push({ text: `${plural(r.series.length, "series", "series")}. ${plural(missing, "number")} missing, ${plural(dups, "number")} used more than once, ${plural(ooo, "row")} out of order.`, warn: missing + dups + ooo > 0 });
-        if (r.series.length > 1) lines.push({ text: "Check the series list: a stray code with a different prefix shows up as its own series." });
+        lines.push({ text: `${journal ? `${plural(r.entries, "entry", "entries")} (lines of one entry counted once). ` : ""}${plural(missing, "number")} missing, ${plural(dups, "number")} used more than once, ${plural(ooo, journal ? "entry" : "row", journal ? "entries" : "rows")} out of order.`, warn: missing + dups + ooo > 0 });
+        if (r.series.length > 1) lines.push({ text: `${plural(r.series.length, "series", "series")}: a stray code with a different prefix shows up as its own series.` });
       }
       if (r.skipped.length) lines.push({ text: `${plural(r.skipped.length, "row")} without a whole number left out (blank, text only, or a fraction).` });
       const out = new Out().text("Series", series).text("Issue", issue).text("Number", from).text("To", to).num("Count", counts).text("Sheet rows", where);
@@ -452,6 +568,7 @@ function sequenceTool(data: SheetData, sheet: string): Tool {
         table: r.series.length ? table : undefined,
         sheets: series.length ? [{ name: `${sheet} gaps`, out }] : null,
         done: `Sequence: ${plural(missing, "missing number")}, ${plural(dups, "duplicate")}, ${count(ooo)} out of order`,
+        outcome: r.series.length ? { test: "sequence", exceptions: missing + dups + ooo, detail: `${label(data, colOf(col))}${journal ? ` (${plural(r.entries, "entry", "entries")})` : ""}: ${plural(missing, "missing number")}, ${plural(dups, "number")} used twice, ${count(ooo)} out of order` } : undefined,
       };
     },
   };
@@ -529,7 +646,7 @@ function benfordTool(data: SheetData, sheet: string): Tool {
       const chiOk = r.chiSquare <= r.critical5;
       lines.push({ text: `${plural(r.n, "value")} tested, ${count(r.ignored)} left out.` });
       lines.push({ text: `MAD ${r.mad.toFixed(4)}: ${CONFORMITY[r.conformity]} (Nigrini: close up to ${r.bands[0]}, acceptable up to ${r.bands[1]}, marginal up to ${r.bands[2]}).`, warn: r.conformity === "nonconformity" || r.conformity === "marginal" });
-      lines.push({ text: `Chi-square ${r.chiSquare.toFixed(2)} with ${r.df} degrees of freedom (${chiOk ? "below" : "above"} ${r.critical5.toFixed(2)}, the 5% level; p = ${r.pValue < 0.0001 ? "< 0.0001" : r.pValue.toFixed(4)}).`, warn: !chiOk });
+      lines.push({ text: `Chi-square ${r.chiSquare.toFixed(2)} with ${r.df} degrees of freedom (${chiOk ? "below" : "above"} ${r.critical5.toFixed(2)}, the 5% level; p ${r.pValue < 0.0001 ? "< 0.0001" : "= " + r.pValue.toFixed(4)}).`, warn: !chiOk });
       if (r.n > 5000 && !chiOk) lines.push({ text: "With this many values chi-square flags even small differences; MAD is the better guide." });
       const hot = r.digits.filter((d) => d.z > 1.96).sort((a, b) => b.z - a.z);
       if (hot.length) lines.push({ text: `Digits that stand out (z above 1.96): ${hot.slice(0, 8).map((d) => `${d.digit} (${d.actual > d.expected ? "more" : "fewer"} than expected)`).join(", ")}${hot.length > 8 ? "…" : ""}.`, warn: true });
@@ -554,6 +671,12 @@ function benfordTool(data: SheetData, sheet: string): Tool {
         chart: benfordChart(r.digits),
         sheets: [{ name: `${sheet} Benford`, out }],
         done: `Benford (${r.test === "first" ? "first digit" : "first two digits"}): MAD ${r.mad.toFixed(4)}, ${CONFORMITY[r.conformity]}`,
+        outcome: {
+          test: "benford",
+          exceptions: hot.length,
+          status: r.conformity === "nonconformity" || r.conformity === "marginal" || hot.length ? "Done: exceptions" : "Done: no exceptions",
+          detail: `${label(data, colOf(col))}, ${count(r.n)} values: MAD ${r.mad.toFixed(4)}, ${CONFORMITY[r.conformity]}${hot.length ? `; digits standing out: ${hot.slice(0, 5).map((x) => x.digit).join(", ")}` : ""}`,
+        },
       };
     },
   };
@@ -583,7 +706,13 @@ function stratifyTool(data: SheetData, sheet: string): Tool {
         .num("Value %", [...S.map((s) => s.valueShare), r.count ? 1 : 0], PCT)
         .num("Smallest", [...S.map((s) => (s.count ? s.min : null)), null], MONEY)
         .num("Largest", [...S.map((s) => (s.count ? s.max : null)), null], MONEY);
-      return { lines, table, sheets: r.count ? [{ name: `${sheet} strata`, out }] : null, done: `Stratified ${plural(r.count, "value")} into ${plural(S.length, "band")}` };
+      return {
+        lines,
+        table,
+        sheets: r.count ? [{ name: `${sheet} strata`, out }] : null,
+        done: `Stratified ${plural(r.count, "value")} into ${plural(S.length, "band")}`,
+        outcome: r.count ? { test: "stratify", exceptions: null, status: "Done: no exceptions", detail: `${label(data, colOf(col))}: ${plural(r.count, "value")} in ${plural(S.length, "band")}, total ${money(r.total)}` } : undefined,
+      };
     },
   };
 }
@@ -832,7 +961,7 @@ function sampleTool(data: SheetData, sheet: string): Tool {
         )
         .text(
           "Method",
-          r.items.map(() => note),
+          r.items.map((_, i) => (i ? "" : note)),
         )
         .copy(
           data,
@@ -843,6 +972,8 @@ function sampleTool(data: SheetData, sheet: string): Tool {
         headline: { value: count(r.items.length), unit: r.items.length === 1 ? "item picked" : "items picked", tone: r.items.length ? "accent" : "unmatched", caption: `Seed ${s}: the same seed on the same rows picks the same items again.` },
         sheets: r.items.length ? [{ name: `${sheet} sample`, out }] : null,
         done: `Sample: ${plural(r.items.length, "item")} (${note})`,
+        // picking is the start of the test: the items still have to be tested, so it's "In progress"
+        outcome: r.items.length ? { test: "sample", exceptions: null, status: "In progress", label: `Sample (seed ${s})`, detail: `${plural(r.items.length, "item")}, ${note}` } : undefined,
       };
     },
   };
@@ -910,14 +1041,24 @@ export function openAuditTool(kind: AuditToolKind, d: AuditDeps): void {
         clearTimeout(timer);
         update();
         const pv = preview;
-        if (!pv?.sheets) return;
+        if (!pv) return;
+        if (!pv.sheets) {
+          if (!pv.outcome) return;
+          void recordOnResults(d.workbook?.() ?? currentWorkbook(), d.run, pv.outcome).then((ok) => ok && report(d.status, `${pv.done} · recorded on Results`));
+          return;
+        }
         create.disabled = true;
         void (async () => {
-          for (const s of pv.sheets!) {
-            const source = new EditableSource(new Table(s.out.columns), 5);
-            await d.run({ type: "sheet.insert", params: { name: s.name.slice(0, 31), source: d.putBlob(source), numFmts: s.out.numFmts } });
-          }
-          report(d.status, pv.done || `Added ${pv.sheets!.length === 1 ? "the results sheet" : "the results sheets"}`);
+          const wb = d.workbook?.() ?? currentWorkbook();
+          // a rerun replaces the sheet the last run made, so Results keeps pointing at the current one
+          const names = await addResultSheets(
+            { run: d.run, putBlob: d.putBlob, workbook: wb ? () => wb : undefined },
+            pv.sheets!.map((s) => ({ name: s.name, columns: s.out.columns, numFmts: s.out.numFmts, title: `${tool.title}: ${sheetName}`, summary: pv.done || undefined, origin: `${tool.title} on ${sheetName}` })),
+            { replace: true },
+          );
+          const added = names[0];
+          const recorded = pv.outcome ? await recordOnResults(wb, d.run, { ...pv.outcome, detail: added ? `${pv.outcome.detail}: see ${added}` : pv.outcome.detail }, added) : false;
+          report(d.status, `${pv.done || `Added ${pv.sheets!.length === 1 ? "the results sheet" : "the results sheets"}`}${recorded ? " · recorded on Results" : ""}`);
           create.disabled = false;
         })();
       }, "primary");
@@ -945,9 +1086,12 @@ export function openAuditTool(kind: AuditToolKind, d: AuditDeps): void {
           result.append(t.element);
           if (goRow && g.sheetRow && g.rows.length) result.append(el("p", { className: "tk-muted", textContent: "Click a row to see it in the sheet." }));
         } else if (pv.table) result.append(stringGrid(pv.table, goRow));
-        create.disabled = !pv.sheets;
-        create.textContent = pv.sheets && pv.sheets.length > 1 ? "Create results sheets" : "Create results sheet";
-        create.title = pv.sheets ? "" : "Nothing to put on a sheet yet";
+        // nothing to list (no duplicates, say) still goes on the audit template's Results sheet
+        const wbNow = d.workbook?.() ?? currentWorkbook();
+        const recordOnly = !pv.sheets && !!pv.outcome && !!wbNow && !!resultsSheet(wbNow);
+        create.disabled = !pv.sheets && !recordOnly;
+        create.textContent = recordOnly ? "Record on Results" : pv.sheets && pv.sheets.length > 1 ? "Create results sheets" : "Create results sheet";
+        create.title = pv.sheets || recordOnly ? "" : "Nothing to put on a sheet yet";
       };
       let timer = 0;
       const later = () => {

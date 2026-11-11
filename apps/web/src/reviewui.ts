@@ -8,13 +8,24 @@ import type { Action } from "@cellforge/actions";
 import { Table, type ColumnData } from "@cellforge/core";
 import { columnLetter, type CellRange } from "@cellforge/grid";
 import { EditableSource } from "./editable";
-import { allMarks, changedSince, reviewerName, setReviewerName, type SheetReview } from "./review";
+import { allMarks, changedSince, onSignOffUndo, reviewerName, setReviewerName, type SheetReview } from "./review";
 import type { Workbook } from "./workbook";
 import "./review.css";
 import { button, el, emptyState, field, headline, navigator, plural, report, section } from "./toolkit";
 import { openDialog } from "./ui/dialog";
 import { openSidePanel } from "./ui/sidepanel";
 import { toast } from "./ui/toast";
+
+// Undo can take a sign-off away (and redo put it back). That is allowed, as
+// for any other step, but never silently: an attestation that disappears
+// without a word is worse than one that can't be undone.
+onSignOffUndo((e) =>
+  typeof document === "undefined" ? undefined : toast({
+    kind: e.removed ? "warning" : "info",
+    title: e.removed ? `Sign-off undone on ${e.sheet}` : `Sign-off put back on ${e.sheet}`,
+    text: e.removed ? `Undo took away the ${e.role} sign-off by ${e.by}. Redo (Ctrl+Y) puts it back.` : `Redo put back the ${e.role} sign-off by ${e.by}.`,
+  }),
+);
 
 export interface ReviewDeps {
   workbook: () => Workbook;
@@ -55,7 +66,7 @@ function ask(title: string, label: string, value = "", multiline = false, hint?:
 export async function whoAmI(): Promise<string | null> {
   const known = reviewerName();
   if (known) return known;
-  const name = await ask("Your name or initials", "Your name or initials (for sign-offs and review notes; kept in this browser)");
+  const name = await ask("Who's signing?", "Your name or initials", "", false, "Shown on sign-offs and review notes. Kept in this browser only.");
   if (name) setReviewerName(name);
   return name || null;
 }
@@ -157,10 +168,19 @@ export function signOffBlock(role: "prepared" | "reviewed", sr: SheetReview, ope
 const STATE_LABEL: Record<ReviewState, string> = { "not started": "Not signed off", prepared: "Prepared", reviewed: "Reviewed", changed: "Changed since sign-off" };
 const STATE_TONE: Record<ReviewState, string> = { "not started": "", prepared: "cf-badge--accent", reviewed: "cf-badge--success", changed: "cf-badge--warning" };
 
-const when = (at: number) => {
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/**
+ * When a sign-off was given: "17 Nov, 14:05" (with the year when it isn't
+ * this one). Day before month and a 24-hour clock read the same in every
+ * locale, so a UK file signed on a US laptop isn't ambiguous. Pure.
+ */
+export function signedWhen(at: number, now = Date.now()): string {
   const d = new Date(at);
-  return d.toLocaleString(undefined, { day: "numeric", month: "short", ...(d.getFullYear() === new Date().getFullYear() ? {} : { year: "numeric" }), hour: "2-digit", minute: "2-digit" });
-};
+  const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const year = d.getFullYear() === new Date(now).getFullYear() ? "" : ` ${d.getFullYear()}`;
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}${year}, ${hm}`;
+}
+const when = (at: number) => signedWhen(at);
 
 /** The review panel: every sheet's sign-offs, with buttons to sign, and the open review notes. */
 export function openReviewStatus(d: ReviewDeps): void {
@@ -201,7 +221,7 @@ export function openReviewStatus(d: ReviewDeps): void {
           el("span", { className: "tk-muted", textContent: me ? "Signing as " : "Sign-offs record your name and the time." }),
           me ? el("strong", { textContent: me }) : null,
           button(me ? "Change" : "Set your name", async () => {
-            const name = await ask("Your name or initials", "Name or initials", me ?? "", false, "Shown on sign-offs and review notes. Kept in this browser only.");
+            const name = await ask("Who's signing?", "Your name or initials", me ?? "", false, "Shown on sign-offs and review notes. Kept in this browser only.");
             if (name) setReviewerName(name);
             draw();
           }, "ghost"),

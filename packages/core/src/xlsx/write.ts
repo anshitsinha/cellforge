@@ -33,8 +33,13 @@ export function excelFormula(f: string): string {
 
 const argb = (c: string | undefined) => {
   if (!c || c === "auto") return undefined;
-  const m = /^#?([0-9a-f]{6})$/i.exec(c.trim());
-  return m ? `FF${m[1].toUpperCase()}` : undefined;
+  const m = /^#?([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(c.trim());
+  if (!m) return undefined;
+  if (!m[2]) return `FF${m[1].toUpperCase()}`;
+  // a translucent tint (#rrggbbaa, used so fills read in a dark theme): Excel has no alpha, so blend it over white
+  const a = parseInt(m[2], 16) / 255;
+  const ch = (i: number) => Math.round(parseInt(m[1].slice(i, i + 2), 16) * a + 255 * (1 - a)).toString(16).padStart(2, "0");
+  return `FF${(ch(0) + ch(2) + ch(4)).toUpperCase()}`;
 };
 
 function stylesXml(styles: XStyle[], dxfs: string[] = []): string {

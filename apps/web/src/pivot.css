@@ -12,8 +12,8 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: var(--space-1-5);
   max-height: 168px;
   overflow-y: auto;
@@ -53,6 +53,13 @@
   border-radius: var(--radius-sm);
   background: var(--surface-3);
   color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.pivot-field-list .pivot-field {
+  width: 100%;
 }
 
 .pivot-field__name {

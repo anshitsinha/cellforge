@@ -89,6 +89,8 @@ export function columnKind(sample: ColumnSample): ColumnKind {
     return decimals || NAME.amount.test(sample.name) ? "amount" : "number";
   }
   if (codeish / n >= 0.6) return "reference";
+  // a Reference column mixing codes (INV-20452) with bare numbers (20452, a cheque number) is still references
+  if (NAME.reference.test(sample.name) && !NAME.amount.test(sample.name) && !decimals && (codeish + num) / n >= 0.6) return "reference";
   return "text";
 }
 

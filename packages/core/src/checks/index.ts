@@ -1,4 +1,4 @@
-export { CHECK_KIND_LABEL, checkProblem, checksAllPass, describeCheck, normaliseKey, runChecks, type CheckDef, type CheckFailure, type CheckKind, type CheckNormalise, type CheckResult, type CheckSource, type CheckStatus, type CheckTable, type CheckValue, type RunChecksOptions } from "./checks";
+export { CHECK_KIND_LABEL, cellCheckPasses, checkAmount, checkProblem, parseCellRef, type CellCheckOp, checksAllPass, describeCheck, normaliseKey, runChecks, type CheckDef, type CheckFailure, type CheckKind, type CheckNormalise, type CheckResult, type CheckSource, type CheckStatus, type CheckTable, type CheckValue, type RunChecksOptions } from "./checks";
 export {
   categorise,
   categoryRuleProblem,

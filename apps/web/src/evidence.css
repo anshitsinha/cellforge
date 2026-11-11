@@ -168,8 +168,9 @@
 /* ---- evidence pack ------------------------------------------------------ */
 
 .ev-hash {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   font-size: var(--text-xs);
 }
 
