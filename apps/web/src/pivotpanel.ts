@@ -16,6 +16,7 @@ import type { ChartSpec, ChartType } from "./charts/model";
 import { pivotChartSpec, savePivot } from "./charts/pivotspec";
 import { namedHeader } from "./cleanup";
 import { dataExtent } from "./usedrange";
+import { headerRowOf } from "./resultsheet";
 import { EditableSource } from "./editable";
 import "./pivot.css";
 import "./analysis.css";
@@ -81,7 +82,9 @@ export function readSheetColumns(src: ColumnSource): SheetColumns {
   // the rows that show data: a template's formula rows that show "" aren't data
   const { rows: used, cols } = dataExtent(src);
   const named = namedHeader(src as EditableSource);
-  const first = named ? 0 : 1;
+  // a results sheet has a title block over its header: the header is its last frozen row
+  const head = named || !(src as Partial<EditableSource>).frozen ? -1 : headerRowOf(src as EditableSource);
+  const first = named ? 0 : head >= 0 ? head + 1 : 1;
   const rows = Math.max(0, used - first);
   const names: string[] = [];
   const columns: ColumnData[] = [];
@@ -89,7 +92,7 @@ export function readSheetColumns(src: ColumnSource): SheetColumns {
   const isDate: boolean[] = [];
   const order = src.rowOrder;
   for (let c = 0; c < cols; c++) {
-    const raw = named ? named[c] : src.getCell(0, c);
+    const raw = named ? named[c] : src.getCell(head >= 0 ? head : 0, c);
     const text = raw === null || raw === undefined ? "" : String(raw).trim();
     const name = text || `Column ${columnLetter(c)}`;
     const fmt = (rows ? src.getStyle(first, c)?.numFmt : undefined) ?? "";

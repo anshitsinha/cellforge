@@ -4,7 +4,7 @@
  * result keeps the original sheet row number so items can be traced back.
  */
 import type { Action } from "@cellforge/actions";
-import { dateParts, formatValue, parseDateLoose, Table, type ColumnData, type DateOrder } from "@cellforge/core";
+import { dateParts, formatValue, parseDateLoose, type ColumnData, type DateOrder } from "@cellforge/core";
 import { columnLetter } from "@cellforge/grid";
 import {
   ageing,
@@ -30,7 +30,7 @@ import { EditableSource } from "./editable";
 import { dataExtent } from "./usedrange";
 import "./audittools.css";
 import { columnKind, defaultDuplicateKeys, firstOfKind, formatForKind, guessRoles, type ColumnKind, type ColumnSample } from "./colguess";
-import { activeSheetId, button, el, emptyState, field as tkField, headline, navigator, notice, report, section, type HeadlineOptions } from "./toolkit";
+import { activeSheetId, addResultSheets, button, el, emptyState, field as tkField, headline, navigator, notice, report, section, type HeadlineOptions } from "./toolkit";
 import { setCells } from "./actions";
 import { currentWorkbook } from "./checksui";
 import { RESULTS_ROWS, type ResultsTest } from "./templates";
@@ -1050,13 +1050,13 @@ export function openAuditTool(kind: AuditToolKind, d: AuditDeps): void {
         create.disabled = true;
         void (async () => {
           const wb = d.workbook?.() ?? currentWorkbook();
-          const before = new Set(wb?.sheets.map((s) => s.id) ?? []);
-          for (const s of pv.sheets!) {
-            const source = new EditableSource(new Table(s.out.columns), 5);
-            await d.run({ type: "sheet.insert", params: { name: s.name.slice(0, 31), source: d.putBlob(source), numFmts: s.out.numFmts } });
-          }
-          // the sheet just added (its name may have a number added when the test was run before)
-          const added = wb?.sheets.find((s) => !before.has(s.id))?.name;
+          // a rerun replaces the sheet the last run made, so Results keeps pointing at the current one
+          const names = await addResultSheets(
+            { run: d.run, putBlob: d.putBlob, workbook: wb ? () => wb : undefined },
+            pv.sheets!.map((s) => ({ name: s.name, columns: s.out.columns, numFmts: s.out.numFmts, title: `${tool.title}: ${sheetName}`, summary: pv.done || undefined, origin: `${tool.title} on ${sheetName}` })),
+            { replace: true },
+          );
+          const added = names[0];
           const recorded = pv.outcome ? await recordOnResults(wb, d.run, { ...pv.outcome, detail: added ? `${pv.outcome.detail}: see ${added}` : pv.outcome.detail }, added) : false;
           report(d.status, `${pv.done || `Added ${pv.sheets!.length === 1 ? "the results sheet" : "the results sheets"}`}${recorded ? " · recorded on Results" : ""}`);
           create.disabled = false;

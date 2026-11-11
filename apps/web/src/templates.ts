@@ -32,19 +32,31 @@ type CheckNoId = CheckDef extends infer C ? (C extends CheckDef ? Omit<C, "id"> 
 export const TEMPLATE_ROWS = 2000;
 
 /**
- * Cell looks that read in both themes. The fills are translucent tints
- * (#rrggbbaa) over the sheet's own background and the text keeps the
- * theme's colour, so a header is a soft grey band on white and a slightly
- * lighter band on the dark grid, and a flag is a pale amber on white and a
- * dim amber in the dark. Excel export blends the tint over white.
+ * Cell looks that read in both themes: semantic roles that the grid paints
+ * in the theme's own colours (a soft grey header band on white, a lighter
+ * band on the dark grid; flags in amber, red and green tints), with the
+ * text in the theme's colour. No hard-coded fills or text colours.
  */
 export const ROLE_STYLES = {
-  header: { bold: true, fill: "#8c8c8c26" },
+  header: { bold: true, role: "header" },
+  flagWarn: { bold: true, role: "flag-warn" },
+  flagBad: { bold: true, role: "flag-bad" },
+  good: { role: "flag-good" },
+  total: { bold: true, role: "total" },
+  title: { bold: true, size: 16 },
+} satisfies Record<string, CellStyle>;
+
+/**
+ * Conditional-format looks (rules carry colours, not roles): translucent
+ * tints (#rrggbbaa) over the sheet's own background, with the theme's text
+ * colour, so they read on white and on the dark grid alike. Excel export
+ * blends the tint over white.
+ */
+export const CF_STYLES = {
   flagWarn: { bold: true, fill: "#f9ab0047" },
   flagBad: { bold: true, fill: "#ea433540" },
   good: { fill: "#34a85338" },
-  title: { bold: true, size: 16 },
-} satisfies Record<string, CellStyle>;
+} as const;
 
 /** Rows of text (or formulas) starting at a cell. */
 function block(top: number, left: number, rows: (string | null)[][]): Cell[] {
@@ -162,8 +174,8 @@ async function closeTemplate(size: TemplateSize): Promise<Workbook> {
     ...widths([90, 240, 160, 120, 120, 120, 90, 80, 320]),
     styled(1, 3, R - 1, 5, { numFmt: MONEY }),
     { type: "format.set", params: { range: all(6), style: { numFmt: "0.0%" } } },
-    { type: "format.conditionalAdd", params: { rule: { kind: "text", op: "contains", value: "Explain", ranges: [all(7)], format: ROLE_STYLES.flagWarn } } },
-    { type: "format.conditionalAdd", params: { rule: { kind: "text", op: "contains", value: "not mapped", ranges: [all(2)], format: ROLE_STYLES.flagBad } } },
+    { type: "format.conditionalAdd", params: { rule: { kind: "text", op: "contains", value: "Explain", ranges: [all(7)], format: CF_STYLES.flagWarn } } },
+    { type: "format.conditionalAdd", params: { rule: { kind: "text", op: "contains", value: "not mapped", ranges: [all(2)], format: CF_STYLES.flagBad } } },
     { type: "review.ref", params: { ref: "C-2" } },
   );
   await b.on("TB current").do({ type: "review.ref", params: { ref: "C-1" } });
@@ -223,11 +235,11 @@ async function bankRecTemplate(size: TemplateSize): Promise<Workbook> {
     styled(0, 0, 0, 0, ROLE_STYLES.title),
     { type: "rows.height", params: { at: 0, height: 34 } },
     styled(2, 1, 13, 1, { numFmt: MONEY }),
-    styled(6, 0, 6, 1, { bold: true }),
-    styled(11, 0, 11, 1, { bold: true }),
-    styled(13, 0, 13, 1, { bold: true }),
-    { type: "format.conditionalAdd", params: { rule: { kind: "cell", op: "!=", a: 0, ranges: [{ top: 13, left: 1, bottom: 13, right: 1 }], format: ROLE_STYLES.flagBad } } },
-    { type: "format.conditionalAdd", params: { rule: { kind: "cell", op: "=", a: 0, ranges: [{ top: 13, left: 1, bottom: 13, right: 1 }], format: ROLE_STYLES.good } } },
+    styled(6, 0, 6, 1, ROLE_STYLES.total),
+    styled(11, 0, 11, 1, ROLE_STYLES.total),
+    styled(13, 0, 13, 1, ROLE_STYLES.total),
+    { type: "format.conditionalAdd", params: { rule: { kind: "cell", op: "!=", a: 0, ranges: [{ top: 13, left: 1, bottom: 13, right: 1 }], format: CF_STYLES.flagBad } } },
+    { type: "format.conditionalAdd", params: { rule: { kind: "cell", op: "=", a: 0, ranges: [{ top: 13, left: 1, bottom: 13, right: 1 }], format: CF_STYLES.good } } },
     ...widths([300, 140]),
     { type: "review.ref", params: { ref: "B-1" } },
     { type: "cells.extra", params: { row: 2, col: 1, note: "The closing balance from the bank statement." } },
@@ -272,8 +284,8 @@ async function auditTemplate(size: TemplateSize): Promise<Workbook> {
     header(6),
     ...widths([220, 160, 100, 380, 90, 260]),
     { type: "validation.add", params: { rule: { kind: "list", list: ["Not started", "In progress", "Done: no exceptions", "Done: exceptions"], ranges: [{ top: 1, left: 1, bottom: 6, right: 1 }] } } },
-    { type: "format.conditionalAdd", params: { rule: { kind: "text", op: "contains", value: ": exceptions", ranges: [{ top: 1, left: 1, bottom: 6, right: 1 }], format: ROLE_STYLES.flagWarn } } },
-    { type: "format.conditionalAdd", params: { rule: { kind: "text", op: "begins", value: "Done: no", ranges: [{ top: 1, left: 1, bottom: 6, right: 1 }], format: ROLE_STYLES.good } } },
+    { type: "format.conditionalAdd", params: { rule: { kind: "text", op: "contains", value: ": exceptions", ranges: [{ top: 1, left: 1, bottom: 6, right: 1 }], format: CF_STYLES.flagWarn } } },
+    { type: "format.conditionalAdd", params: { rule: { kind: "text", op: "begins", value: "Done: no", ranges: [{ top: 1, left: 1, bottom: 6, right: 1 }], format: CF_STYLES.good } } },
     styled(1, 2, 6, 2, { numFmt: "#,##0" }),
     styled(9, 1, 9, 1, { numFmt: "#,##0" }),
     styled(10, 1, 10, 1, { numFmt: MONEY }),

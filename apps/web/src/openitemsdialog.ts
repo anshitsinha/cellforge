@@ -8,7 +8,7 @@
  */
 import "./openitems.css";
 import type { Action } from "@cellforge/actions";
-import { formatValue, parseDateLoose, parseNumberLoose, reconcile, Table, type ColumnData, type RecRecord, type RecRule } from "@cellforge/core";
+import { formatValue, parseDateLoose, parseNumberLoose, reconcile, type ColumnData, type RecRecord, type RecRule } from "@cellforge/core";
 import { proposeAdjustments, recStatement, type AdjEntry, type RecItem, type RecLine, type RecStatement } from "@cellforge/core";
 import {
   guessStatementSigns,
@@ -28,7 +28,7 @@ import type { Sheet, Workbook } from "./workbook";
 import { setCells } from "./actions";
 import type { OutstandingKind } from "./templates";
 import { dataRows } from "./usedrange";
-import { el, field, headline, notice, plural, report, section, toolDialog } from "./toolkit";
+import { addResultSheets, el, field, headline, notice, plural, report, section, toolDialog } from "./toolkit";
 import { formatCell, renderTable } from "./ui/table";
 
 export interface OpenItemsDeps {
@@ -828,12 +828,10 @@ export function openOpenItems(kind: OpenItemsKind, d: OpenItemsDeps): void {
   const addSheets = async () => {
     if (!sheets) return;
     const out = sheets;
+    const done = doneText;
     dlg.close();
-    for (const s of out) {
-      const source = new EditableSource(new Table(s.columns), 10);
-      await d.run({ type: "sheet.insert", params: { name: s.name, source: d.putBlob(source), numFmts: s.numFmts } });
-    }
-    report(d.status, doneText);
+    await addResultSheets({ run: d.run, putBlob: d.putBlob, workbook: d.workbook }, out.map((s) => ({ name: s.name, columns: s.columns, numFmts: s.numFmts, title: s.name, summary: done })), { replace: true });
+    report(d.status, done);
   };
 
   const fillTemplate = async () => {

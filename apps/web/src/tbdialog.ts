@@ -4,11 +4,11 @@
  * name, current, prior and movement.
  */
 import type { Action } from "@cellforge/actions";
-import { buildTb, formatValue, readTb, Table, TB_ROLES, type ColumnData, type TbResult, type TbRole } from "@cellforge/core";
+import { buildTb, formatValue, readTb, TB_ROLES, type ColumnData, type TbResult, type TbRole } from "@cellforge/core";
 import { namedHeader, sheetText } from "./cleanup";
 import { EditableSource } from "./editable";
 import "./openitems.css";
-import { el, headline, notice, plural, report, section, toolDialog } from "./toolkit";
+import { addResultSheets, el, headline, notice, plural, report, section, toolDialog } from "./toolkit";
 import { renderTable } from "./ui/table";
 
 export interface TbDeps {
@@ -128,10 +128,10 @@ export function openTbMapper(d: TbDeps): void {
       if (!tb) return;
       dlg.close();
       const { columns, numFmts } = tbColumns(tb);
-      const source = new EditableSource(new Table(columns), 5);
-      const name = `${d.sheetName()} TB`.slice(0, 31);
+      const name = `${d.sheetName()} TB`;
       const lines = tb.lines.length;
-      void d.run({ type: "sheet.insert", params: { name, source: d.putBlob(source), numFmts } }).then(() => report(d.status, `Trial balance: ${plural(lines, "account")}`));
+      const summary = tb.balances ? `${plural(lines, "account")}; debits equal credits.` : `${plural(lines, "account")}; out of balance by ${money(tb.totalCurrent)}.`;
+      void addResultSheets({ run: d.run, putBlob: d.putBlob }, [{ name, columns, numFmts, title: `Trial balance from ${d.sheetName()}`, summary, origin: `Mapped from ${d.sheetName()}` }]).then(() => report(d.status, `Trial balance: ${plural(lines, "account")}`));
     },
     { kind: "primary", disabled: true },
   );

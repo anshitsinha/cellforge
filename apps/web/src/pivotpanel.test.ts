@@ -276,3 +276,13 @@ describe("pivot panel: template sheets", () => {
     expect(labels).toContain("(not mapped)");
   });
 });
+
+describe("pivot panel: results sheets", () => {
+  it("reads the header under a results sheet's title block", async () => {
+    const { buildResultSheet } = await import("./resultsheet");
+    const { source } = buildResultSheet({ name: "Rec lines", columns: [{ kind: "string", name: "Side", codes: Uint32Array.from([1, 2, 1]), dict: ["A", "B"] }, { kind: "number", name: "Amount", values: Float64Array.from([10, 20, 30]) }], numFmts: ["", "#,##0.00;(#,##0.00)"], summary: "Three lines" });
+    const data = readSheetColumns(source);
+    expect(data.names).toEqual(["Side", "Amount"]);
+    expect(data.rows).toBe(3);
+  });
+});
