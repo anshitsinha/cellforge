@@ -1,4 +1,5 @@
 import "./style.css";
+import { maybeOpenWorkflowGuide, openWorkflowGuide } from "./workflowguide";
 import "./shell.css";
 import type { ChartSpec } from "./charts/model";
 import { type CellRange, Grid, columnLetter } from "@cellforge/grid";
@@ -660,7 +661,8 @@ async function undo() {
       recorder.undo(label);
       logEvidence({ kind: "undo", label });
       // say what went, with the way back
-      toast({ kind: "info", text: `Undid ${label}`, action: { label: "Redo", run: () => void redo() } });
+      // undoing a sign-off has its own, stronger warning (review.ts)
+      if (!/sign.?off/i.test(label)) toast({ kind: "info", text: `Undid ${label}`, action: { label: "Redo", run: () => void redo() } });
     }
     refresh();
   } catch (e) {
@@ -1386,7 +1388,8 @@ if (startSample && startSample !== "big") {
   void sampleWorkbook(startSample).then((s) => {
     loadWorkbook(s.workbook, s.active, s.name);
     void snapshotNow();
-    notify("Sample data (fictional): read \"Start here\" first.");
+    maybeOpenWorkflowGuide(guideDeps());
+    notify("Sample data (fictional): the guide on the right walks you through it.");
   });
 }
 
@@ -1729,6 +1732,7 @@ const commandDeps: CommandDeps = {
   recent: () => recent.entries,
   openRecent: (id) => void openRecent(id),
   showStartScreen: () => startScreen.show(),
+  showWorkflowGuide: () => openWorkflowGuide(guideDeps()),
   openFile: () => openFilePicker(),
   saveFile: (saveAs) => saveFile(saveAs),
   exportExcel: async () => void (await gateExport(() => exportExcel())),
@@ -1737,7 +1741,7 @@ const commandDeps: CommandDeps = {
   clearLocal,
   startTemplate: () => startTemplate(),
   openSample: (kind) => void openSample(kind),
-  saveEvidencePack: () => void logQueue.then(() => saveEvidencePack(workbook, workbook.get(activeId).name, notify, docBytes())),
+  saveEvidencePack: () => void logQueue.then(() => saveEvidencePack(workbook, currentName, notify, docBytes())),
   fillDown,
   sortBy,
   pasteCopied,
@@ -1780,6 +1784,17 @@ const commandDeps: CommandDeps = {
 };
 
 /** The command registry for the state the app is in now (palette, menus, rail, ask bar). */
+/** The step-by-step guide beside a sample or template workbook. */
+const guideDeps = () => ({
+  workbook: () => workbook,
+  activeSheet: () => activeId,
+  showSheet,
+  goTo: findDeps().goTo,
+  run: (a: Action) => run(a),
+  runCommand: (id: string) => void commands().find((c) => c.id === id)?.run(),
+  focusGrid: () => grid.focus(),
+});
+
 function commands(): AppCommand[] {
   return buildCommands(commandDeps);
 }
@@ -1991,7 +2006,8 @@ async function openSample(kind: SampleKind) {
   fileHandle = null;
   loadWorkbook(s.workbook, s.active, s.name);
   void snapshotNow();
-  notify(kind === "big" ? "Opened 100 million lines of a fictional general ledger. Scroll, sort or pivot it." : 'Sample data (fictional) opened: read "Start here" first.');
+  maybeOpenWorkflowGuide(guideDeps());
+  notify(kind === "big" ? "Opened 100 million lines of a fictional general ledger. Scroll, sort or pivot it." : "Sample data (fictional) opened: the guide on the right walks you through it.");
 }
 
 /** Start from a template (empty workbook laid out for the job). */
@@ -2004,7 +2020,8 @@ async function startTemplate(kind?: TemplateKind) {
   fileHandle = null;
   loadWorkbook(wb, wb.sheets[0].id, TEMPLATES.find((t) => t.kind === k)!.title);
   void snapshotNow();
-  notify('Started from the template: read "Start here" first.');
+  maybeOpenWorkflowGuide(guideDeps());
+  notify("Started from the template: the guide on the right walks you through it.");
 }
 
 // --- CSV export ---------------------------------------------------------------

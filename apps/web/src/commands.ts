@@ -123,6 +123,8 @@ export interface CommandDeps {
   recent: () => readonly RecentEntry[];
   openRecent: (id: string) => void;
   showStartScreen: () => void;
+  /** the step-by-step guide for a sample or template workbook */
+  showWorkflowGuide: () => void;
   openFile: () => void;
   saveFile: (saveAs?: boolean) => Promise<void>;
   exportExcel: () => Promise<void>;
@@ -431,6 +433,7 @@ export function buildCommands(d: CommandDeps): AppCommand[] {
     // ---------------------------------------------------------- Help --
     { group: "Help", section: "help", id: "ask-guide", title: "Ask the guide (how do I…)…", keys: "F1", description: "Search the guide in plain words; it can run what it suggests", icon: "help", hint: "help how do i question guide docs documentation search", run: () => openAskGuide(() => buildCommands(d), d.focusGrid) },
     { group: "Help", section: "help", id: "shortcuts", title: "Keyboard shortcuts", description: "Every shortcut, on one page", icon: "help", hint: "keys keyboard shortcuts hotkeys cheat sheet", run: d.showShortcuts },
+    { group: "Help", section: "start", id: "workflow-guide", title: "Workflow guide", description: "Step by step through this sample or template, with a button for each step", icon: "list-check", hint: "guide steps walkthrough tutorial how to start here next step", run: d.showWorkflowGuide },
     { group: "Help", section: "start", id: "start-screen", title: "Start screen", description: "Workflows, sample data and recent ways to begin", icon: "play", hint: "home welcome start", run: d.showStartScreen },
     ...(
       [
