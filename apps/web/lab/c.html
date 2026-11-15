@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="cellforge is the spreadsheet for finance and audit work: bank recs, month-end close and journal entry tests on files of up to 100 million rows. It runs entirely on your computer, including the AI. Nothing is uploaded." />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f8f3e9" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#17150f" media="(prefers-color-scheme: dark)" />
+    <title>cellforge: close the month before lunch</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body class="cx">
+    <a class="cx-skip" href="#main">Skip to content</a>
+
+    <header class="cx-nav">
+      <div class="cx-wrap cx-nav-in">
+        <a class="cx-brand" href="/" aria-label="cellforge home">
+          <svg class="cx-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="9" class="m-bg" />
+            <rect x="7" y="7" width="8" height="8" rx="2" class="m-a" />
+            <rect x="17" y="7" width="8" height="8" rx="2" class="m-b" />
+            <rect x="7" y="17" width="8" height="8" rx="2" class="m-b" />
+            <rect x="17" y="17" width="8" height="8" rx="2" class="m-c" />
+          </svg>
+          <span>cellforge</span>
+        </a>
+        <nav class="cx-links" aria-label="On this page">
+          <a href="#work">The work</a>
+          <a href="#scale">100M rows</a>
+          <a href="#privacy">Privacy</a>
+          <a href="#ai">Private AI</a>
+        </nav>
+        <a class="cx-btn cx-btn-ink cx-btn-sm" href="/app.html">Open cellforge</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- ================================================================ hero -->
+      <section class="cx-hero" aria-labelledby="hero-title">
+        <div class="cx-wrap cx-hero-in">
+          <div class="cx-hero-copy">
+            <p class="cx-eyebrow"><span class="cx-dot" aria-hidden="true"></span>The spreadsheet for finance &amp; audit people</p>
+            <h1 id="hero-title">
+              <span class="cx-h1-a">Close the month</span>
+              <span class="cx-h1-b"><em>before lunch.</em></span>
+            </h1>
+            <p class="cx-lede">
+              cellforge reconciles, tests and proves your numbers on your own laptop. Bank recs, month-end close and
+              journal entry tests, on files of up to 100 million rows. Nothing is uploaded. Not even to the AI.
+            </p>
+            <div class="cx-cta">
+              <a class="cx-btn cx-btn-ink cx-btn-lg" href="/app.html">Open cellforge <span aria-hidden="true">→</span></a>
+              <a class="cx-btn cx-btn-ghost cx-btn-lg" href="/app.html?sample=bank-rec">Try it with sample data</a>
+            </div>
+            <p class="cx-trust">Free &amp; open source <i aria-hidden="true">·</i> No sign-up <i aria-hidden="true">·</i> Works offline</p>
+          </div>
+
+          <figure class="cx-stage" data-cx="hero">
+            <div class="cx-win">
+              <div class="cx-win-bar">
+                <span class="cx-win-title"><b>Cash book</b> · Halden &amp; Pryce Ltd</span>
+              </div>
+              <div class="cx-sheet cx-sheet-hero"><div class="cx-skel" aria-hidden="true"></div></div>
+              <div class="cx-win-foot">
+                <span class="cx-meter" aria-hidden="true"><span></span></span>
+                <span class="cx-win-status" aria-live="polite">Matching the cash book to the bank…</span>
+                <button type="button" class="cx-chipbtn cx-replay" disabled>Run it again</button>
+              </div>
+            </div>
+            <p class="cx-sticker cx-st-a" aria-hidden="true"><b class="cx-st-n">0</b> matched</p>
+            <p class="cx-sticker cx-st-b" aria-hidden="true"></p>
+            <p class="cx-sticker cx-st-c" aria-hidden="true"></p>
+            <figcaption class="cx-cap">
+              <span class="cx-live" aria-hidden="true"></span><b>That's the real thing, not a picture.</b>
+              <span class="cx-took">The sample month, matched by the real engine in this tab.</span> Scroll it, or change an amount.
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- ============================================================ workflows -->
+      <section id="work" class="cx-work" aria-labelledby="work-title">
+        <div class="cx-wrap">
+          <h2 id="work-title" class="cx-h2 cx-center" data-reveal>Three jobs you do every month.<br /><span class="cx-soft">Now the boring part does itself.</span></h2>
+
+          <div class="cx-cards">
+            <article class="cx-card cx-mint" aria-labelledby="w-rec" data-card>
+              <div class="cx-card-copy">
+                <p class="cx-tag">Bank reconciliation</p>
+                <h3 id="w-rec">Bank to ledger before your coffee goes cold.</h3>
+                <p>Matches by reference, amount and date, catches split payments, swapped digits and double postings, then writes the rec statement for you.</p>
+                <a class="cx-arrow" href="/app.html?sample=bank-rec">Reconcile the sample month <span aria-hidden="true">→</span></a>
+              </div>
+              <div class="cx-card-demo" data-cx="rec">
+                <p class="cx-big"><b class="cx-big-n">–</b><span class="cx-big-l">matched. Here's what's left to explain.</span></p>
+                <div class="cx-sheet cx-sheet-card"><div class="cx-skel" aria-hidden="true"></div></div>
+              </div>
+            </article>
+
+            <article class="cx-card cx-sun" aria-labelledby="w-close" data-card>
+              <div class="cx-card-copy">
+                <p class="cx-tag">Month-end close</p>
+                <h3 id="w-close">A trial balance that checks itself.</h3>
+                <p>Map your accounts once. Flux flags every movement over your threshold and asks why. Drag the threshold: the template's own formulas do the rest.</p>
+                <a class="cx-arrow" href="/app.html?sample=close">Open a sample close <span aria-hidden="true">→</span></a>
+              </div>
+              <div class="cx-card-demo" data-cx="close">
+                <div class="cx-thr">
+                  <label for="cx-thr-in">Flag changes over <output class="cx-thr-v" for="cx-thr-in">10,000</output></label>
+                  <input id="cx-thr-in" type="range" min="1000" max="60000" step="1000" value="10000" disabled />
+                  <p class="cx-thr-n" aria-live="polite"><b>–</b> movements to explain</p>
+                </div>
+                <div class="cx-sheet cx-sheet-card"><div class="cx-skel" aria-hidden="true"></div></div>
+              </div>
+            </article>
+
+            <article class="cx-card cx-tomato" aria-labelledby="w-audit" data-card>
+              <div class="cx-card-copy">
+                <p class="cx-tag">Audit tests</p>
+                <h3 id="w-audit">Journal entry testing. No scripting.</h3>
+                <p>Eleven tests in one pass (weekend postings, backdating, amounts just under the approval limit and friends), with every entry scored and ranked.</p>
+                <a class="cx-arrow" href="/app.html?sample=audit">Test a sample journal <span aria-hidden="true">→</span></a>
+              </div>
+              <div class="cx-card-demo" data-cx="audit">
+                <p class="cx-big"><b class="cx-big-n">–</b><span class="cx-big-l">entries flagged. The worst ones float to the top.</span></p>
+                <div class="cx-sheet cx-sheet-card"><div class="cx-skel" aria-hidden="true"></div></div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================ scale -->
+      <section id="scale" class="cx-scale" aria-labelledby="scale-title" data-cx="scale">
+        <div class="cx-scale-pin">
+          <div class="cx-wrap cx-scale-in">
+            <div class="cx-scale-copy">
+              <p class="cx-tag cx-tag-dark">Scale</p>
+              <h2 id="scale-title" class="cx-h2">Keep scrolling.<br /><span class="cx-soft">We'll be here for a while.</span></h2>
+              <p class="cx-odo" aria-hidden="true"><span class="cx-odo-l">Row</span> <b class="cx-odo-n">1</b></p>
+              <p class="cx-odo-sub">of <b>100,000,000</b> rows, in one sheet. Only what's on screen is drawn, so row 100 million scrolls like row 1.</p>
+              <p class="cx-excel" aria-hidden="true"><span>That was row 1,048,576, where Excel stops. We're about 1% of the way down.</span></p>
+              <dl class="cx-facts">
+                <div><dt>≈4 s</dt><dd>to sort all 100 million rows</dd></div>
+                <div><dt>76 s</dt><dd>to reconcile 3M ledger lines against 3M bank lines, on a laptop</dd></div>
+              </dl>
+            </div>
+            <div class="cx-scale-demo">
+              <div class="cx-win cx-win-dark">
+                <div class="cx-win-bar"><span class="cx-win-title"><b>General ledger</b> · 100,000,000 lines</span></div>
+                <div class="cx-sheet cx-sheet-scale"><div class="cx-skel" aria-hidden="true"></div></div>
+              </div>
+              <p class="cx-cap cx-cap-dark">A real grid over a fictional 100-million-line ledger. It follows your scroll; grab it and it's yours. <a href="/app.html?sample=big">Open it in the app <span aria-hidden="true">→</span></a></p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================== privacy -->
+      <section id="privacy" class="cx-privacy" aria-labelledby="privacy-title">
+        <div class="cx-wrap">
+          <div class="cx-block cx-tomato" data-scrub>
+            <div class="cx-zero" aria-hidden="true">
+              <span class="cx-zero-n">0</span>
+              <span class="cx-zero-l">bytes<br />uploaded</span>
+            </div>
+            <div class="cx-privacy-copy">
+              <h2 id="privacy-title" class="cx-h2">Your client's data never leaves your laptop.</h2>
+              <p>No server, no account, no telemetry. Files are read in the browser and kept in its private storage, and after the first visit it works with no connection at all. There's nothing to approve, nothing to breach and nothing awkward to explain to a client.</p>
+              <p class="cx-fine">Free, MIT-licensed and open source, so you don't have to take our word for it. <a href="https://github.com/anshitsinha/cellforge" rel="noopener">Read the source <span aria-hidden="true">→</span></a></p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =================================================================== AI -->
+      <section id="ai" class="cx-ai" aria-labelledby="ai-title">
+        <div class="cx-wrap cx-ai-in">
+          <div class="cx-ai-copy" data-reveal>
+            <p class="cx-tag">Private AI</p>
+            <h2 id="ai-title" class="cx-h2">Ask in plain English.<br /><span class="cx-soft">Get a plan, not a surprise.</span></h2>
+            <p>Every request becomes the app's own steps, described before anything changes, and Ctrl+Z puts it back. The ask bar here needs no model at all. Want a full local model? It runs inside your browser tab and downloads only when you press Download.</p>
+          </div>
+          <div class="cx-ai-demo" data-cx="ask">
+            <div class="af af-ask">
+              <div class="af-top">
+                <div class="af-doc"><b>Bank statement</b><span class="af-saved">Saved on this computer</span></div>
+                <div class="af-tools"><button type="button" class="af-btn af-undo" disabled>Undo</button></div>
+              </div>
+              <div class="af-fx"><span class="af-ref">A1</span><span class="af-fxi" aria-hidden="true">fx</span><span class="af-val"></span></div>
+              <div class="af-body">
+                <div class="af-grid"><div class="af-skel" aria-hidden="true"></div></div>
+              </div>
+              <div class="af-foot">
+                <div class="af-tabs" aria-label="Sheets"><span class="af-tab active">Bank statement</span></div>
+                <div class="af-status"></div>
+              </div>
+              <p class="af-failed" hidden>The live sheet couldn't start in this browser. <a href="/app.html?sample=bank-rec">Open the sample in the app</a>.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================== closing -->
+      <section class="cx-closing" aria-labelledby="close-title">
+        <div class="cx-wrap">
+          <div class="cx-block cx-sun cx-closing-in" data-scrub>
+            <h2 id="close-title">Go on. Close the month <em>before lunch.</em></h2>
+            <p>Nothing to install, nothing to sign up for. Open it, drop in a file, and start.</p>
+            <div class="cx-cta cx-cta-center">
+              <a class="cx-btn cx-btn-ink cx-btn-lg" href="/app.html">Open cellforge <span aria-hidden="true">→</span></a>
+              <a class="cx-btn cx-btn-ghost cx-btn-lg" href="/app.html?sample=bank-rec">Try it with sample data</a>
+            </div>
+            <p class="cx-samples">
+              Or jump into a sample:
+              <a href="/app.html?sample=bank-rec">bank rec</a> ·
+              <a href="/app.html?sample=close">month-end close</a> ·
+              <a href="/app.html?sample=audit">journal tests</a> ·
+              <a href="/app.html?sample=big">100M-line ledger</a>
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="cx-foot">
+      <div class="cx-wrap cx-foot-in">
+        <p class="cx-foot-brand"><b>cellforge</b> Open anything. Prove everything. Upload nothing.</p>
+        <nav aria-label="Footer">
+          <a href="https://github.com/anshitsinha/cellforge/tree/main/docs/guide" rel="noopener">User guide</a>
+          <a href="https://github.com/anshitsinha/cellforge/blob/main/docs/guide/06-privacy.md" rel="noopener">Privacy</a>
+          <a href="/bench.html">Benchmark</a>
+          <a href="https://github.com/anshitsinha/cellforge" rel="noopener">Source</a>
+          <a href="https://github.com/anshitsinha/cellforge/blob/main/LICENSE" rel="noopener">MIT licence</a>
+        </nav>
+        <p class="cx-foot-note">
+          Timings: sorting and reconciliation from the
+          <a href="https://github.com/anshitsinha/cellforge/blob/main/docs/acceptance.md" rel="noopener">acceptance test</a> on a Windows laptop (Intel i5-10300H); sorting 100M rows needs about 1.7 GB of free memory. All names and figures in the samples are fictional.
+        </p>
+      </div>
+    </footer>
+
+    <script type="module" src="/src/lab/c.ts"></script>
+  </body>
+</html>

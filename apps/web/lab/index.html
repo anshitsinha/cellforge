@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Landing page variants</title>
+    <style>
+      :root { --bg: #f7f6f2; --ink: #15171c; --muted: #646872; --line: #e2e0d8; --card: #fff; }
+      @media (prefers-color-scheme: dark) { :root { --bg: #0d0e11; --ink: #eef0f3; --muted: #9a9ea8; --line: #24262c; --card: #15171b; } }
+      body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+      main { max-width: 880px; margin: 0 auto; padding: 64px 16px; }
+      h1 { font-size: 32px; letter-spacing: -0.02em; margin: 0 0 6px; }
+      p { color: var(--muted); margin: 0 0 32px; }
+      ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+      a { display: grid; grid-template-columns: 44px 1fr; gap: 4px 14px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: inherit; text-decoration: none; }
+      a:hover, a:focus-visible { border-color: var(--ink); }
+      b { grid-row: span 2; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 10px; background: var(--ink); color: var(--bg); font-size: 18px; }
+      strong { font-size: 17px; }
+      span { color: var(--muted); font-size: 14.5px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Landing page variants</h1>
+      <p>Open each one, scroll through it, and pick a direction (or mix parts of several).</p>
+      <ul>
+        <li><a href="/lab/a.html"><b>A</b><strong>Calm editorial</strong><span>Light, lots of space, large type; the story is told as you scroll beside one live sheet.</span></a></li>
+        <li><a href="/lab/b.html"><b>B</b><strong>Dark product showcase</strong><span>Cinematic dark look, the app shown large, then a grid of small live tiles.</span></a></li>
+        <li><a href="/lab/c.html"><b>C</b><strong>Bold and playful</strong><span>Warm colours, big type, a hero sheet that reconciles itself in front of you.</span></a></li>
+        <li><a href="/"><b>·</b><strong>Current page</strong><span>For comparison.</span></a></li>
+      </ul>
+    </main>
+  </body>
+</html>
