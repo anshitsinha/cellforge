@@ -141,8 +141,15 @@
             </p>
           </header>
 
+          <nav class="wf-nav" aria-label="Workflows on this page">
+            <a href="#wf-rec" class="wf-rec"><span aria-hidden="true"></span>Bank reconciliation</a>
+            <a href="#wf-close" class="wf-close"><span aria-hidden="true"></span>Month-end close</a>
+            <a href="#wf-audit" class="wf-audit"><span aria-hidden="true"></span>Audit tests</a>
+            <a href="#wf-evidence" class="wf-evidence"><span aria-hidden="true"></span>Evidence and review</a>
+          </nav>
+
           <!-- bank rec -->
-          <article class="feature" aria-labelledby="f-rec">
+          <article class="feature" id="wf-rec" aria-labelledby="f-rec">
             <div class="feature-copy reveal">
               <div class="feature-lead">
                 <p class="tag tag-rec">Bank reconciliation</p>
@@ -179,7 +186,7 @@
           </article>
 
           <!-- close -->
-          <article class="feature" aria-labelledby="f-close">
+          <article class="feature" id="wf-close" aria-labelledby="f-close">
             <div class="feature-copy reveal">
               <div class="feature-lead">
                 <p class="tag tag-close">Month-end close</p>
@@ -216,7 +223,7 @@
           </article>
 
           <!-- audit -->
-          <article class="feature" aria-labelledby="f-audit">
+          <article class="feature" id="wf-audit" aria-labelledby="f-audit">
             <div class="feature-copy reveal">
               <div class="feature-lead">
                 <p class="tag tag-audit">Audit tests</p>
@@ -252,7 +259,7 @@
           </article>
 
           <!-- evidence -->
-          <article class="feature" aria-labelledby="f-evidence">
+          <article class="feature" id="wf-evidence" aria-labelledby="f-evidence">
             <div class="feature-copy reveal">
               <div class="feature-lead">
                 <p class="tag tag-evidence">Evidence and review</p>
@@ -300,12 +307,6 @@
               Say what you want in plain English and see exactly what will change before anything does. The model runs on
               your computer, inside the browser tab. Nothing you type, and none of your data, is sent anywhere.
             </p>
-            <ul class="ai-points">
-              <li><b>Shows its plan first.</b> Every request is described in words, which column, which rows, before you press Do it.</li>
-              <li><b>Always undoable.</b> Whatever it does is an ordinary step: Ctrl+Z, history and recipes work as usual.</li>
-              <li><b>Checked against your sheet.</b> The model can only answer with the app's own actions, and each one is checked before it runs.</li>
-              <li><b>Helps where it counts.</b> Rephrases formulas in "Explain this number", finds spelling variants of vendor names, and suggests categories for rows no rule covers.</li>
-            </ul>
           </div>
           <div class="ai-side reveal">
             <ol class="steps" aria-label="Getting started with the local AI">
@@ -343,6 +344,12 @@
             </div>
             <p class="demo-cap"><span class="live-dot" aria-hidden="true"></span>The ask bar's own parser, with no model and no network: each request becomes the app's actions, described first, then run on the sheet. Requests it doesn't know go to the local model, once you've loaded one in the app.</p>
           </div>
+          <ul class="ai-points reveal" aria-label="What the AI will and won't do">
+            <li><b>Shows its plan first.</b> Every request is described in words, which column, which rows, before you press Do it.</li>
+            <li><b>Always undoable.</b> Whatever it does is an ordinary step: Ctrl+Z, history and recipes work as usual.</li>
+            <li><b>Checked against your sheet.</b> The model can only answer with the app's own actions, and each one is checked before it runs.</li>
+            <li><b>Helps where it counts.</b> Rephrases formulas in "Explain this number", finds spelling variants of vendor names, and suggests categories for rows no rule covers.</li>
+          </ul>
         </div>
       </section>
 

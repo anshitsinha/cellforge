@@ -24,6 +24,44 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   }
 });
 
+// --------------------------------------------------------- workflow nav --
+// The row of workflow links above the four workflows marks the one you're
+// reading: the last whose top has passed a line a third of the way down.
+const wfLinks = [...document.querySelectorAll<HTMLAnchorElement>(".wf-nav a")];
+const wfArticles = wfLinks.map((a) => document.querySelector<HTMLElement>(a.hash)).filter((x): x is HTMLElement => !!x);
+let spyQueued = false;
+let spyCurrent = -2;
+function spy() {
+  spyQueued = false;
+  const line = innerHeight / 3;
+  let current = -1;
+  wfArticles.forEach((el, i) => {
+    if (el.getBoundingClientRect().top <= line) current = i;
+  });
+  const last = wfArticles[wfArticles.length - 1];
+  if (last && last.getBoundingClientRect().bottom < line) current = -1;
+  if (current === spyCurrent) return;
+  spyCurrent = current;
+  wfLinks.forEach((a, i) => (i === current ? a.setAttribute("aria-current", "true") : a.removeAttribute("aria-current")));
+  // on a narrow screen the row scrolls sideways: keep the marked one in view
+  const on = wfLinks[current];
+  const bar = on?.parentElement;
+  if (on && bar && bar.scrollWidth > bar.clientWidth) bar.scrollTo({ left: on.offsetLeft - (bar.clientWidth - on.offsetWidth) / 2, behavior: reduceMotion ? "auto" : "smooth" });
+}
+if (wfArticles.length) {
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (!spyQueued) {
+        spyQueued = true;
+        requestAnimationFrame(spy);
+      }
+    },
+    { passive: true },
+  );
+  spy();
+}
+
 // ---------------------------------------------------------------- reveal --
 const reveals = document.querySelectorAll<HTMLElement>(".reveal");
 if (reduceMotion || !("IntersectionObserver" in window)) {
