@@ -105,16 +105,16 @@ export function contrastRatio(a: string, b: string): number {
 /** Each role's fill and ink, per theme. */
 export const ROLE_COLORS: Record<"light" | "dark", Record<StyleRole, { fill: string; ink: string }>> = {
   light: {
-    header: { fill: "#e8eaed", ink: "#202124" },
-    total: { fill: "#f1f3f4", ink: "#202124" },
+    header: { fill: "#efe6d3", ink: "#1d1a14" },
+    total: { fill: "#f5eedf", ink: "#1d1a14" },
     "flag-warn": { fill: "#ffeb9c", ink: "#7a4a00" },
     "flag-bad": { fill: "#ffc7ce", ink: "#9c0006" },
     "flag-good": { fill: "#c6efce", ink: "#006100" },
     input: { fill: "#fff2cc", ink: "#202124" },
   },
   dark: {
-    header: { fill: "#2f3237", ink: "#e3e5e8" },
-    total: { fill: "#282a2e", ink: "#e3e5e8" },
+    header: { fill: "#302a20", ink: "#f0e8d6" },
+    total: { fill: "#26221a", ink: "#f0e8d6" },
     "flag-warn": { fill: "#4a3b12", ink: "#fbd775" },
     "flag-bad": { fill: "#4d2329", ink: "#ffb3b8" },
     "flag-good": { fill: "#1d3b26", ink: "#9fdcab" },

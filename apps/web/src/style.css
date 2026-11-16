@@ -154,7 +154,7 @@ button.primary {
   background: var(--accent-solid);
   border-color: var(--accent-solid);
   color: var(--on-accent);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.14), var(--shadow-1);
+  box-shadow: var(--primary-edge);
 }
 
 .btn-primary:hover:not(:disabled),
@@ -183,7 +183,7 @@ button.primary:active:not(:disabled) {
 .btn-danger {
   background: var(--danger-solid);
   border-color: var(--danger-solid);
-  color: #fff;
+  color: #fffdf8;
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), var(--shadow-1);
 }
 
@@ -1794,8 +1794,8 @@ th.num {
 
 .doc-region {
   position: absolute;
-  border: 2px solid #2557d6;
-  background: rgb(37 87 214 / 15%);
+  border: 2px solid var(--accent-default);
+  background: var(--accent-soft);
   pointer-events: none;
 }
 

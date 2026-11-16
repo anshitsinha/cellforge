@@ -46,18 +46,17 @@
   fill: var(--text-strong);
 }
 
-.bm-a,
-.bm-b,
-.bm-c {
-  fill: var(--surface-1);
+/* the home page mark: tomato, sunflower, mint */
+.bm-a {
+  fill: #ff6542;
 }
 
 .bm-b {
-  opacity: 0.6;
+  fill: #ffc93c;
 }
 
 .bm-c {
-  opacity: 0.32;
+  fill: #3fd08f;
 }
 
 .topbar__doc {
