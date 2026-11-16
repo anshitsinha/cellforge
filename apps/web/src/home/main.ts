@@ -5,7 +5,7 @@
  * workflow cards stack, and the 100M section follows the page's scroll.
  */
 import "../landing/landing.css";
-import "./c.css";
+import "./home.css";
 
 document.documentElement.classList.add("js");
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -77,12 +77,12 @@ queue();
 // ------------------------------------------------------------ live demos --
 type Demo = { mount(root: HTMLElement, ctx: { onScroll: typeof onScroll; reduce: boolean }): unknown };
 const DEMOS: Record<string, () => Promise<Demo>> = {
-  hero: () => import("./c-hero"),
-  rec: () => import("./c-cards").then((m) => ({ mount: m.mountRec })),
-  close: () => import("./c-cards").then((m) => ({ mount: m.mountClose })),
-  audit: () => import("./c-cards").then((m) => ({ mount: m.mountAudit })),
-  scale: () => import("./c-scale"),
-  ask: () => import("./c-ask"),
+  hero: () => import("./hero"),
+  rec: () => import("./cards").then((m) => ({ mount: m.mountRec })),
+  close: () => import("./cards").then((m) => ({ mount: m.mountClose })),
+  audit: () => import("./cards").then((m) => ({ mount: m.mountAudit })),
+  scale: () => import("./scale"),
+  ask: () => import("./ask"),
 };
 
 async function start(root: HTMLElement) {

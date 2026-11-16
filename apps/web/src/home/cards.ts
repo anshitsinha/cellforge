@@ -15,7 +15,7 @@ import { JE_TEST_LABEL } from "../landing/engine";
 import { countUp } from "../landing/frame";
 import { LiveSheet } from "../landing/sheet";
 import { AMOUNT, TableSource } from "../landing/table";
-import { rowFill, warmHeader } from "./c-hero";
+import { rowFill, warmHeader } from "./hero";
 
 const sheetHost = (root: HTMLElement) => {
   const host = root.querySelector<HTMLElement>(".cx-sheet")!;
