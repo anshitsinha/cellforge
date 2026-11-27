@@ -116,3 +116,7 @@ Issues and PRs are welcome — have a look at [CONTRIBUTING.md](CONTRIBUTING.md)
 ## License
 
 [MIT](LICENSE)
+
+---
+
+Case study: [anshit.is-a.dev/works/cellforge](https://anshit.is-a.dev/works/cellforge) · Built by [Anshit Sinha](https://anshit.is-a.dev)
